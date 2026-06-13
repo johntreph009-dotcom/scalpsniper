@@ -170,6 +170,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .mini-chart-hdr{display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,0,0,.35);border-bottom:1px solid rgba(255,255,255,.04)}
   .mc-tf{font-size:9px;letter-spacing:.5px;color:var(--text-faint)}
   .mc-status{font-size:9px;letter-spacing:.3px;color:var(--text-dim);margin-left:auto}
+  .ticker-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+  .ticker-chip{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.3px;padding:2px 7px;background:var(--panel);border:1px solid var(--line);border-radius:3px;color:var(--text-dim);cursor:pointer;transition:border-color .12s,color .12s,background .12s;line-height:1.6}
+  .ticker-chip:hover{border-color:var(--accent-dim);color:var(--accent)}
+  .ticker-chip.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  /* ── hint tooltips ── */
+  .hint-wrap{position:relative;display:inline-flex;align-items:center;vertical-align:middle;margin-left:6px}
+  .hint-ico{width:14px;height:14px;border-radius:50%;border:1px solid var(--line);display:inline-flex;align-items:center;justify-content:center;font-size:8px;color:var(--text-faint);cursor:default;transition:border-color .12s,color .12s;flex-shrink:0;font-style:normal;font-family:'JetBrains Mono',monospace;line-height:1;user-select:none}
+  .hint-wrap:hover .hint-ico,.hint-wrap.open .hint-ico{border-color:var(--accent-dim);color:var(--accent)}
+  .hint-tip{position:absolute;left:0;bottom:calc(100% + 8px);background:var(--panel-2);border:1px solid var(--glass-border);border-radius:6px;padding:8px 11px;font-size:10px;color:var(--text-dim);line-height:1.55;min-width:180px;max-width:240px;pointer-events:none;opacity:0;transition:opacity .15s;z-index:200;font-family:'JetBrains Mono',monospace;font-weight:400;box-shadow:0 4px 16px rgba(0,0,0,.5);white-space:normal}
+  .hint-tip::after{content:'';position:absolute;top:100%;left:10px;border:5px solid transparent;border-top-color:var(--panel-2)}
+  .hint-wrap:hover .hint-tip,.hint-wrap.open .hint-tip{opacity:1}
+  @media(max-width:500px){.hint-tip{left:auto;right:0;max-width:200px}.hint-tip::after{left:auto;right:10px}}
   /* ===== close zone button (session) ===== */
   .zone-close{background:none;border:1px solid var(--green-dim);color:var(--green);cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;padding:5px 10px;border-radius:5px;white-space:nowrap;letter-spacing:.5px}
   .zone-close:hover{background:rgba(63,185,80,.12);border-color:var(--green)}
@@ -660,7 +672,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div id="prepPhase">
     <div class="field">
       <div class="row4">
-        <div><span class="label">Тикер</span><input id="ticker" placeholder="BTC/USDT" oninput="saveSettings();triggerPriceFetch()"></div>
+        <div><span class="label">Тикер</span><input id="ticker" placeholder="BTC/USDT" list="tickerList" autocomplete="off" oninput="saveSettings();triggerPriceFetch();_markActiveChip()">
+          <datalist id="tickerList"></datalist>
+          <div class="ticker-chips" id="tickerChips"></div>
+        </div>
         <div><span class="label">Таймфрейм</span><select id="tf" onchange="saveSettings()"><option>1m</option><option selected>5m</option><option>15m</option><option>1h</option><option>4h</option></select></div>
         <div><span class="label">Плечо ×</span><input id="lev" type="number" value="1" min="1" oninput="saveSettings()"></div>
         <div><span class="label">Текущая цена <span id="pxLiveInd" style="font-size:9px;letter-spacing:.3px;font-family:'JetBrains Mono',monospace;color:var(--text-faint);vertical-align:middle">○</span></span><input id="price" type="number" placeholder="103450"></div>
@@ -686,7 +701,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         </div>
       </div>
     </div>
-    <div class="section-title">Наблюдения <span class="tag">AI заполняет автоматически</span></div>
+    <div class="section-title">Наблюдения <span class="tag">AI заполняет автоматически</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Ctrl+V вставляет скрин из буфера в первый свободный слот · ✏ — ввод вручную · AI заполняет textarea сразу после загрузки каждого скрина</span></span></div>
     <div class="shots">
       <div class="shot" id="shot_dom">
         <div class="st"><span style="display:flex;align-items:center;gap:6px">Стакан MEXC <span style="color:var(--text-faint);font-weight:400;font-size:10px">DOM / стены</span></span><button class="obs-toggle" onclick="toggleObs('dom')" title="Ввести вручную">✏</button></div>
@@ -713,7 +728,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <textarea id="obs_chart" class="obs-ta" oninput="renderReadinessScore()" placeholder="POC, VAH, VAL, LVN, фибы, волна, MLMI..."></textarea>
       </div>
     </div>
-    <div class="section-title">Стратегия для матчинга</div>
+    <div class="section-title">Стратегия для матчинга<span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Выбери протокол ДО сессии · В момент сделки думать поздно · Протокол определяет чеклист условий входа ниже</span></span></div>
     <div class="protos" id="protos">
       <div class="proto sel" data-p="VALENTINI"><div class="pn">Valentini</div><div class="pd">failed auction / fade</div></div>
       <div class="proto" data-p="SQUEEZE"><div class="pn">Squeeze</div><div class="pd">wall break</div></div>
@@ -734,7 +749,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <!-- ===== LIVE PHASE ===== -->
   <div id="livePhase" class="hide">
     <div id="readinessBar" class="readiness-bar" style="display:none"></div>
-    <div class="section-title">Текущая цена <span class="tag" id="liveZoneCount"></span></div>
+    <div class="section-title">Текущая цена <span class="tag" id="liveZoneCount"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Цена с Binance · обновляется каждые 5с · При входе в зону — звуковой сигнал + вспышка вкладки · Клик по полосе на графике → прокрутит к карточке зоны</span></span></div>
     <div class="live-bar">
       <span class="label" style="margin:0">Цена сейчас</span>
       <input id="livePrice" type="number" placeholder="103200" oninput="updateLive()" style="max-width:180px;font-size:16px;font-weight:700">
@@ -816,10 +831,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
   <div class="t-side">
   <!-- ===== ZONES (shared, always visible) ===== -->
-  <div class="section-title" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
+  <div class="section-title" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация по времени · Клик на цену зоны — скопировать</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
   <!-- paste zones from analysis -->
   <div class="paste-box" id="pasteBox">
-    <span class="mini-label" style="margin:0 0 8px">Вставить зоны из разбора <span class="tag" style="text-transform:none">один блок вместо ручного ввода</span></span>
+    <span class="mini-label" style="margin:0 0 8px">Вставить зоны из разбора <span class="tag" style="text-transform:none">один блок вместо ручного ввода</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Формат: цена | тип | план | стоп · Один ряд = одна зона · «Сформировать запрос» → AI выдаёт готовый блок, вставляй сюда целиком</span></span></span>
     <textarea id="pasteIn" placeholder="103200 | fade | отбой от POC, абсорбция в ленте | 103050&#10;103480 | break | пробой стенки 2.1М, вход по рынку | 103560&#10;102900 | watch | смотрю реакцию на нижний кластер"></textarea>
     <div class="paste-row">
       <button class="paste-btn" onclick="parseZones()">Разобрать в зоны ↓</button>
@@ -1502,7 +1517,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function loadSettings(){
     try{
       const s=JSON.parse(localStorage.getItem(SKEY)||'{}');
-      if(s.ticker)document.getElementById('ticker').value=s.ticker;
+      document.getElementById('ticker').value=s.ticker||'BTC/USDT';
       if(s.tf){const sel=document.getElementById('tf');
         for(let o of sel.options){if(o.value===s.tf){o.selected=true;break;}}}
       if(s.lev)document.getElementById('lev').value=s.lev;
@@ -1939,51 +1954,24 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const prompts={
       dom:'Опиши скриншот стакана (DOM/Order Book) для крипто-скальпинга. Только факты: крупные лимитные заявки (стены) на bid и ask, их примерный уровень и размер, дисбаланс. 2–3 предложения, без торговых рекомендаций и конкретных точек входа.',
       tape:'Опиши скриншот ленты сделок (tape/time&sales) для крипто-скальпинга. Только факты: преобладающий агрессор, характер дельты, есть ли поглощение, признаки инициации или реакции. 2–3 предложения, без рекомендаций.',
-      liq:'Опиши скриншот карты ликвидаций Coinglass. Только факты: кластеры ликвидаций выше и ниже текущей цены с примерным объёмом, недавно сметённые пулы, вакуумные зоны. 2–3 предложения, без рекомендаций.',
-      chart:'Опиши скриншот графика с профилем объёма (VPVR). Только факты: положение POC, VAH, VAL, LVN, заметные fibonacci-уровни, структура последних волн. 2–3 предложения, без рекомендаций.'
+      liq:'Опиши скриншот карты ликвидаций Coinglass. Только факты: кластеры ликвидаций выше/ниже текущей цены, смётённые пулы, вакуум между уровнями. 2–3 предложения, без рекомендаций.',
+      chart:'Опиши скриншот графика с VPVR для крипто-скальпинга. Только факты: POC, VAH, VAL, LVN, ключевые свечи, паттерн структуры (волны, коррекция, фибы если есть). 2–3 предложения, без рекомендаций.'
     };
     try{
-      const img=new Image();
-      img.src=dataUrl;
-      await new Promise(r=>{img.onload=r;img.onerror=r});
-      const MAX=1280;
-      const sc=Math.min(1,MAX/Math.max(img.width||MAX,img.height||MAX));
-      const cvs=document.createElement('canvas');
-      cvs.width=Math.round((img.width||MAX)*sc);
-      cvs.height=Math.round((img.height||MAX)*sc);
-      cvs.getContext('2d').drawImage(img,0,0,cvs.width,cvs.height);
-      const b64=cvs.toDataURL('image/jpeg',.85).split(',')[1];
-      const res=await fetch('https://api.anthropic.com/v1/messages',{
+      const b64=await _resizeToB64(dataUrl);
+      const resp=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'x-api-key':apiKey,
-          'anthropic-version':'2023-06-01',
-          'anthropic-dangerous-direct-browser-access':'true'
-        },
-        body:JSON.stringify({
-          model:'claude-haiku-4-5-20251001',
-          max_tokens:220,
-          messages:[{role:'user',content:[
-            {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
-            {type:'text',text:prompts[field]||'Опиши что видишь на скриншоте. 2–3 предложения.'}
-          ]}]
-        })
+        headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:200,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},{type:'text',text:prompts[field]||prompts.dom}]}]})
       });
-      const json=await res.json();
-      ta.value=(json.content&&json.content[0]&&json.content[0].text)||prev||'';
-      if(ta.value.trim())ta.classList.add('filled');else ta.classList.remove('filled');
+      if(!resp.ok)throw new Error('API '+resp.status);
+      const data=await resp.json();
+      ta.value=(data.content&&data.content[0]&&data.content[0].text)||prev;
     }catch(err){
-      ta.value=prev||'';
-      if(ta.value.trim())ta.classList.add('filled');else ta.classList.remove('filled');
-      console.warn('ScalpSniper AI анализ:',err);
-    }finally{
-      ta.disabled=false;
-      renderReadinessScore();
-    }
+      ta.value=prev;
+      console.warn('ScalpSniper analyzeShot:',err);
+    }finally{ta.disabled=false;}
   }
-
-  // ── analyzeAllShots: combined vision → zone pipe candidates ──
   async function _resizeToB64(dataUrl,MAX=1024){
     const img=new Image();img.src=dataUrl;
     await new Promise(r=>{img.onload=r;img.onerror=r});
@@ -2004,50 +1992,62 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     pbLabel.textContent='';
     try{
       const ticker=document.getElementById('ticker').value.trim()||'?';
-      const price=document.getElementById('price').value.trim()||'?';
-      const tf=document.getElementById('tf').value||'—';
+      const tf=document.getElementById('tf').value||'5m';
+      const price=document.getElementById('price').value||'?';
       const lev=document.getElementById('lev').value||'1';
-      const content=[];
-      for(const {field,src} of imgs){
+      const imgContent=await Promise.all(imgs.map(async({field,src})=>{
         const b64=await _resizeToB64(src);
-        content.push({type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}});
-        content.push({type:'text',text:'['+(_FL[field]||field)+']'});
-      }
-      content.push({type:'text',text:
-        'Тикер: '+ticker+', ТФ: '+tf+', Цена: '+price+', Плечо: '+lev+'×, Стратегия: '+selProto+'.\n\n'+
-        'Посмотри на '+imgs.length+' скриншот(а) рынка. Кратко опиши структуру (1–2 предложения).\n'+
-        'Затем выдай зоны-кандидаты — только наблюдения, без директив входа. Если цена зоны не видна чётко — не подставляй.\n\n'+
-        'Ответ строго в формате:\nЗОНЫ:\nцена | тип | план | стоп\n'+
-        'тип=fade/break/watch/stand, стоп опционален. Финальное решение и уровни — за трейдером.'
-      });
-      const res=await fetch('https://api.anthropic.com/v1/messages',{
+        return [{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},{type:'text',text:`[${_FL[field]||field}]`}];
+      }));
+      const flat=imgContent.flat();
+      flat.push({type:'text',text:`Контекст: ${ticker} · ${tf} · плечо ×${lev} · текущая цена ~${price}\n\nПо всем скринам выдели 3-6 ключевых ценовых уровня для скальп-сессии. Ответ СТРОГО в формате:\nЗОНЫ:\nцена | тип | краткий план | стоп\n...\n\nТип: fade/break/watch/stand. Стоп — опционально. Без объяснений, без торговых рекомендаций, без конкретных директив входа. Только структурные уровни и наблюдения.`});
+      const resp=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:600,messages:[{role:'user',content}]})
+        headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:600,messages:[{role:'user',content:flat}]})
       });
-      const json=await res.json();
-      const text=(json.content&&json.content[0]&&json.content[0].text)||'';
-      const m=text.match(/ЗОНЫ[:\s]*([\s\S]+)/i);
-      if(m){
-        pasteIn.value=m[1].trim();
-        pbLabel.textContent='✓ AI предложил зоны — проверь и нажми «Разобрать в зоны ↓»';
-        pbLabel.className='paste-result ok';
-      }else{
-        pasteIn.value=text.trim();
-        pbLabel.textContent='AI ответил — найди строки зон, нажми «Разобрать»';
-        pbLabel.className='paste-result';
-      }
+      if(!resp.ok)throw new Error('API '+resp.status);
+      const data=await resp.json();
+      const text=(data.content&&data.content[0]&&data.content[0].text)||'';
+      const m=text.match(/ЗОНЫ:\n?([\s\S]+)/i);
+      if(m){pasteIn.value=m[1].trim();}
+      else{pasteIn.value=text.trim();}
+      pbLabel.textContent='↑ AI подобрал зоны — проверь и нажми «Разобрать»';
     }catch(err){
       pasteIn.value=prevVal||'';
       pbLabel.textContent='Ошибка AI — введи зоны вручную';
-      pbLabel.className='paste-result';
       console.warn('ScalpSniper analyzeAllShots:',err);
-    }finally{
-      pasteIn.disabled=false;
-    }
+    }finally{pasteIn.disabled=false;}
   }
 
-  // ── Mini Chart (Binance klines → SESSION canvas) ──
+  // ── Ctrl+V paste screenshot into first empty slot ──
+  document.addEventListener('paste',e=>{
+    if(document.getElementById('prepPhase').classList.contains('hide'))return;
+    const items=e.clipboardData&&e.clipboardData.items;
+    if(!items)return;
+    for(const item of items){
+      if(item.type.startsWith('image/')){
+        const file=item.getAsFile();if(!file)break;
+        const fields=['dom','tape','liq','chart'];
+        const f=fields.find(f=>{const el=document.getElementById('img_'+f);return !el||!el.src||!el.src.startsWith('data:');});
+        if(!f)break;
+        const reader=new FileReader();
+        reader.onload=ev=>{
+          const dataUrl=ev.target.result;
+          document.getElementById('img_'+f).src=dataUrl;
+          document.getElementById('sp_'+f).classList.add('visible');
+          document.getElementById('su_'+f).classList.add('loaded');
+          document.getElementById('shot_'+f).classList.add('has-img');
+          const apiKey=localStorage.getItem(AKEY)||'';
+          if(apiKey)analyzeShot(dataUrl,f,apiKey);
+        };
+        reader.readAsDataURL(file);
+        e.preventDefault();break;
+      }
+    }
+  });
+
+  // ── Mini chart module ──
   let _klines=[],_klSym='',_klTf='',_chartTimer=null,_zoneHitAreas=[],_chartClickBound=false;
   let _lastAlertZone=-2;
   function _zoneBeep(){
@@ -2093,7 +2093,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     ctx.fillStyle='#0d0c0a';ctx.fillRect(0,0,W,H);
     ctx.strokeStyle='#1a1814';ctx.lineWidth=.5;
     [1,2,3].forEach(i=>{const y=H/4*i;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();});
-    // zone bands
     _zoneHitAreas=[];
     activeZ.forEach(z=>{
       const col=_MC_KIND[z.kind]||_MC_KIND.watch;
@@ -2111,7 +2110,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         ctx.setLineDash([]);
       }
     });
-    // candles
     const pad=4,cw=(W-pad*2-LBL)/Math.max(candles.length,1),bw=Math.max(1,Math.floor(cw*.6));
     candles.forEach((c,i)=>{
       const x=pad+i*cw+cw/2,green=c.c>=c.o,col=green?'#22c55e':'#ef4444';
@@ -2120,7 +2118,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const top=Math.min(toY(c.o),toY(c.c)),ht=Math.max(1,Math.abs(toY(c.o)-toY(c.c)));
       ctx.fillStyle=col;ctx.fillRect(x-bw/2,top,bw,ht);
     });
-    // current price
     if(currentPrice&&isFinite(currentPrice)){
       const py=toY(currentPrice);
       ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=1;ctx.setLineDash([4,3]);
@@ -2222,34 +2219,55 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _pxPoll=setInterval(fetchLivePx,5000);
   }
 
-  // ── Ctrl+V paste screenshot into first empty slot ──
-  document.addEventListener('paste',e=>{
-    if(document.getElementById('prepPhase').classList.contains('hide'))return;
-    const items=e.clipboardData&&e.clipboardData.items;
-    if(!items)return;
-    for(const item of items){
-      if(item.type.startsWith('image/')){
-        const file=item.getAsFile();if(!file)break;
-        const fields=['dom','tape','liq','chart'];
-        const f=fields.find(f=>{const el=document.getElementById('img_'+f);return !el||!el.src||!el.src.startsWith('data:');});
-        if(!f)break;
-        const reader=new FileReader();
-        reader.onload=ev=>{
-          const dataUrl=ev.target.result;
-          document.getElementById('img_'+f).src=dataUrl;
-          document.getElementById('sp_'+f).classList.add('visible');
-          document.getElementById('su_'+f).classList.add('loaded');
-          document.getElementById('shot_'+f).classList.add('has-img');
-          const apiKey=localStorage.getItem(AKEY)||'';
-          if(apiKey)analyzeShot(dataUrl,f,apiKey);
-        };
-        reader.readAsDataURL(file);
-        e.preventDefault();break;
-      }
-    }
-  });
+  // ── Ticker quick-chips (топ-30 по объёму) ──
+  const _DEFAULT_TICKERS=['BTC','ETH','BNB','SOL','XRP','DOGE','ADA','TRX','AVAX','TON','SHIB','LINK','DOT','LTC','BCH','NEAR','APT','SUI','INJ','WLD','ARB','OP','ATOM','HBAR','PEPE','ONDO','FIL','ICP','VET','BONK'];
+  function _setTicker(sym){
+    const el=document.getElementById('ticker');
+    el.value=sym+'/USDT';
+    saveSettings();triggerPriceFetch();
+    if(phase==='live')_chartRefresh();
+    _markActiveChip();
+  }
+  function _markActiveChip(){
+    const cur=(document.getElementById('ticker').value||'').replace(/[\/\-_ ]/g,'').replace(/USDT$/i,'').toUpperCase();
+    document.querySelectorAll('.ticker-chip').forEach(c=>c.classList.toggle('active',c.dataset.sym===cur));
+  }
+  function _populateTickerList(syms){
+    const dl=document.getElementById('tickerList');
+    const chips=document.getElementById('tickerChips');
+    if(dl)dl.innerHTML=syms.map(s=>`<option value="${s}/USDT">`).join('');
+    if(chips)chips.innerHTML=syms.map(s=>`<button class="ticker-chip" data-sym="${s}" onclick="_setTicker('${s}')">${s}</button>`).join('');
+    _markActiveChip();
+  }
+  async function _fetchTopTickers(){
+    _populateTickerList(_DEFAULT_TICKERS);
+    try{
+      const r=await fetch('https://api.binance.com/api/v3/ticker/24hr',{cache:'no-store'});
+      if(!r.ok)throw 0;
+      const all=await r.json();
+      const stables=new Set(['USDC','BUSD','TUSD','FDUSD','DAI','USDP','FRAX','USDD','EURI','EUR']);
+      const top=all
+        .filter(t=>t.symbol.endsWith('USDT')&&!stables.has(t.symbol.slice(0,-4)))
+        .sort((a,b)=>parseFloat(b.quoteVolume)-parseFloat(a.quoteVolume))
+        .slice(0,30)
+        .map(t=>t.symbol.slice(0,-4));
+      _populateTickerList(top);
+    }catch(e){}
+  }
 
-  load(); loadJournal(); loadSettings(); loadRules(); checkExpiry(); loadApiKey(); triggerPriceFetch();
+  // ── Hint tooltip mobile toggle ──
+  document.querySelectorAll('.hint-ico').forEach(ico=>{
+    ico.addEventListener('click',e=>{
+      e.stopPropagation();
+      const wrap=ico.closest('.hint-wrap');
+      const wasOpen=wrap.classList.contains('open');
+      document.querySelectorAll('.hint-wrap.open').forEach(x=>x.classList.remove('open'));
+      if(!wasOpen)wrap.classList.add('open');
+    });
+  });
+  document.addEventListener('click',()=>document.querySelectorAll('.hint-wrap.open').forEach(x=>x.classList.remove('open')));
+
+  load(); loadJournal(); loadSettings(); loadRules(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers();
   try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
   renderZones();recalc();
 </script>
