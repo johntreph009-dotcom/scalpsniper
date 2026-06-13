@@ -27,7 +27,13 @@
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 60% 40% at 20% 5%,rgba(255,122,24,.06) 0%,transparent 60%),radial-gradient(ellipse 40% 35% at 85% 25%,rgba(88,166,255,.04) 0%,transparent 55%),radial-gradient(ellipse 50% 45% at 50% 90%,rgba(188,140,255,.03) 0%,transparent 60%)}
 .wrap{position:relative;z-index:1}
   .wrap{max-width:1080px;margin:0 auto}
-  .head{display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid var(--line);margin-bottom:22px}
+  /* ── sticky header ── */
+  .head{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--line);margin-bottom:22px;position:sticky;top:0;z-index:90;transition:background .22s,border-color .28s,box-shadow .28s;--zone-hdr-col:var(--line)}
+  .head.hdr-scrolled{background:rgba(10,9,7,.88);backdrop-filter:blur(22px) saturate(165%);-webkit-backdrop-filter:blur(22px) saturate(165%);border-bottom-color:var(--zone-hdr-col);box-shadow:0 2px 28px rgba(0,0,0,.5),0 0 0 0 transparent}
+  .head.hdr-zone{border-bottom-color:var(--zone-hdr-col)!important;box-shadow:0 2px 28px rgba(0,0,0,.5),0 0 26px var(--zone-hdr-glow,rgba(0,0,0,0))!important}
+  /* zone pill inside header */
+  .hdr-zone-pill{display:none;align-items:center;gap:5px;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.5px;padding:4px 9px;border-radius:4px;border:1px solid var(--zone-hdr-col);color:var(--zone-hdr-col);background:var(--zone-hdr-bg,rgba(255,255,255,.04));white-space:nowrap;transition:all .2s}
+  .head.hdr-zone .hdr-zone-pill{display:flex}
   .brand{display:flex;align-items:center;gap:13px}
   .brand-mark{width:38px;height:38px;flex-shrink:0}
   .brand h1{font-family:'Rajdhani',sans-serif;font-size:25px;font-weight:700;letter-spacing:1.5px;line-height:1;text-transform:uppercase}
@@ -80,6 +86,24 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .addbtn{background:linear-gradient(180deg,#241407,#16100a);border:1px solid var(--accent-dim);color:var(--accent);font-family:inherit;font-weight:700;font-size:12px;padding:9px;border-radius:5px;cursor:pointer}
   .addbtn:hover{border-color:var(--accent)}
   .zones-list{display:flex;flex-direction:column;gap:8px}
+  /* ── zone-add collapsible ── */
+  .zone-add-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;background:none;border:1px solid var(--line-soft);border-radius:6px;padding:8px 12px;color:var(--text-dim);font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;transition:all .15s;margin-bottom:8px}
+  .zone-add-toggle:hover{border-color:var(--accent-dim);color:var(--accent)}
+  .zone-add-toggle .tog-ico{font-size:11px;transition:transform .18s;font-family:'JetBrains Mono',monospace}
+  .zone-add-wrap.open .tog-ico{transform:rotate(180deg)}
+  .zone-add-wrap .zone-add{display:none}
+  .zone-add-wrap.open .zone-add{display:grid}
+  /* ── zone card 2-row layout ── */
+  .zone-card{flex-direction:column;align-items:stretch;gap:0}
+  .zc-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .zc-bot{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap}
+  .zone-note{font-size:11px;color:var(--text-dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .zone-delta{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-faint);background:rgba(255,255,255,.04);border:1px solid var(--line-soft);padding:2px 6px;border-radius:3px;white-space:nowrap;flex-shrink:0}
+  .zone-delta.near{color:var(--accent);border-color:var(--accent-dim)}
+  .zc-acts{display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0}
+  /* ── zone group separator ── */
+  .zones-group-lbl{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-faint);padding:4px 2px 2px;border-top:1px solid var(--line-soft);margin-top:4px;margin-bottom:2px;font-family:'JetBrains Mono',monospace}
+  .zones-group-lbl:first-child{border-top:none;margin-top:0}
   .zone-card{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-left-width:4px;border-radius:7px;padding:11px 14px;position:relative}
   .zone-card.live{box-shadow:0 0 0 1px var(--accent),0 0 14px rgba(255,122,24,.28);border-color:var(--accent)}
   .zone-num{font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;color:var(--text-faint);min-width:26px}
@@ -657,7 +681,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <div class="sub">Precision Trading Terminal</div>
       </div>
     </div>
-    <div class="badge" id="modeBadge">PREP</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="hdr-zone-pill" id="hdrZonePill">● <span id="hdrZoneNum"></span> · <span id="hdrZoneKind"></span></div>
+      <div class="badge" id="modeBadge">PREP</div>
+    </div>
   </div>
   <div class="phase">
     <button class="on" data-ph="prep" onclick="setPhase('prep')">① ПОДГОТОВКА</button>
@@ -843,30 +870,36 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="paste-result" id="pasteResult"></div>
     <div class="pb-parsed-bar"><span class="paste-result ok" id="pbParsedLabel"></span><button class="pb-toggle" onclick="expandPasteBox()">↕ Добавить ещё</button></div>
   </div>
-  <div class="dep-bar">
-    <span class="mini-label" style="margin:0">Депозит на расчёт позиций</span>
-    <input id="deposit" type="number" placeholder="1000" oninput="onDepositChange()">
-    <span class="dep-unit">USDT</span>
-    <span class="mini-label" style="margin:0 0 0 12px">Риск на сделку %</span>
-    <input id="depRisk" type="number" value="1" min="0.1" step="0.1" oninput="onDepositChange()" style="max-width:90px">
-  </div>
-  <div class="zone-add">
-    <div><span class="mini-label">Цена</span><input id="z_px" type="number" placeholder="103200" oninput="checkDupLive()"></div>
-    <div><span class="mini-label">Тип</span><select id="z_kind">
-      <option value="fade">FADE — отбой</option>
-      <option value="break">BREAK — пробой</option>
-      <option value="watch">WATCH — наблюдать</option>
-      <option value="stand">STAND — стоять в стороне</option>
-    </select></div>
-    <div class="note-col" style="grid-column:1/-1;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-      <div style="flex:1;min-width:120px"><span class="mini-label">План на зону</span><input id="z_note" placeholder="что делаю если цена здесь"></div>
-      <div style="flex-shrink:0"><span class="mini-label">До (HH:MM)</span><input id="z_exp" type="time" style="max-width:110px;padding:9px 8px;font-size:12px"></div>
-      <div style="flex-shrink:0"><span class="mini-label">★ Конфлюенс</span><div class="star-sel" id="z_stars_sel"><button type="button" class="star-btn on" onclick="setStar(1)">★</button><button type="button" class="star-btn on" onclick="setStar(2)">★</button><button type="button" class="star-btn" onclick="setStar(3)">★</button></div></div>
+  <div class="zone-add-wrap" id="zoneAddWrap">
+    <button class="zone-add-toggle" onclick="toggleZoneAdd()">
+      <span>＋ Добавить зону вручную</span>
+      <span class="tog-ico">▾</span>
+    </button>
+    <div class="dep-bar" style="margin-top:0">
+      <span class="mini-label" style="margin:0">Депозит</span>
+      <input id="deposit" type="number" placeholder="1000" oninput="onDepositChange()">
+      <span class="dep-unit">USDT</span>
+      <span class="mini-label" style="margin:0 0 0 8px">Риск %</span>
+      <input id="depRisk" type="number" value="1" min="0.1" step="0.1" oninput="onDepositChange()" style="max-width:72px">
     </div>
-    <div><span class="mini-label">Стоп (опц.)</span><input id="z_stop" type="number" placeholder="103050"></div>
-    <div><button class="addbtn" id="addZoneBtn" onclick="addZone()">+ Зона</button><button class="cancelbtn" id="cancelEditBtn" onclick="cancelEdit()" style="display:none">Отмена</button></div>
+    <div class="zone-add">
+      <div><span class="mini-label">Цена</span><input id="z_px" type="number" placeholder="103200" oninput="checkDupLive()"></div>
+      <div><span class="mini-label">Тип</span><select id="z_kind">
+        <option value="fade">FADE — отбой</option>
+        <option value="break">BREAK — пробой</option>
+        <option value="watch">WATCH — наблюдать</option>
+        <option value="stand">STAND — стоять в стороне</option>
+      </select></div>
+      <div class="note-col" style="grid-column:1/-1;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:1;min-width:120px"><span class="mini-label">План на зону</span><input id="z_note" placeholder="что делаю если цена здесь"></div>
+        <div style="flex-shrink:0"><span class="mini-label">До (HH:MM)</span><input id="z_exp" type="time" style="max-width:110px;padding:9px 8px;font-size:12px"></div>
+        <div style="flex-shrink:0"><span class="mini-label">★ Конфлюенс</span><div class="star-sel" id="z_stars_sel"><button type="button" class="star-btn on" onclick="setStar(1)">★</button><button type="button" class="star-btn on" onclick="setStar(2)">★</button><button type="button" class="star-btn" onclick="setStar(3)">★</button></div></div>
+      </div>
+      <div><span class="mini-label">Стоп (опц.)</span><input id="z_stop" type="number" placeholder="103050"></div>
+      <div><button class="addbtn" id="addZoneBtn" onclick="addZone()">+ Зона</button><button class="cancelbtn" id="cancelEditBtn" onclick="cancelEdit()" style="display:none">Отмена</button></div>
+    </div>
+    <div id="dupWarn" class="dup-warn"></div>
   </div>
-  <div id="dupWarn" class="dup-warn"></div>
   <div class="zones-list" id="zonesList"></div>
   <p style="font-size:11px;color:var(--text-dim);margin-top:10px;line-height:1.55">Размер позиции = (депозит × риск%) / |цена зоны − стоп|. Считается только если у зоны задан стоп. «ед.» — количество единиц базового актива; объём и риск в деньгах видны при наведении на цифру.</p>
   </div><!-- /t-side -->
@@ -1121,6 +1154,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(document.getElementById('z_exp'))document.getElementById('z_exp').value=z.exp||'';
     setStar(z.stars||2);
     syncAddButton();
+    // open the add-form panel
+    const wrap=document.getElementById('zoneAddWrap');
+    if(wrap&&!wrap.classList.contains('open'))wrap.classList.add('open');
     document.getElementById('z_px').scrollIntoView({behavior:'smooth',block:'center'});
     document.getElementById('z_px').focus();
     renderZones();
@@ -1157,44 +1193,72 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const notional=units*z.px;
     return {units,riskMoney,notional};
   }
+  const _KIND_RAW={fade:'#bc8cff',break:'#3fb950',watch:'#58a6ff',stand:'#666'};
   function renderZones(){
     if(phase==='live')_chartRedraw();
     const wrap=document.getElementById('zonesList');
     if(!zones.length){wrap.innerHTML='<div class="empty">Зон пока нет. Добавь уровни из разбора — цена, тип, план.</div>';return;}
-    const act = phase==='live'?activeZoneIdx():-1;
-    wrap.innerHTML=zones.map((z,i)=>{
-      const k=KIND[z.kind];
-      const ps=posSize(z);
-      let sizeHtml;
-      if(ps){sizeHtml=`<span class="zone-size" title="Риск ${ps.riskMoney.toFixed(2)} USDT · объём ${ps.notional.toFixed(0)} USDT">${ps.units.toFixed(4)} ед.</span>`;}
-      else{sizeHtml=`<span class="zone-size muted" title="нужны цена, стоп, депозит и риск">— ед.</span>`;}
-      const isDone = !!z.closed;
-      const isExpired = !!z.expired;
+    const act=phase==='live'?activeZoneIdx():-1;
+    const lp=parseFloat(document.getElementById('livePrice')?.value||document.getElementById('price')?.value)||null;
+    // group: active first, then by stars desc, then done/expired last
+    const order=zones.map((_,i)=>i).sort((a,b)=>{
+      const za=zones[a],zb=zones[b];
+      const doneA=za.closed||za.expired,doneB=zb.closed||zb.expired;
+      if(doneA&&!doneB)return 1;if(!doneA&&doneB)return-1;
+      if(a===act)return-1;if(b===act)return 1;
+      return(zb.stars||2)-(za.stars||2)||(a-b);
+    });
+    let lastGroup='',html='';
+    order.forEach(i=>{
+      const z=zones[i];const k=KIND[z.kind];
+      const isDone=!!z.closed,isExpired=!!z.expired;
+      const isActive=i===act&&!isDone&&!isExpired;
       const st=z.stars||2;
       const stStr='★'.repeat(st)+'☆'.repeat(3-st);
       const stCls='zone-stars s'+st;
-      const dimCls=(phase==='live'&&st<3&&!isDone&&!isExpired)?'dim-zone':'';
+      const dimCls=(phase==='live'&&st<3&&!isDone&&!isExpired&&!isActive)?'dim-zone':'';
+      const ps=posSize(z);
+      const sizeHtml=ps
+        ?`<span class="zone-size" title="Риск ${ps.riskMoney.toFixed(2)} USDT · объём ${ps.notional.toFixed(0)} USDT">${ps.units.toFixed(4)} ед.</span>`
+        :`<span class="zone-size muted">— ед.</span>`;
       const expBadge=isExpired?'<span class="zone-exp-badge zone-exp-dead">ПРОСРОЧЕНА</span>':(z.exp?`<span class="zone-exp-badge">⏰ ${z.exp}</span>`:'');
       const trigBadge=z.triggeredAt&&!isDone?`<span class="zone-trig-badge">🎯 ${new Date(z.triggeredAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</span>`:'';
-      const closeBtn = (phase==='live' && !isDone)
-        ? `<button class="zone-close" onclick="openClose(${i})">✓ Закрыть</button>` : '';
-      const doneTag = isDone ? `<span class="zone-done-tag">ЗАКРЫТ</span>` : '';
-      return `<div class="zone-card ${i===act?'live':''} ${i===editingIdx?'editing':''} ${isDone?'done':''} ${isExpired?'expired':''} ${dimCls}" style="border-left-color:${isDone||isExpired?'var(--line)':k.col}">
-        <span class="zone-num">${i+1}</span>
-        <span class="zone-px zone-px-cp" onclick="copyToClip(${z.px},this)" title="Скопировать цену">${z.px}</span>
-        <span class="zone-kind ${k.cls}">${k.lbl}</span>
-        <span class="zone-note">${z.note?escapeHtml(z.note):'<span style="color:var(--text-faint)">—</span>'}${z.stop?` · <span style="color:var(--danger)">SL ${z.stop}</span>`:''}</span>
-        <span class="${stCls}">${stStr}</span>
-        ${expBadge}
-        ${trigBadge}
-        ${sizeHtml}
-        ${i===act&&!isDone&&!isExpired?'<span class="zone-live-tag">● ЦЕНА ЗДЕСЬ</span>':''}
-        ${doneTag}
-        ${closeBtn}
-        <button class="zone-edit" onclick="editZone(${i})" title="Править">✎</button>
-        <button class="zone-del" onclick="delZone(${i})" title="Удалить">×</button>
+      const closeBtn=(phase==='live'&&!isDone)?`<button class="zone-close" onclick="openClose(${i})">✓</button>`:'';
+      const doneTag=isDone?`<span class="zone-done-tag">ЗАКРЫТ</span>`:'';
+      // delta from live price
+      let deltaHtml='';
+      if(lp&&isFinite(+z.px)&&!isDone&&!isExpired){
+        const d=((+z.px-lp)/lp*100);
+        const sign=d>=0?'+':'';
+        const near=Math.abs(d)<0.5;
+        deltaHtml=`<span class="zone-delta${near?' near':''}">${sign}${d.toFixed(2)}%</span>`;
+      }
+      // group separator
+      let grpLabel='';
+      const grp=isDone||isExpired?'done':isActive?'active':'s'+st;
+      if(grp!==lastGroup){
+        const labels={'active':'● АКТИВНАЯ ЗОНА','s3':'★★★ ВЫСОКИЙ ПРИОРИТЕТ','s2':'★★ СРЕДНИЙ','s1':'★ НАБЛЮДЕНИЕ','done':'ЗАКРЫТЫЕ / ПРОСРОЧЕННЫЕ'};
+        if(labels[grp])grpLabel=`<div class="zones-group-lbl">${labels[grp]}</div>`;
+        lastGroup=grp;
+      }
+      html+=grpLabel+`<div class="zone-card ${isActive?'live':''} ${i===editingIdx?'editing':''} ${isDone?'done':''} ${isExpired?'expired':''} ${dimCls}" style="border-left-color:${isDone||isExpired?'var(--line)':k.col}">
+        <div class="zc-top">
+          <span class="zone-num">${i+1}</span>
+          <span class="zone-px zone-px-cp" onclick="copyToClip(${z.px},this)" title="Скопировать">${z.px}</span>
+          <span class="zone-kind ${k.cls}">${k.lbl}</span>
+          <span class="${stCls}">${stStr}</span>
+          ${deltaHtml}
+          ${isActive?'<span class="zone-live-tag">● ЗДЕСЬ</span>':''}
+          ${doneTag}
+          <div class="zc-acts">${expBadge}${trigBadge}${closeBtn}<button class="zone-edit" onclick="editZone(${i})" title="Править">✎</button><button class="zone-del" onclick="delZone(${i})" title="Удалить">×</button></div>
+        </div>
+        <div class="zc-bot">
+          <span class="zone-note">${z.note?escapeHtml(z.note):'<span style="color:var(--text-faint)">план не записан</span>'}${z.stop?` · <span style="color:var(--danger);font-size:10px">SL ${z.stop}</span>`:''}</span>
+          ${sizeHtml}
+        </div>
       </div>`;
-    }).join('');
+    });
+    wrap.innerHTML=html;
   }
   function onDepositChange(){
     const r=document.getElementById('depRisk').value;
@@ -1229,6 +1293,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       document.getElementById('lcSize').style.color=ps?'var(--accent)':'var(--text-faint)';
       document.getElementById('lcNote').textContent=z.note||'план не записан';
       const cfb=document.getElementById('calcFillBtn');if(cfb)cfb.style.display=z.stop?'block':'none';
+      _updateHdrZone(z);
     } else {
       st.textContent='вне размеченных зон — ждать';st.style.color='var(--text-faint)';
       card.classList.remove('hide');card.classList.add('flat');
@@ -1239,8 +1304,32 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       document.getElementById('lcSize').textContent='—';document.getElementById('lcSize').style.color='var(--text-faint)';
       document.getElementById('lcNote').textContent='Цена не в размеченной зоне. По плану — ждать, не входить.';
       const cfb2=document.getElementById('calcFillBtn');if(cfb2)cfb2.style.display='none';
+      _updateHdrZone(null);
     }
     renderZones();
+  }
+  /* ── header zone accent ── */
+  function _updateHdrZone(zoneObj){
+    const hdr=document.querySelector('.head');
+    if(!hdr)return;
+    if(zoneObj){
+      const raw=_KIND_RAW[zoneObj.kind]||'#888';
+      const glowMap={fade:'rgba(188,140,255,.18)',break:'rgba(63,185,80,.18)',watch:'rgba(88,166,255,.18)',stand:'rgba(102,102,102,.10)'};
+      hdr.style.setProperty('--zone-hdr-col',raw);
+      hdr.style.setProperty('--zone-hdr-bg',glowMap[zoneObj.kind]||'rgba(255,255,255,.04)');
+      hdr.style.setProperty('--zone-hdr-glow',glowMap[zoneObj.kind]||'rgba(0,0,0,0)');
+      hdr.classList.add('hdr-zone');
+      const pill=document.getElementById('hdrZonePill');
+      if(pill){
+        document.getElementById('hdrZoneNum').textContent='ЗН '+(zones.indexOf(zoneObj)+1);
+        document.getElementById('hdrZoneKind').textContent=KIND[zoneObj.kind]?.lbl||'';
+      }
+    } else {
+      hdr.style.removeProperty('--zone-hdr-col');
+      hdr.style.removeProperty('--zone-hdr-bg');
+      hdr.style.removeProperty('--zone-hdr-glow');
+      hdr.classList.remove('hdr-zone');
+    }
   }
   // ---- risk calc ----
   function recalc(){
@@ -2266,6 +2355,22 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     });
   });
   document.addEventListener('click',()=>document.querySelectorAll('.hint-wrap.open').forEach(x=>x.classList.remove('open')));
+
+  // ── Zone-add collapsible ──
+  function toggleZoneAdd(forceOpen){
+    const wrap=document.getElementById('zoneAddWrap');
+    if(!wrap)return;
+    const open=forceOpen!=null?forceOpen:!wrap.classList.contains('open');
+    wrap.classList.toggle('open',open);
+  }
+  // ── Sticky header scroll class ──
+  (function(){
+    const hdr=document.querySelector('.head');
+    if(!hdr)return;
+    function _onScroll(){hdr.classList.toggle('hdr-scrolled',window.scrollY>8);}
+    window.addEventListener('scroll',_onScroll,{passive:true});
+    _onScroll();
+  })();
 
   load(); loadJournal(); loadSettings(); loadRules(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers();
   try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
