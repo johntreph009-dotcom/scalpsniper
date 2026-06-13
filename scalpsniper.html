@@ -1249,6 +1249,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     document.getElementById('outPre').textContent=L.join('\n');
     document.getElementById('outBox').classList.remove('hide');
     document.getElementById('outBox').scrollIntoView({behavior:'smooth',block:'nearest'});
+    // if API key + images → auto-fill zone candidates
+    const _ak=localStorage.getItem(AKEY)||'';
+    if(_ak){
+      const _imgs=['dom','tape','liq','chart'].map(f=>{const el=document.getElementById('img_'+f);return(el&&el.src&&el.src.startsWith('data:'))?{field:f,src:el.src}:null;}).filter(Boolean);
+      if(_imgs.length>0)analyzeAllShots(_imgs,_ak);
+    }
   }
   function copyOut(){navigator.clipboard.writeText(document.getElementById('outPre').textContent).then(()=>{const b=event.target,o=b.textContent;b.textContent='Скопировано';setTimeout(()=>b.textContent=o,1400)});}
   function resetPrep(){
@@ -1960,6 +1966,70 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }
   }
 
+  // ── analyzeAllShots: combined vision → zone pipe candidates ──
+  async function _resizeToB64(dataUrl,MAX=1024){
+    const img=new Image();img.src=dataUrl;
+    await new Promise(r=>{img.onload=r;img.onerror=r});
+    const sc=Math.min(1,MAX/Math.max(img.width||MAX,img.height||MAX));
+    const cvs=document.createElement('canvas');
+    cvs.width=Math.round((img.width||MAX)*sc);
+    cvs.height=Math.round((img.height||MAX)*sc);
+    cvs.getContext('2d').drawImage(img,0,0,cvs.width,cvs.height);
+    return cvs.toDataURL('image/jpeg',.85).split(',')[1];
+  }
+  const _FL={dom:'Стакан MEXC (DOM)',tape:'Лента CScalp (tape)',liq:'Coinglass (ликвидации)',chart:'График/VPVR'};
+  async function analyzeAllShots(imgs,apiKey){
+    const pasteIn=document.getElementById('pasteIn');
+    const pbLabel=document.getElementById('pbParsedLabel');
+    const prevVal=pasteIn.value;
+    pasteIn.value='⏳ AI анализирует скриншоты…';
+    pasteIn.disabled=true;
+    pbLabel.textContent='';
+    try{
+      const ticker=document.getElementById('ticker').value.trim()||'?';
+      const price=document.getElementById('price').value.trim()||'?';
+      const tf=document.getElementById('tf').value||'—';
+      const lev=document.getElementById('lev').value||'1';
+      const content=[];
+      for(const {field,src} of imgs){
+        const b64=await _resizeToB64(src);
+        content.push({type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}});
+        content.push({type:'text',text:'['+(_FL[field]||field)+']'});
+      }
+      content.push({type:'text',text:
+        'Тикер: '+ticker+', ТФ: '+tf+', Цена: '+price+', Плечо: '+lev+'×, Стратегия: '+selProto+'.\n\n'+
+        'Посмотри на '+imgs.length+' скриншот(а) рынка. Кратко опиши структуру (1–2 предложения).\n'+
+        'Затем выдай зоны-кандидаты — только наблюдения, без директив входа. Если цена зоны не видна чётко — не подставляй.\n\n'+
+        'Ответ строго в формате:\nЗОНЫ:\nцена | тип | план | стоп\n'+
+        'тип=fade/break/watch/stand, стоп опционален. Финальное решение и уровни — за трейдером.'
+      });
+      const res=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:600,messages:[{role:'user',content}]})
+      });
+      const json=await res.json();
+      const text=(json.content&&json.content[0]&&json.content[0].text)||'';
+      const m=text.match(/ЗОНЫ[:\s]*([\s\S]+)/i);
+      if(m){
+        pasteIn.value=m[1].trim();
+        pbLabel.textContent='✓ AI предложил зоны — проверь и нажми «Разобрать в зоны ↓»';
+        pbLabel.className='paste-result ok';
+      }else{
+        pasteIn.value=text.trim();
+        pbLabel.textContent='AI ответил — найди строки зон, нажми «Разобрать»';
+        pbLabel.className='paste-result';
+      }
+    }catch(err){
+      pasteIn.value=prevVal||'';
+      pbLabel.textContent='Ошибка AI — введи зоны вручную';
+      pbLabel.className='paste-result';
+      console.warn('ScalpSniper analyzeAllShots:',err);
+    }finally{
+      pasteIn.disabled=false;
+    }
+  }
+
   // ── Live Price (Binance → MEXC fallback) ──
   let _pxPoll=null;
   function _symFromTicker(raw){return raw.replace(/[\/\-_ ]/g,'').toUpperCase();}
@@ -2000,6 +2070,33 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     fetchLivePx();
     _pxPoll=setInterval(fetchLivePx,5000);
   }
+
+  // ── Ctrl+V paste screenshot into first empty slot ──
+  document.addEventListener('paste',e=>{
+    if(document.getElementById('prepPhase').classList.contains('hide'))return;
+    const items=e.clipboardData&&e.clipboardData.items;
+    if(!items)return;
+    for(const item of items){
+      if(item.type.startsWith('image/')){
+        const file=item.getAsFile();if(!file)break;
+        const fields=['dom','tape','liq','chart'];
+        const f=fields.find(f=>{const el=document.getElementById('img_'+f);return !el||!el.src||!el.src.startsWith('data:');});
+        if(!f)break;
+        const reader=new FileReader();
+        reader.onload=ev=>{
+          const dataUrl=ev.target.result;
+          document.getElementById('img_'+f).src=dataUrl;
+          document.getElementById('sp_'+f).classList.add('visible');
+          document.getElementById('su_'+f).classList.add('loaded');
+          document.getElementById('shot_'+f).classList.add('has-img');
+          const apiKey=localStorage.getItem(AKEY)||'';
+          if(apiKey)analyzeShot(dataUrl,f,apiKey);
+        };
+        reader.readAsDataURL(file);
+        e.preventDefault();break;
+      }
+    }
+  });
 
   load(); loadJournal(); loadSettings(); loadRules(); checkExpiry(); loadApiKey(); triggerPriceFetch();
   try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
