@@ -232,6 +232,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .hint-ico{width:14px;height:14px;border-radius:50%;border:1px solid var(--line);display:inline-flex;align-items:center;justify-content:center;font-size:8px;color:var(--text-faint);cursor:default;transition:border-color .12s,color .12s;flex-shrink:0;font-style:normal;font-family:'JetBrains Mono',monospace;line-height:1;user-select:none}
   .hint-wrap:hover .hint-ico,.hint-wrap.open .hint-ico{border-color:var(--accent-dim);color:var(--accent)}
   .hint-tip{position:absolute;left:0;bottom:calc(100% + 8px);background:var(--panel-2);border:1px solid var(--glass-border);border-radius:6px;padding:8px 11px;font-size:10px;color:var(--text-dim);line-height:1.55;min-width:180px;max-width:240px;pointer-events:none;opacity:0;transition:opacity .15s;z-index:200;font-family:'JetBrains Mono',monospace;font-weight:400;box-shadow:0 4px 16px rgba(0,0,0,.5);white-space:normal}
+  /* в правой панели всплывашка раскрывается влево, чтобы не обрезаться у края */
+  .t-side .hint-tip{left:auto;right:0}
   .hint-tip::after{content:'';position:absolute;top:100%;left:10px;border:5px solid transparent;border-top-color:var(--panel-2)}
   .hint-wrap:hover .hint-tip,.hint-wrap.open .hint-tip{opacity:1}
   @media(max-width:500px){.hint-tip{left:auto;right:0;max-width:200px}.hint-tip::after{left:auto;right:10px}}
@@ -899,7 +901,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
   <div class="t-side">
   <!-- ===== ZONES (shared, always visible) ===== -->
-  <div class="section-title" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация по времени · Клик на цену зоны — скопировать</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
+  <div class="section-title" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация зоны по времени · Клик по цене внутри карточки зоны копирует её в буфер</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
   <!-- input tools: collapsible (вставка + ручное добавление + депозит) -->
   <div class="zone-tools open" id="zoneTools">
   <button class="zone-tools-toggle" type="button" onclick="toggleZoneTools()">
