@@ -194,10 +194,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .mini-chart-hdr{display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,0,0,.35);border-bottom:1px solid rgba(255,255,255,.04)}
   .mc-tf{font-size:9px;letter-spacing:.5px;color:var(--text-faint)}
   .mc-status{font-size:9px;letter-spacing:.3px;color:var(--text-dim);margin-left:auto}
-  .ticker-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
-  .ticker-chip{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.3px;padding:2px 7px;background:var(--panel);border:1px solid var(--line);border-radius:3px;color:var(--text-dim);cursor:pointer;transition:border-color .12s,color .12s,background .12s;line-height:1.6}
-  .ticker-chip:hover{border-color:var(--accent-dim);color:var(--accent)}
-  .ticker-chip.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  .ticker-input-wrap{position:relative}
+  #ticker{padding-right:30px}
+  .ticker-dd-toggle{position:absolute;right:1px;top:1px;bottom:1px;width:28px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;border-left:1px solid var(--line);color:var(--text-dim);cursor:pointer;font-size:12px;border-radius:0 3px 3px 0;transition:color .12s,transform .12s}
+  .ticker-dd-toggle:hover{color:var(--accent)}
+  .ticker-input-wrap.open .ticker-dd-toggle{color:var(--accent);transform:rotate(180deg)}
+  .ticker-dd{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;max-height:240px;overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,.5);display:none;padding:3px}
+  .ticker-input-wrap.open .ticker-dd{display:block}
+  .ticker-dd-item{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.3px;padding:5px 9px;border-radius:3px;color:var(--text-dim);cursor:pointer;line-height:1.4}
+  .ticker-dd-item:hover{background:var(--accent-soft);color:var(--accent)}
+  .ticker-dd-item.active{color:var(--accent);background:var(--accent-soft)}
+  .ticker-dd-empty{font-size:10px;color:var(--text-faint);padding:6px 9px}
   /* ── hint tooltips ── */
   .hint-wrap{position:relative;display:inline-flex;align-items:center;vertical-align:middle;margin-left:6px}
   .hint-ico{width:14px;height:14px;border-radius:50%;border:1px solid var(--line);display:inline-flex;align-items:center;justify-content:center;font-size:8px;color:var(--text-faint);cursor:default;transition:border-color .12s,color .12s;flex-shrink:0;font-style:normal;font-family:'JetBrains Mono',monospace;line-height:1;user-select:none}
@@ -699,9 +706,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div id="prepPhase">
     <div class="field">
       <div class="row4">
-        <div><span class="label">Тикер</span><input id="ticker" placeholder="BTC/USDT" list="tickerList" autocomplete="off" oninput="saveSettings();triggerPriceFetch();_markActiveChip()">
-          <datalist id="tickerList"></datalist>
-          <div class="ticker-chips" id="tickerChips"></div>
+        <div><span class="label">Тикер</span>
+          <div class="ticker-input-wrap" id="tickerWrap">
+            <input id="ticker" placeholder="BTC/USDT" autocomplete="off" oninput="saveSettings();triggerPriceFetch();_filterTickerDD()" onfocus="_openTickerDD()">
+            <button type="button" class="ticker-dd-toggle" id="tickerDDToggle" onclick="_toggleTickerDD(event)" aria-label="Список тикеров">▾</button>
+            <div class="ticker-dd" id="tickerDD"></div>
+          </div>
         </div>
         <div><span class="label">Таймфрейм</span><select id="tf" onchange="saveSettings()"><option>1m</option><option selected>5m</option><option>15m</option><option>1h</option><option>4h</option></select></div>
         <div><span class="label">Плечо ×</span><input id="lev" type="number" value="1" min="1" oninput="saveSettings()"></div>
@@ -2308,26 +2318,44 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _pxPoll=setInterval(fetchLivePx,5000);
   }
 
-  // ── Ticker quick-chips (топ-30 по объёму) ──
+  // ── Ticker dropdown (топ-30 по объёму) ──
   const _DEFAULT_TICKERS=['BTC','ETH','BNB','SOL','XRP','DOGE','ADA','TRX','AVAX','TON','SHIB','LINK','DOT','LTC','BCH','NEAR','APT','SUI','INJ','WLD','ARB','OP','ATOM','HBAR','PEPE','ONDO','FIL','ICP','VET','BONK'];
+  let _tickerSyms=[];
   function _setTicker(sym){
     const el=document.getElementById('ticker');
     el.value=sym+'/USDT';
     saveSettings();triggerPriceFetch();
     if(phase==='live')_chartRefresh();
     _markActiveChip();
+    _closeTickerDD();
   }
   function _markActiveChip(){
     const cur=(document.getElementById('ticker').value||'').replace(/[\/\-_ ]/g,'').replace(/USDT$/i,'').toUpperCase();
-    document.querySelectorAll('.ticker-chip').forEach(c=>c.classList.toggle('active',c.dataset.sym===cur));
+    document.querySelectorAll('.ticker-dd-item').forEach(c=>c.classList.toggle('active',c.dataset.sym===cur));
   }
-  function _populateTickerList(syms){
-    const dl=document.getElementById('tickerList');
-    const chips=document.getElementById('tickerChips');
-    if(dl)dl.innerHTML=syms.map(s=>`<option value="${s}/USDT">`).join('');
-    if(chips)chips.innerHTML=syms.map(s=>`<button class="ticker-chip" data-sym="${s}" onclick="_setTicker('${s}')">${s}</button>`).join('');
+  function _renderTickerDD(syms){
+    const dd=document.getElementById('tickerDD');
+    if(!dd)return;
+    dd.innerHTML=syms.length
+      ? syms.map(s=>`<div class="ticker-dd-item" data-sym="${s}" onmousedown="event.preventDefault();_setTicker('${s}')">${s}/USDT</div>`).join('')
+      : '<div class="ticker-dd-empty">нет совпадений</div>';
     _markActiveChip();
   }
+  function _populateTickerList(syms){ _tickerSyms=syms; _renderTickerDD(syms); }
+  function _filterTickerDD(){
+    const q=(document.getElementById('ticker').value||'').replace(/[\/\-_ ]/g,'').replace(/USDT$/i,'').toUpperCase();
+    _renderTickerDD(q?_tickerSyms.filter(s=>s.includes(q)):_tickerSyms);
+    _openTickerDD();
+  }
+  function _openTickerDD(){const w=document.getElementById('tickerWrap');if(w)w.classList.add('open');}
+  function _closeTickerDD(){const w=document.getElementById('tickerWrap');if(w)w.classList.remove('open');}
+  function _toggleTickerDD(e){
+    e.preventDefault();e.stopPropagation();
+    const w=document.getElementById('tickerWrap');if(!w)return;
+    if(w.classList.contains('open')){_closeTickerDD();}
+    else{_renderTickerDD(_tickerSyms);_openTickerDD();document.getElementById('ticker').focus();}
+  }
+  document.addEventListener('click',e=>{ if(!e.target.closest('#tickerWrap'))_closeTickerDD(); });
   async function _fetchTopTickers(){
     _populateTickerList(_DEFAULT_TICKERS);
     try{
