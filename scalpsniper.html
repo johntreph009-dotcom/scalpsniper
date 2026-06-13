@@ -164,6 +164,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   /* session price paste */
   .live-bar .paste-px{background:var(--panel-2);border:1px solid var(--line);color:var(--text-dim);font-family:inherit;font-size:11px;font-weight:700;padding:10px 12px;border-radius:5px;cursor:pointer;white-space:nowrap;letter-spacing:.3px}
   .live-bar .paste-px:hover{color:var(--text);border-color:var(--text-faint)}
+  /* ===== mini chart (session) ===== */
+  .mini-chart-wrap{position:relative;border-radius:8px;overflow:hidden;background:#0d0c0a;border:1px solid var(--line);margin-bottom:14px}
+  .mini-chart-wrap canvas{display:block;width:100%}
+  .mini-chart-hdr{display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,0,0,.35);border-bottom:1px solid rgba(255,255,255,.04)}
+  .mc-tf{font-size:9px;letter-spacing:.5px;color:var(--text-faint)}
+  .mc-status{font-size:9px;letter-spacing:.3px;color:var(--text-dim);margin-left:auto}
   /* ===== close zone button (session) ===== */
   .zone-close{background:none;border:1px solid var(--green-dim);color:var(--green);cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;padding:5px 10px;border-radius:5px;white-space:nowrap;letter-spacing:.5px}
   .zone-close:hover{background:rgba(63,185,80,.12);border-color:var(--green)}
@@ -738,6 +744,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <span id="streakBadge" class="streak-badge" style="display:none"></span>
     </div>
     <div class="session-ctx" id="sessionCtx"><div class="sc-bias" id="scBias"></div><div class="sc-guards" id="scGuards"></div></div>
+    <div class="mini-chart-wrap" id="miniChartWrap">
+      <div class="mini-chart-hdr">
+        <span class="mc-tf" id="mcTfLabel">—</span>
+        <span class="mc-status" id="mcStatus">загрузка…</span>
+      </div>
+      <canvas id="miniChart" height="180"></canvas>
+    </div>
     <div class="zone-ladder" id="zoneLadder"></div>
     <div id="liveCard" class="live-card hide">
       <div class="lc-top"><span class="lc-num" id="lcNum">1</span><span class="lc-kind" id="lcKind">FADE</span></div>
@@ -964,8 +977,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const lpEl=document.getElementById('livePrice');
       const prepPx=document.getElementById('price').value;
       updateSessionCtx(); checkSessionReadiness();
+      startMiniChart();
       if(lpEl && !lpEl.value && prepPx){ lpEl.value=prepPx; updateLive(); return; }
-    }
+    } else { stopMiniChart(); }
     if(p==='journal') renderJournal();
     if(p==='live'){ updateSessionCtx(); checkSessionReadiness(); }
     renderZones();
@@ -1129,6 +1143,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     return {units,riskMoney,notional};
   }
   function renderZones(){
+    if(phase==='live')_chartRedraw();
     const wrap=document.getElementById('zonesList');
     if(!zones.length){wrap.innerHTML='<div class="empty">Зон пока нет. Добавь уровни из разбора — цена, тип, план.</div>';return;}
     const act = phase==='live'?activeZoneIdx():-1;
@@ -2030,6 +2045,96 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }
   }
 
+  // ── Mini Chart (Binance klines → SESSION canvas) ──
+  let _klines=[],_klSym='',_klTf='',_chartTimer=null;
+  const _MC_KIND={fade:{fill:'rgba(255,122,24,.14)',line:'rgba(255,122,24,.75)'},break:{fill:'rgba(34,197,94,.10)',line:'rgba(34,197,94,.65)'},watch:{fill:'rgba(120,120,110,.07)',line:'rgba(120,120,110,.45)'},stand:{fill:'rgba(100,140,255,.07)',line:'rgba(100,140,255,.45)'}};
+  async function _fetchKlines(sym,tf){
+    try{
+      const r=await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval='+tf+'&limit=65',{cache:'no-store'});
+      if(!r.ok)return null;
+      return (await r.json()).map(k=>({o:+k[1],h:+k[2],l:+k[3],c:+k[4]}));
+    }catch{return null;}
+  }
+  function _drawChart(candles,currentPrice){
+    const cv=document.getElementById('miniChart');if(!cv)return;
+    const W=cv.parentElement.clientWidth||600,H=180,LBL=86;
+    cv.width=W;cv.height=H;
+    const ctx=cv.getContext('2d');
+    const activeZ=zones.filter(z=>!z.closed&&!z.expired);
+    const prices=candles.flatMap(c=>[c.h,c.l]);
+    activeZ.forEach(z=>{prices.push(+z.px);if(z.stop)prices.push(+z.stop);});
+    if(currentPrice&&isFinite(currentPrice))prices.push(currentPrice);
+    if(!prices.length)return;
+    const span=Math.max(...prices)-Math.min(...prices)||1;
+    const minP=Math.min(...prices)-span*.04,maxP=Math.max(...prices)+span*.04;
+    const toY=p=>H-((p-minP)/(maxP-minP))*H;
+    ctx.fillStyle='#0d0c0a';ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='#1a1814';ctx.lineWidth=.5;
+    [1,2,3].forEach(i=>{const y=H/4*i;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();});
+    // zone bands
+    activeZ.forEach(z=>{
+      const col=_MC_KIND[z.kind]||_MC_KIND.watch;
+      const y=toY(+z.px),bh=Math.max(2,H*.024);
+      ctx.fillStyle=col.fill;ctx.fillRect(0,y-bh,W-LBL,bh*2);
+      ctx.strokeStyle=col.line;ctx.lineWidth=.8;ctx.setLineDash([]);
+      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W-LBL,y);ctx.stroke();
+      ctx.font='9px JetBrains Mono,monospace';ctx.fillStyle=col.line;
+      ctx.fillText((z.kind||'').toUpperCase()+' '+z.px,W-LBL+4,y+3);
+      if(z.stop){
+        const sy=toY(+z.stop);
+        ctx.strokeStyle='rgba(239,68,68,.6)';ctx.lineWidth=.7;ctx.setLineDash([3,3]);
+        ctx.beginPath();ctx.moveTo(0,sy);ctx.lineTo(W-LBL,sy);ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    });
+    // candles
+    const pad=4,cw=(W-pad*2-LBL)/Math.max(candles.length,1),bw=Math.max(1,Math.floor(cw*.6));
+    candles.forEach((c,i)=>{
+      const x=pad+i*cw+cw/2,green=c.c>=c.o,col=green?'#22c55e':'#ef4444';
+      ctx.strokeStyle=col;ctx.lineWidth=.8;ctx.setLineDash([]);
+      ctx.beginPath();ctx.moveTo(x,toY(c.h));ctx.lineTo(x,toY(c.l));ctx.stroke();
+      const top=Math.min(toY(c.o),toY(c.c)),ht=Math.max(1,Math.abs(toY(c.o)-toY(c.c)));
+      ctx.fillStyle=col;ctx.fillRect(x-bw/2,top,bw,ht);
+    });
+    // current price
+    if(currentPrice&&isFinite(currentPrice)){
+      const py=toY(currentPrice);
+      ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=1;ctx.setLineDash([4,3]);
+      ctx.beginPath();ctx.moveTo(0,py);ctx.lineTo(W-LBL,py);ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle='rgba(255,255,255,.13)';ctx.fillRect(W-LBL+2,py-8,LBL-4,15);
+      ctx.fillStyle='#fff';ctx.font='bold 9px JetBrains Mono,monospace';
+      ctx.fillText(currentPrice.toLocaleString(),W-LBL+5,py+4);
+    }
+  }
+  function _chartRedraw(){
+    const lp=parseFloat(document.getElementById('livePrice').value)||parseFloat(document.getElementById('price').value)||null;
+    if(_klines.length)_drawChart(_klines,lp);
+  }
+  async function _chartRefresh(){
+    const raw=document.getElementById('ticker').value.trim();
+    const tf=document.getElementById('tf').value||'5m';
+    const st=document.getElementById('mcStatus');
+    const tl=document.getElementById('mcTfLabel');
+    if(tl)tl.textContent=(raw||'—').toUpperCase()+' · '+tf;
+    if(!raw){if(st)st.textContent='нет тикера';return;}
+    const sym=_symFromTicker(raw);
+    if(st)st.textContent='загрузка…';
+    const data=await _fetchKlines(sym,tf);
+    if(data){_klines=data;_klSym=sym;_klTf=tf;if(st)st.textContent='live';}
+    else{if(st)st.textContent='нет данных';}
+    _chartRedraw();
+  }
+  function startMiniChart(){
+    if(_chartTimer)clearInterval(_chartTimer);
+    _chartRefresh();
+    _chartTimer=setInterval(_chartRefresh,15000);
+    const ro=new ResizeObserver(()=>_chartRedraw());
+    const wrap=document.getElementById('miniChartWrap');
+    if(wrap)ro.observe(wrap);
+  }
+  function stopMiniChart(){if(_chartTimer){clearInterval(_chartTimer);_chartTimer=null;}}
+
   // ── Live Price (Binance → MEXC fallback) ──
   let _pxPoll=null;
   function _symFromTicker(raw){return raw.replace(/[\/\-_ ]/g,'').toUpperCase();}
@@ -2042,6 +2147,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const sessEl=document.getElementById('livePrice');
     if(document.activeElement!==sessEl){sessEl.value=px;updateLive();}
     _setLiveInd('● LIVE','var(--green)');
+    if(phase==='live')_chartRedraw();
   }
   async function fetchLivePx(){
     const raw=document.getElementById('ticker').value.trim();
