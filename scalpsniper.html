@@ -683,6 +683,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .shot .st span{color:var(--text-faint);font-weight:400;font-size:10px}
   .obs-toggle{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:11px;padding:0 2px;font-family:inherit;opacity:.55;transition:opacity .15s;line-height:1;flex-shrink:0}
   .obs-toggle:hover,.shot.obs-open .obs-toggle{opacity:1;color:var(--accent)}
+  .st-acts{display:flex;align-items:center;gap:8px;flex-shrink:0}
+  .src-link{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:9.5px;font-family:'JetBrains Mono',monospace;letter-spacing:.2px;padding:1px 4px;border:1px solid var(--line-soft);border-radius:3px;opacity:.7;transition:opacity .15s,color .15s,border-color .15s;line-height:1.3;white-space:nowrap}
+  .src-link:hover{opacity:1;color:var(--accent);border-color:var(--accent-dim)}
   .obs-ta:disabled{opacity:.45;cursor:wait;background:rgba(255,255,255,.02)}
   /* ── sticky prep bar ── */
   .prep-sticky-bar{position:sticky;bottom:16px;z-index:20;background:rgba(10,12,16,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,122,24,.3);border-radius:8px;padding:10px 14px;margin-top:14px}
@@ -767,7 +770,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="section-title">Наблюдения <span class="tag">AI заполняет автоматически</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Ctrl+V вставляет скрин из буфера в первый свободный слот · ✏ — ввод вручную · AI заполняет textarea сразу после загрузки каждого скрина</span></span></div>
     <div class="shots">
       <div class="shot" id="shot_dom">
-        <div class="st"><span style="display:flex;align-items:center;gap:6px">Стакан MEXC <span style="color:var(--text-faint);font-weight:400;font-size:10px">DOM / стены</span></span><button class="obs-toggle" onclick="toggleObs('dom')" title="Ввести вручную">✏</button></div>
+        <div class="st"><span style="display:flex;align-items:center;gap:6px">Стакан MEXC <span style="color:var(--text-faint);font-weight:400;font-size:10px">DOM / стены</span></span><span class="st-acts"><button class="src-link" type="button" onclick="openSource('dom')" title="Открыть стакан MEXC Futures по тикеру">↗ источник</button><button class="obs-toggle" onclick="toggleObs('dom')" title="Ввести вручную">✏</button></span></div>
         <div class="shot-upload" id="su_dom"><label><input type="file" accept="image/*" onchange="loadShot(this,'dom')">+ скриншот</label></div>
         <div class="shot-preview" id="sp_dom"><img id="img_dom" alt="DOM"><button class="shot-clear" onclick="clearShot('dom')">✕ убрать</button></div>
         <textarea id="obs_dom" class="obs-ta" oninput="renderReadinessScore()" placeholder="Крупные лимитки, размер, уровень, дисбаланс bid/ask..."></textarea>
@@ -779,13 +782,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <textarea id="obs_tape" class="obs-ta" oninput="renderReadinessScore()" placeholder="Агрессор, дельта, абсорбция, переход в инициацию..."></textarea>
       </div>
       <div class="shot" id="shot_liq">
-        <div class="st"><span style="display:flex;align-items:center;gap:6px">Coinglass <span style="color:var(--text-faint);font-weight:400;font-size:10px">карта ликвидаций</span></span><button class="obs-toggle" onclick="toggleObs('liq')" title="Ввести вручную">✏</button></div>
+        <div class="st"><span style="display:flex;align-items:center;gap:6px">Coinglass <span style="color:var(--text-faint);font-weight:400;font-size:10px">карта ликвидаций</span></span><span class="st-acts"><button class="src-link" type="button" onclick="openSource('liq')" title="Открыть карту ликвидаций Coinglass по символу">↗ источник</button><button class="obs-toggle" onclick="toggleObs('liq')" title="Ввести вручную">✏</button></span></div>
         <div class="shot-upload" id="su_liq"><label><input type="file" accept="image/*" onchange="loadShot(this,'liq')">+ скриншот</label></div>
         <div class="shot-preview" id="sp_liq"><img id="img_liq" alt="Coinglass"><button class="shot-clear" onclick="clearShot('liq')">✕ убрать</button></div>
         <textarea id="obs_liq" class="obs-ta" oninput="renderReadinessScore()" placeholder="Кластеры сверху/снизу, сметённые пулы, вакуум..."></textarea>
       </div>
       <div class="shot" id="shot_chart">
-        <div class="st"><span style="display:flex;align-items:center;gap:6px">График / VPVR <span style="color:var(--text-faint);font-weight:400;font-size:10px">структура</span></span><button class="obs-toggle" onclick="toggleObs('chart')" title="Ввести вручную">✏</button></div>
+        <div class="st"><span style="display:flex;align-items:center;gap:6px">График / VPVR <span style="color:var(--text-faint);font-weight:400;font-size:10px">структура</span></span><span class="st-acts"><button class="src-link" type="button" onclick="openSource('chart')" title="Открыть график TradingView по символу">↗ источник</button><button class="obs-toggle" onclick="toggleObs('chart')" title="Ввести вручную">✏</button></span></div>
         <div class="shot-upload" id="su_chart"><label><input type="file" accept="image/*" onchange="loadShot(this,'chart')">+ скриншот</label></div>
         <div class="shot-preview" id="sp_chart"><img id="img_chart" alt="Chart"><button class="shot-clear" onclick="clearShot('chart')">✕ убрать</button></div>
         <textarea id="obs_chart" class="obs-ta" oninput="renderReadinessScore()" placeholder="POC, VAH, VAL, LVN, фибы, волна, MLMI..."></textarea>
@@ -2403,6 +2406,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // ── Live Price (Binance → MEXC fallback) ──
   let _pxPoll=null;
   function _symFromTicker(raw){return raw.replace(/[\/\-_ ]/g,'').toUpperCase();}
+  // открыть источник для слота наблюдения под текущий тикер (один клик — на нужную страницу для скрина)
+  function openSource(kind){
+    const raw=document.getElementById('ticker').value.trim()||'BTC/USDT';
+    const base=(_symFromTicker(raw).replace(/USDT$/i,'')||'BTC');
+    const urls={
+      dom:'https://futures.mexc.com/exchange/'+base+'_USDT',
+      liq:'https://www.coinglass.com/currencies/'+base,
+      chart:'https://www.tradingview.com/chart/?symbol=MEXC%3A'+base+'USDT.P'
+    };
+    const u=urls[kind];
+    if(u)window.open(u,'_blank','noopener');
+  }
   function _setLiveInd(txt,col){
     ['pxLiveInd','sessLiveInd'].forEach(id=>{const el=document.getElementById(id);if(el){el.textContent=txt;el.style.color=col;}});
   }
