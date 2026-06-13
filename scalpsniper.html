@@ -27,13 +27,17 @@
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 60% 40% at 20% 5%,rgba(255,122,24,.06) 0%,transparent 60%),radial-gradient(ellipse 40% 35% at 85% 25%,rgba(88,166,255,.04) 0%,transparent 55%),radial-gradient(ellipse 50% 45% at 50% 90%,rgba(188,140,255,.03) 0%,transparent 60%)}
 .wrap{position:relative;z-index:1}
   .wrap{max-width:1080px;margin:0 auto}
-  /* ── sticky header ── */
-  .head{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--line);margin-bottom:22px;position:sticky;top:0;z-index:90;transition:background .22s,border-color .28s,box-shadow .28s;--zone-hdr-col:var(--line)}
-  .head.hdr-scrolled{background:rgba(10,9,7,.88);backdrop-filter:blur(22px) saturate(165%);-webkit-backdrop-filter:blur(22px) saturate(165%);border-bottom-color:var(--zone-hdr-col);box-shadow:0 2px 28px rgba(0,0,0,.5),0 0 0 0 transparent}
-  .head.hdr-zone{border-bottom-color:var(--zone-hdr-col)!important;box-shadow:0 2px 28px rgba(0,0,0,.5),0 0 26px var(--zone-hdr-glow,rgba(0,0,0,0))!important}
-  /* zone pill inside header */
-  .hdr-zone-pill{display:none;align-items:center;gap:5px;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.5px;padding:4px 9px;border-radius:4px;border:1px solid var(--zone-hdr-col);color:var(--zone-hdr-col);background:var(--zone-hdr-bg,rgba(255,255,255,.04));white-space:nowrap;transition:all .2s}
-  .head.hdr-zone .hdr-zone-pill{display:flex}
+  /* ── header (logo, прокручивается) ── */
+  .head{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--line);margin-bottom:14px}
+  /* ── sticky phase-nav: вкладки Подготовка / Сессия / Журнал парят вверху ── */
+  .phase-nav{position:sticky;top:0;z-index:90;display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:6px 0;transition:background .22s,box-shadow .28s,padding .2s,border-radius .2s;--zone-hdr-col:var(--line)}
+  .phase-nav .phase{flex:1;margin-bottom:0}
+  .phase-nav.nav-scrolled{background:rgba(10,9,7,.9);backdrop-filter:blur(22px) saturate(165%);-webkit-backdrop-filter:blur(22px) saturate(165%);box-shadow:0 4px 28px rgba(0,0,0,.55);padding:8px 12px;border-radius:0 0 12px 12px}
+  .phase-nav.nav-zone .phase{border-color:var(--zone-hdr-col)}
+  .phase-nav.nav-zone.nav-scrolled{box-shadow:0 4px 28px rgba(0,0,0,.55),0 0 26px var(--zone-hdr-glow,rgba(0,0,0,0))}
+  /* zone pill внутри phase-nav (видна во время сессии) */
+  .hdr-zone-pill{display:none;align-items:center;gap:5px;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.5px;padding:5px 9px;border-radius:4px;border:1px solid var(--zone-hdr-col);color:var(--zone-hdr-col);background:var(--zone-hdr-bg,rgba(255,255,255,.04));white-space:nowrap;transition:all .2s;flex-shrink:0}
+  .phase-nav.nav-zone .hdr-zone-pill{display:flex}
   .brand{display:flex;align-items:center;gap:13px}
   .brand-mark{width:38px;height:38px;flex-shrink:0}
   .brand h1{font-family:'Rajdhani',sans-serif;font-size:25px;font-weight:700;letter-spacing:1.5px;line-height:1;text-transform:uppercase}
@@ -93,6 +97,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .zone-add-wrap.open .tog-ico{transform:rotate(180deg)}
   .zone-add-wrap .zone-add{display:none}
   .zone-add-wrap.open .zone-add{display:grid}
+  /* ── zone-tools: единый сворачиваемый блок ввода (вставка + ручное + депозит) ── */
+  .zone-tools{margin-bottom:10px}
+  .zone-tools-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--glass-bg);backdrop-filter:var(--glass-blur-sm);-webkit-backdrop-filter:var(--glass-blur-sm);border:1px solid var(--glass-border);border-radius:7px;padding:8px 12px;color:var(--text-dim);font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;transition:color .12s,border-color .12s}
+  .zone-tools-toggle:hover{color:var(--accent);border-color:var(--accent-dim)}
+  .zone-tools-toggle .ztt-hint{font-weight:400;text-transform:none;color:var(--text-faint);font-size:9px;margin-left:8px;letter-spacing:.2px}
+  .zone-tools-toggle .tog-ico{font-size:11px;transition:transform .18s;font-family:'JetBrains Mono',monospace}
+  .zone-tools.open .zone-tools-toggle .tog-ico{transform:rotate(180deg)}
+  .zone-tools .zt-body{display:none;margin-top:10px}
+  .zone-tools.open .zt-body{display:block}
   /* ── zone card 2-row layout ── */
   .zone-card{flex-direction:column;align-items:stretch;gap:0}
   .zc-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -192,7 +205,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .mini-chart-wrap{position:relative;border-radius:8px;overflow:hidden;background:#0d0c0a;border:1px solid var(--line);margin-bottom:14px}
   .mini-chart-wrap canvas{display:block;width:100%}
   .mini-chart-hdr{display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,0,0,.35);border-bottom:1px solid rgba(255,255,255,.04)}
-  .mc-tf{font-size:9px;letter-spacing:.5px;color:var(--text-faint)}
+  .mc-tf{font-size:9px;letter-spacing:.5px;color:var(--text-faint);font-family:'JetBrains Mono',monospace}
+  .mc-tfs{display:flex;gap:3px;margin-left:4px}
+  .mc-tfbtn{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.3px;padding:2px 7px;background:transparent;border:1px solid var(--line);border-radius:3px;color:var(--text-dim);cursor:pointer;transition:color .12s,border-color .12s,background .12s;line-height:1.5}
+  .mc-tfbtn:hover{color:var(--accent);border-color:var(--accent-dim)}
+  .mc-tfbtn.active{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
   .mc-status{font-size:9px;letter-spacing:.3px;color:var(--text-dim);margin-left:auto}
   .ticker-input-wrap{position:relative}
   #ticker{padding-right:30px}
@@ -689,14 +706,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
-      <div class="hdr-zone-pill" id="hdrZonePill">● <span id="hdrZoneNum"></span> · <span id="hdrZoneKind"></span></div>
       <div class="badge" id="modeBadge">PREP</div>
     </div>
   </div>
-  <div class="phase">
-    <button class="on" data-ph="prep" onclick="setPhase('prep')">① ПОДГОТОВКА</button>
-    <button data-ph="live" onclick="setPhase('live')">② СЕССИЯ</button>
-    <button data-ph="journal" onclick="setPhase('journal')">③ ЖУРНАЛ</button>
+  <div class="phase-nav" id="phaseNav">
+    <div class="phase">
+      <button class="on" data-ph="prep" onclick="setPhase('prep')">① ПОДГОТОВКА</button>
+      <button data-ph="live" onclick="setPhase('live')">② СЕССИЯ</button>
+      <button data-ph="journal" onclick="setPhase('journal')">③ ЖУРНАЛ</button>
+    </div>
+    <div class="hdr-zone-pill" id="hdrZonePill">● <span id="hdrZoneNum"></span> · <span id="hdrZoneKind"></span></div>
   </div>
   <p class="phase-desc" id="phaseDesc">До сессии — читаешь рынок, размечаешь зоны. В сессии — только исполнение.</p>
 
@@ -799,6 +818,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="mini-chart-wrap" id="miniChartWrap">
       <div class="mini-chart-hdr">
         <span class="mc-tf" id="mcTfLabel">—</span>
+        <div class="mc-tfs" id="mcTfs">
+          <button class="mc-tfbtn" data-tf="1m" onclick="setChartTf('1m')">1m</button>
+          <button class="mc-tfbtn" data-tf="5m" onclick="setChartTf('5m')">5m</button>
+          <button class="mc-tfbtn" data-tf="15m" onclick="setChartTf('15m')">15m</button>
+          <button class="mc-tfbtn" data-tf="1h" onclick="setChartTf('1h')">1h</button>
+          <button class="mc-tfbtn" data-tf="4h" onclick="setChartTf('4h')">4h</button>
+        </div>
         <span class="mc-status" id="mcStatus">загрузка…</span>
       </div>
       <canvas id="miniChart" height="180"></canvas>
@@ -869,6 +895,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div class="t-side">
   <!-- ===== ZONES (shared, always visible) ===== -->
   <div class="section-title" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация по времени · Клик на цену зоны — скопировать</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
+  <!-- input tools: collapsible (вставка + ручное добавление + депозит) -->
+  <div class="zone-tools open" id="zoneTools">
+  <button class="zone-tools-toggle" type="button" onclick="toggleZoneTools()">
+    <span>Ввод зон<span class="ztt-hint">вставка · ручное · депозит</span></span>
+    <span class="tog-ico">▾</span>
+  </button>
+  <div class="zt-body">
   <!-- paste zones from analysis -->
   <div class="paste-box" id="pasteBox">
     <span class="mini-label" style="margin:0 0 8px">Вставить зоны из разбора <span class="tag" style="text-transform:none">один блок вместо ручного ввода</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Формат: цена | тип | план | стоп · Один ряд = одна зона · «Сформировать запрос» → AI выдаёт готовый блок, вставляй сюда целиком</span></span></span>
@@ -910,6 +943,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     </div>
     <div id="dupWarn" class="dup-warn"></div>
   </div>
+  </div><!-- /zt-body -->
+  </div><!-- /zone-tools -->
   <div class="zones-list" id="zonesList"></div>
   <p style="font-size:11px;color:var(--text-dim);margin-top:10px;line-height:1.55">Размер позиции = (депозит × риск%) / |цена зоны − стоп|. Считается только если у зоны задан стоп. «ед.» — количество единиц базового актива; объём и риск в деньгах видны при наведении на цифру.</p>
   </div><!-- /t-side -->
@@ -1025,6 +1060,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     document.getElementById('livePhase').classList.toggle('hide',p!=='live');
     document.getElementById('journalPhase').classList.toggle('hide',p!=='journal');
     document.getElementById('modeBadge').textContent = p==='prep'?'PREP':p==='live'?'LIVE':'LOG';
+    // в Сессии/Журнале сворачиваем инструменты ввода — список зон выходит на первый план; в Подготовке раскрыты
+    const zt=document.getElementById('zoneTools'); if(zt)zt.classList.toggle('open',p==='prep');
     if(p==='prep')renderReadinessScore();
     document.getElementById('phaseDesc').textContent = p==='prep'
       ? 'До сессии — читаешь рынок, размечаешь зоны. В сессии — только исполнение.'
@@ -1318,9 +1355,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }
     renderZones();
   }
-  /* ── header zone accent ── */
+  /* ── phase-nav zone accent ── */
   function _updateHdrZone(zoneObj){
-    const hdr=document.querySelector('.head');
+    const hdr=document.getElementById('phaseNav');
     if(!hdr)return;
     if(zoneObj){
       const raw=_KIND_RAW[zoneObj.kind]||'#888';
@@ -1328,7 +1365,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       hdr.style.setProperty('--zone-hdr-col',raw);
       hdr.style.setProperty('--zone-hdr-bg',glowMap[zoneObj.kind]||'rgba(255,255,255,.04)');
       hdr.style.setProperty('--zone-hdr-glow',glowMap[zoneObj.kind]||'rgba(0,0,0,0)');
-      hdr.classList.add('hdr-zone');
+      hdr.classList.add('nav-zone');
       const pill=document.getElementById('hdrZonePill');
       if(pill){
         document.getElementById('hdrZoneNum').textContent='ЗН '+(zones.indexOf(zoneObj)+1);
@@ -1338,7 +1375,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       hdr.style.removeProperty('--zone-hdr-col');
       hdr.style.removeProperty('--zone-hdr-bg');
       hdr.style.removeProperty('--zone-hdr-glow');
-      hdr.classList.remove('hdr-zone');
+      hdr.classList.remove('nav-zone');
     }
   }
   // ---- risk calc ----
@@ -2182,31 +2219,56 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     cv.width=W;cv.height=H;
     const ctx=cv.getContext('2d');
     const activeZ=zones.filter(z=>!z.closed&&!z.expired);
-    const prices=candles.flatMap(c=>[c.h,c.l]);
-    activeZ.forEach(z=>{prices.push(+z.px);if(z.stop)prices.push(+z.stop);});
-    if(currentPrice&&isFinite(currentPrice))prices.push(currentPrice);
-    if(!prices.length)return;
-    const span=Math.max(...prices)-Math.min(...prices)||1;
-    const minP=Math.min(...prices)-span*.04,maxP=Math.max(...prices)+span*.04;
+    // Y-scale strictly from candles + current price — зоны больше НЕ растягивают шкалу
+    const base=candles.flatMap(c=>[c.h,c.l]);
+    if(currentPrice&&isFinite(currentPrice))base.push(currentPrice);
+    if(!base.length)return;
+    const lo=Math.min(...base),hi=Math.max(...base);
+    const span=(hi-lo)||(hi*.01)||1;
+    const minP=lo-span*.08,maxP=hi+span*.08;
     const toY=p=>H-((p-minP)/(maxP-minP))*H;
     ctx.fillStyle='#0d0c0a';ctx.fillRect(0,0,W,H);
     ctx.strokeStyle='#1a1814';ctx.lineWidth=.5;
     [1,2,3].forEach(i=>{const y=H/4*i;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();});
     _zoneHitAreas=[];
+    let offTop=0,offBot=0; // stack counters for off-range zone markers
     activeZ.forEach(z=>{
       const col=_MC_KIND[z.kind]||_MC_KIND.watch;
-      const y=toY(+z.px),bh=Math.max(2,H*.024);
-      _zoneHitAreas.push({idx:zones.indexOf(z),yCenter:y,bh});
-      ctx.fillStyle=col.fill;ctx.fillRect(0,y-bh,W-LBL,bh*2);
-      ctx.strokeStyle=col.line;ctx.lineWidth=.8;ctx.setLineDash([]);
-      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W-LBL,y);ctx.stroke();
-      ctx.font='9px JetBrains Mono,monospace';ctx.fillStyle=col.line;
-      ctx.fillText((z.kind||'').toUpperCase()+' '+z.px,W-LBL+4,y+3);
-      if(z.stop){
-        const sy=toY(+z.stop);
-        ctx.strokeStyle='rgba(239,68,68,.6)';ctx.lineWidth=.7;ctx.setLineDash([3,3]);
-        ctx.beginPath();ctx.moveTo(0,sy);ctx.lineTo(W-LBL,sy);ctx.stroke();
-        ctx.setLineDash([]);
+      const px=+z.px;
+      if(px>=minP&&px<=maxP){
+        // зона в диапазоне — обычная полоса
+        const y=toY(px),bh=Math.max(2,H*.024);
+        _zoneHitAreas.push({idx:zones.indexOf(z),yCenter:y,bh});
+        ctx.fillStyle=col.fill;ctx.fillRect(0,y-bh,W-LBL,bh*2);
+        ctx.strokeStyle=col.line;ctx.lineWidth=.8;ctx.setLineDash([]);
+        ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W-LBL,y);ctx.stroke();
+        ctx.font='9px JetBrains Mono,monospace';ctx.fillStyle=col.line;
+        ctx.fillText((z.kind||'').toUpperCase()+' '+z.px,W-LBL+4,y+3);
+        if(z.stop){
+          const sp=+z.stop;
+          if(sp>=minP&&sp<=maxP){
+            const sy=toY(sp);
+            ctx.strokeStyle='rgba(239,68,68,.6)';ctx.lineWidth=.7;ctx.setLineDash([3,3]);
+            ctx.beginPath();ctx.moveTo(0,sy);ctx.lineTo(W-LBL,sy);ctx.stroke();
+            ctx.setLineDash([]);
+          }
+        }
+      } else {
+        // зона вне диапазона — метка-стрелка у края, без растяжения шкалы
+        const above=px>maxP;
+        const slot=above?offTop++:offBot++;
+        const y=above?(7+slot*14):(H-9-slot*14);
+        const dist=(currentPrice&&isFinite(currentPrice))?(px/currentPrice-1)*100:NaN;
+        const tx=4;
+        ctx.fillStyle=col.line;
+        ctx.beginPath();
+        if(above){ctx.moveTo(tx,y+5);ctx.lineTo(tx+9,y+5);ctx.lineTo(tx+4.5,y-2);}
+        else{ctx.moveTo(tx,y-5);ctx.lineTo(tx+9,y-5);ctx.lineTo(tx+4.5,y+2);}
+        ctx.closePath();ctx.fill();
+        ctx.font='9px JetBrains Mono,monospace';ctx.fillStyle=col.line;
+        const distTxt=isFinite(dist)?'  '+(dist>=0?'+':'')+dist.toFixed(1)+'%':'';
+        ctx.fillText((z.kind||'').toUpperCase()+' '+z.px+distTxt,tx+15,y+3);
+        _zoneHitAreas.push({idx:zones.indexOf(z),yCenter:y,bh:8});
       }
     });
     const pad=4,cw=(W-pad*2-LBL)/Math.max(candles.length,1),bw=Math.max(1,Math.floor(cw*.6));
@@ -2231,12 +2293,25 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const lp=parseFloat(document.getElementById('livePrice').value)||parseFloat(document.getElementById('price').value)||null;
     if(_klines.length)_drawChart(_klines,lp);
   }
+  // ── переключение ТФ прямо на графике (как на бирже) ──
+  function setChartTf(tf){
+    const sel=document.getElementById('tf');
+    if(sel)sel.value=tf;
+    saveSettings();
+    _markChartTf(tf);
+    _chartRefresh();
+  }
+  function _markChartTf(tf){
+    tf=tf||document.getElementById('tf')?.value;
+    document.querySelectorAll('.mc-tfbtn').forEach(b=>b.classList.toggle('active',b.dataset.tf===tf));
+  }
   async function _chartRefresh(){
     const raw=document.getElementById('ticker').value.trim();
     const tf=document.getElementById('tf').value||'5m';
     const st=document.getElementById('mcStatus');
     const tl=document.getElementById('mcTfLabel');
-    if(tl)tl.textContent=(raw||'—').toUpperCase()+' · '+tf;
+    if(tl)tl.textContent=(raw||'—').toUpperCase();
+    _markChartTf(tf);
     if(!raw){if(st)st.textContent='нет тикера';return;}
     const sym=_symFromTicker(raw);
     if(st)st.textContent='загрузка…';
@@ -2391,11 +2466,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const open=forceOpen!=null?forceOpen:!wrap.classList.contains('open');
     wrap.classList.toggle('open',open);
   }
-  // ── Sticky header scroll class ──
+  function toggleZoneTools(forceOpen){
+    const wrap=document.getElementById('zoneTools');
+    if(!wrap)return;
+    const open=forceOpen!=null?forceOpen:!wrap.classList.contains('open');
+    wrap.classList.toggle('open',open);
+  }
+  // ── Sticky phase-nav glass on scroll (включается, когда логотип ушёл за верх) ──
   (function(){
-    const hdr=document.querySelector('.head');
-    if(!hdr)return;
-    function _onScroll(){hdr.classList.toggle('hdr-scrolled',window.scrollY>8);}
+    const nav=document.getElementById('phaseNav');
+    const head=document.querySelector('.head');
+    if(!nav)return;
+    function _onScroll(){
+      const trig=head?Math.max(8,head.offsetHeight-6):8;
+      nav.classList.toggle('nav-scrolled',window.scrollY>trig);
+    }
     window.addEventListener('scroll',_onScroll,{passive:true});
     _onScroll();
   })();
