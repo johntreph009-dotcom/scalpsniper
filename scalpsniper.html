@@ -654,10 +654,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div id="prepPhase">
     <div class="field">
       <div class="row4">
-        <div><span class="label">Тикер</span><input id="ticker" placeholder="BTC/USDT" oninput="saveSettings()"></div>
+        <div><span class="label">Тикер</span><input id="ticker" placeholder="BTC/USDT" oninput="saveSettings();triggerPriceFetch()"></div>
         <div><span class="label">Таймфрейм</span><select id="tf" onchange="saveSettings()"><option>1m</option><option selected>5m</option><option>15m</option><option>1h</option><option>4h</option></select></div>
         <div><span class="label">Плечо ×</span><input id="lev" type="number" value="1" min="1" oninput="saveSettings()"></div>
-        <div><span class="label">Текущая цена</span><input id="price" type="number" placeholder="103450"></div>
+        <div><span class="label">Текущая цена <span id="pxLiveInd" style="font-size:9px;letter-spacing:.3px;font-family:'JetBrains Mono',monospace;color:var(--text-faint);vertical-align:middle">○</span></span><input id="price" type="number" placeholder="103450"></div>
       </div>
     </div>
     <div class="bias-compact">
@@ -732,6 +732,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="live-bar">
       <span class="label" style="margin:0">Цена сейчас</span>
       <input id="livePrice" type="number" placeholder="103200" oninput="updateLive()" style="max-width:180px;font-size:16px;font-weight:700">
+      <span id="sessLiveInd" style="font-size:10px;letter-spacing:.3px;font-family:'JetBrains Mono',monospace;color:var(--text-faint)">○</span>
       <button class="paste-px" onclick="pastePrice()" title="Вставить число из буфера обмена">⌘ Вставить</button>
       <span class="live-status" id="liveStatus" style="color:var(--text-dim)">введи цену</span>
       <span id="streakBadge" class="streak-badge" style="display:none"></span>
@@ -1959,7 +1960,48 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }
   }
 
-  load(); loadJournal(); loadSettings(); loadRules(); checkExpiry(); loadApiKey();
+  // ── Live Price (Binance → MEXC fallback) ──
+  let _pxPoll=null;
+  function _symFromTicker(raw){return raw.replace(/[\/\-_ ]/g,'').toUpperCase();}
+  function _setLiveInd(txt,col){
+    ['pxLiveInd','sessLiveInd'].forEach(id=>{const el=document.getElementById(id);if(el){el.textContent=txt;el.style.color=col;}});
+  }
+  function _applyPx(px){
+    const prepEl=document.getElementById('price');
+    if(document.activeElement!==prepEl)prepEl.value=px;
+    const sessEl=document.getElementById('livePrice');
+    if(document.activeElement!==sessEl){sessEl.value=px;updateLive();}
+    _setLiveInd('● LIVE','var(--green)');
+  }
+  async function fetchLivePx(){
+    const raw=document.getElementById('ticker').value.trim();
+    if(!raw){_setLiveInd('○','var(--text-faint)');return;}
+    const sym=_symFromTicker(raw);
+    try{
+      const r=await fetch('https://api.binance.com/api/v3/ticker/price?symbol='+sym,{cache:'no-store'});
+      if(!r.ok)throw 0;
+      const px=parseFloat((await r.json()).price);
+      if(!isFinite(px))throw 0;
+      _applyPx(px);
+    }catch{
+      try{
+        const r=await fetch('https://api.mexc.com/api/v3/ticker/price?symbol='+sym,{cache:'no-store'});
+        if(!r.ok)throw 0;
+        const px=parseFloat((await r.json()).price);
+        if(!isFinite(px))throw 0;
+        _applyPx(px);
+      }catch{_setLiveInd('○ нет','var(--text-faint)');}
+    }
+  }
+  function triggerPriceFetch(){
+    if(_pxPoll)clearInterval(_pxPoll);
+    const raw=document.getElementById('ticker').value.trim();
+    if(!raw){_setLiveInd('○','var(--text-faint)');return;}
+    fetchLivePx();
+    _pxPoll=setInterval(fetchLivePx,5000);
+  }
+
+  load(); loadJournal(); loadSettings(); loadRules(); checkExpiry(); loadApiKey(); triggerPriceFetch();
   try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
   renderZones();recalc();
 </script>
