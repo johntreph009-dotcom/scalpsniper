@@ -652,7 +652,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <button data-ph="live" onclick="setPhase('live')">② СЕССИЯ</button>
     <button data-ph="journal" onclick="setPhase('journal')">③ ЖУРНАЛ</button>
   </div>
-  <p class="phase-desc" id="phaseDesc">Фаза подготовки — спокойно, до торговли. Грузишь скрины мне в чат, получаешь разбор структуры, заносишь зоны. В сессии решения уже приняты, ты только исполняешь.</p>
+  <p class="phase-desc" id="phaseDesc">До сессии — читаешь рынок, размечаешь зоны. В сессии — только исполнение.</p>
 
 <div class="terminal-grid">
   <div class="t-main">
@@ -727,7 +727,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <button class="btn" onclick="resetPrep()">Сброс</button>
     </div>
     <div class="output hide" id="outBox">
-      <div class="output-head"><div class="ot">Запрос для чата — скопируй и приложи скриншоты</div><button class="copy-btn" onclick="copyOut()">Копировать</button></div>
+      <div class="output-head"><div class="ot">Запрос на разбор · AI подберёт зоны-кандидаты</div><button class="copy-btn" onclick="copyOut()">Копировать</button></div>
       <pre id="outPre"></pre>
     </div>
   </div>
@@ -928,7 +928,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function saveJournal(){ try{localStorage.setItem(JKEY,JSON.stringify(journal))}catch(e){} }
   function loadJournal(){ try{const r=localStorage.getItem(JKEY); if(r)journal=JSON.parse(r)}catch(e){journal=[]} }
   // ---- export / import (перенос между устройствами) ----
-  const IO_KEYS=['msa_zones_v2','msa_journal_v1','msa_dep','msa_settings_v1','msa_rules_v1'];
+  const IO_KEYS=['msa_zones_v2','msa_journal_v1','msa_dep','msa_settings_v1','msa_rules_v1','msa_apikey_v1'];
   function exportData(){
     try{
       const dump={app:'ScalpSniper',type:'backup',version:1,exportedAt:new Date().toISOString(),data:{}};
@@ -1194,6 +1194,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const st=document.getElementById('liveStatus');
     const card=document.getElementById('liveCard');
     const a=activeZoneIdx();
+    if(a>=0&&a!==_lastAlertZone&&phase==='live'){_zoneBeep();_zoneTitleFlash();}
+    _lastAlertZone=a;
     if(a>=0&&!zones[a].triggeredAt&&!zones[a].closed&&!zones[a].expired){zones[a].triggeredAt=Date.now();save();}
     if(!lp){st.textContent='введи цену';st.style.color='var(--text-dim)';card.classList.add('hide');}
     else if(a>=0){
@@ -2046,7 +2048,27 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
 
   // ── Mini Chart (Binance klines → SESSION canvas) ──
-  let _klines=[],_klSym='',_klTf='',_chartTimer=null;
+  let _klines=[],_klSym='',_klTf='',_chartTimer=null,_zoneHitAreas=[],_chartClickBound=false;
+  let _lastAlertZone=-2;
+  function _zoneBeep(){
+    try{
+      const ac=new(window.AudioContext||window.webkitAudioContext)();
+      const osc=ac.createOscillator(),g=ac.createGain();
+      osc.frequency.value=880;osc.type='sine';
+      g.gain.setValueAtTime(.28,ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.2);
+      osc.connect(g);g.connect(ac.destination);
+      osc.start();osc.stop(ac.currentTime+.2);
+      setTimeout(()=>ac.close(),500);
+    }catch(e){}
+  }
+  function _zoneTitleFlash(){
+    const orig=document.title;let n=0;
+    const iv=setInterval(()=>{
+      document.title=n++%2===0?'⚡ ЦЕНА В ЗОНЕ ⚡':orig;
+      if(n>7){clearInterval(iv);document.title=orig;}
+    },320);
+  }
   const _MC_KIND={fade:{fill:'rgba(255,122,24,.14)',line:'rgba(255,122,24,.75)'},break:{fill:'rgba(34,197,94,.10)',line:'rgba(34,197,94,.65)'},watch:{fill:'rgba(120,120,110,.07)',line:'rgba(120,120,110,.45)'},stand:{fill:'rgba(100,140,255,.07)',line:'rgba(100,140,255,.45)'}};
   async function _fetchKlines(sym,tf){
     try{
@@ -2072,9 +2094,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     ctx.strokeStyle='#1a1814';ctx.lineWidth=.5;
     [1,2,3].forEach(i=>{const y=H/4*i;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();});
     // zone bands
+    _zoneHitAreas=[];
     activeZ.forEach(z=>{
       const col=_MC_KIND[z.kind]||_MC_KIND.watch;
       const y=toY(+z.px),bh=Math.max(2,H*.024);
+      _zoneHitAreas.push({idx:zones.indexOf(z),yCenter:y,bh});
       ctx.fillStyle=col.fill;ctx.fillRect(0,y-bh,W-LBL,bh*2);
       ctx.strokeStyle=col.line;ctx.lineWidth=.8;ctx.setLineDash([]);
       ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W-LBL,y);ctx.stroke();
@@ -2132,6 +2156,27 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const ro=new ResizeObserver(()=>_chartRedraw());
     const wrap=document.getElementById('miniChartWrap');
     if(wrap)ro.observe(wrap);
+    if(!_chartClickBound){
+      const cv=document.getElementById('miniChart');
+      if(cv){
+        cv.style.cursor='pointer';
+        cv.addEventListener('click',e=>{
+          const rect=cv.getBoundingClientRect();
+          const cy=e.clientY-rect.top;
+          const hit=_zoneHitAreas.find(h=>Math.abs(cy-h.yCenter)<=Math.max(h.bh*2,14));
+          if(!hit)return;
+          const cards=document.querySelectorAll('#zonesList .zone-card');
+          const card=cards[hit.idx];
+          if(card){
+            card.scrollIntoView({behavior:'smooth',block:'center'});
+            card.style.outline='1px solid var(--accent)';
+            card.style.transition='outline .3s';
+            setTimeout(()=>{card.style.outline='';},900);
+          }
+        });
+        _chartClickBound=true;
+      }
+    }
   }
   function stopMiniChart(){if(_chartTimer){clearInterval(_chartTimer);_chartTimer=null;}}
 
