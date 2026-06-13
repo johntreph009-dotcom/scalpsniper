@@ -112,6 +112,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .zc-bot{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap}
   .zone-note{font-size:11px;color:var(--text-dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .zone-delta{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-faint);background:rgba(255,255,255,.04);border:1px solid var(--line-soft);padding:2px 6px;border-radius:3px;white-space:nowrap;flex-shrink:0}
+  .zone-proto{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-dim);padding:1px 6px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  .ai-situation{background:var(--glass-bg);backdrop-filter:var(--glass-blur-sm);-webkit-backdrop-filter:var(--glass-blur-sm);border:1px solid var(--accent-dim);border-radius:8px;padding:10px 13px;margin-bottom:10px}
+  .ai-sit-head{font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+  .ai-sit-head b{color:var(--text)}
+  .ai-sit-body{font-size:11px;line-height:1.5;color:var(--text-dim);white-space:pre-wrap}
   .zone-delta.near{color:var(--accent);border-color:var(--accent-dim)}
   .zc-acts{display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0}
   /* ── zone group separator ── */
@@ -904,11 +909,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div class="zt-body">
   <!-- paste zones from analysis -->
   <div class="paste-box" id="pasteBox">
-    <span class="mini-label" style="margin:0 0 8px">Вставить зоны из разбора <span class="tag" style="text-transform:none">один блок вместо ручного ввода</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Формат: цена | тип | план | стоп · Один ряд = одна зона · «Сформировать запрос» → AI выдаёт готовый блок, вставляй сюда целиком</span></span></span>
-    <textarea id="pasteIn" placeholder="103200 | fade | отбой от POC, абсорбция в ленте | 103050&#10;103480 | break | пробой стенки 2.1М, вход по рынку | 103560&#10;102900 | watch | смотрю реакцию на нижний кластер"></textarea>
+    <span class="mini-label" style="margin:0 0 8px">Вставить зоны из разбора <span class="tag" style="text-transform:none">один блок вместо ручного ввода</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Формат: цена | тип | план | стоп | протокол · Один ряд = одна зона · стоп и протокол опциональны · «Сформировать запрос» → AI выдаёт готовый блок с протоколами, вставляй сюда целиком</span></span></span>
+    <textarea id="pasteIn" placeholder="103200 | fade | отбой от POC, абсорбция в ленте | 103050 | VALENTINI&#10;103480 | break | пробой стенки 2.1М | 103560 | SQUEEZE&#10;102900 | watch | реакция на нижний кластер |  | SHOTGUN"></textarea>
     <div class="paste-row">
       <button class="paste-btn" onclick="parseZones()">Разобрать в зоны ↓</button>
-      <span class="paste-fmt">формат строки: <code>цена | тип | план | стоп</code> · тип: fade / break / watch / stand · стоп опционален</span>
+      <span class="paste-fmt">формат строки: <code>цена | тип | план | стоп | протокол</code> · тип: fade / break / watch / stand · стоп и протокол опциональны</span>
     </div>
     <div class="paste-result" id="pasteResult"></div>
     <div class="pb-parsed-bar"><span class="paste-result ok" id="pbParsedLabel"></span><button class="pb-toggle" onclick="expandPasteBox()">↕ Добавить ещё</button></div>
@@ -945,6 +950,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   </div>
   </div><!-- /zt-body -->
   </div><!-- /zone-tools -->
+  <div class="ai-situation" id="aiSituation" style="display:none"></div>
   <div class="zones-list" id="zonesList"></div>
   <p style="font-size:11px;color:var(--text-dim);margin-top:10px;line-height:1.55">Размер позиции = (депозит × риск%) / |цена зоны − стоп|. Считается только если у зоны задан стоп. «ед.» — количество единиц базового актива; объём и риск в деньгах видны при наведении на цифру.</p>
   </div><!-- /t-side -->
@@ -1082,10 +1088,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // ---- protocols ----
   document.getElementById('protos').addEventListener('click',e=>{
     const p=e.target.closest('.proto'); if(!p)return;
-    document.querySelectorAll('.proto').forEach(x=>x.classList.remove('sel'));
-    p.classList.add('sel'); selProto=p.dataset.p;
-    renderProtoChecks();renderReadinessScore();
+    selectProto(p.dataset.p);
   });
+  // программная установка стратегии матчинга (используется авто-выставлением по анализу)
+  function selectProto(key){
+    if(!key||!PROTO_LABELS[key])return;
+    document.querySelectorAll('.proto').forEach(x=>x.classList.toggle('sel',x.dataset.p===key));
+    selProto=key;
+    renderProtoChecks();renderReadinessScore();
+  }
+  // приоритетный протокол из последнего AI-анализа (для авто-выставления стратегии при «Разобрать»)
+  let _aiPriorityProto=null;
+  // доминирующий протокол среди зон (если AI-приоритет не задан)
+  function _dominantProto(list){
+    const cnt={};list.forEach(z=>{if(z.proto)cnt[z.proto]=(cnt[z.proto]||0)+1;});
+    let best=null,bn=0;Object.keys(cnt).forEach(k=>{if(cnt[k]>bn){bn=cnt[k];best=k;}});
+    return best;
+  }
 
   // ---- zone price ladder (session) ----
   function renderLadder(){
@@ -1131,7 +1150,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(dup&&!confirm('Зона '+dup.px+' уже есть (отличие '+(Math.abs(dup.px-px)/px*100).toFixed(3)+'%). Добавить всё равно?'))return;
     }
     const z={px,kind:document.getElementById('z_kind').value,note:document.getElementById('z_note').value.trim(),stop:parseFloat(document.getElementById('z_stop').value)||null,stars:zStars,exp:document.getElementById('z_exp')?.value||null};
-    if(editingIdx>=0){zones[editingIdx]=z;editingIdx=-1;}
+    if(editingIdx>=0){z.proto=zones[editingIdx].proto||null;zones[editingIdx]=z;editingIdx=-1;}
     else{zones.push(z);}
     zones.sort((a,b)=>b.px-a.px);
     document.getElementById('z_px').value='';document.getElementById('z_note').value='';document.getElementById('z_stop').value='';if(document.getElementById('z_exp'))document.getElementById('z_exp').value='';resetStars();
@@ -1148,6 +1167,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!raw)return 'watch';
     const k=raw.toLowerCase().replace(/[\s—–-]+/g,'');
     return KIND_ALIASES[k] || (KIND[raw.toLowerCase()]?raw.toLowerCase():'watch');
+  }
+  const PROTO_ALIASES={valentini:'VALENTINI',val:'VALENTINI',fade:'VALENTINI',squeeze:'SQUEEZE',sqz:'SQUEEZE',wallbreak:'SQUEEZE',shotgun:'SHOTGUN',shot:'SHOTGUN',liq:'SHOTGUN',liqbasket:'SHOTGUN',elliott:'ELLIOTT_CLUSTER',elliottcluster:'ELLIOTT_CLUSTER',elliot:'ELLIOTT_CLUSTER',fib:'ELLIOTT_CLUSTER',cluster:'ELLIOTT_CLUSTER'};
+  function normProto(raw){
+    if(!raw)return null;
+    const k=raw.toLowerCase().replace(/[\s_—–-]+/g,'');
+    if(PROTO_LABELS[raw.toUpperCase()])return raw.toUpperCase();
+    return PROTO_ALIASES[k]||null;
   }
   function cleanNum(s){
     if(!s)return NaN;
@@ -1174,7 +1200,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const note=(parts[2]||'').trim();
       let stop=null;
       if(parts[3]){const s=cleanNum(parts[3]);if(s&&isFinite(s))stop=s;}
-      zones.push({px,kind,note,stop});
+      const proto=normProto(parts[4]);
+      zones.push({px,kind,note,stop,proto});
       added++;
     });
     zones.sort((a,b)=>b.px-a.px);
@@ -1186,6 +1213,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       document.getElementById('pasteIn').value='';
       document.getElementById('pbParsedLabel').textContent='✓ Зон добавлено: '+added;
       document.getElementById('pasteBox').classList.add('pb-collapsed');
+      // авто-выставление стратегии матчинга по анализу (AI-приоритет → иначе доминирующий протокол зон)
+      const prio=_aiPriorityProto||_dominantProto(zones.filter(z=>!z.closed&&!z.expired));
+      if(prio){selectProto(prio);res.innerHTML+='<span class="skips">Стратегия матчинга → '+(PROTO_LABELS[prio]||prio)+' (по анализу)</span>';}
+      _aiPriorityProto=null;
     } else {
       res.className='paste-result warn';
       res.innerHTML='Ничего не добавлено — проверь формат: <code>цена | тип | план | стоп</code>'+
@@ -1280,6 +1311,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         const near=Math.abs(d)<0.5;
         deltaHtml=`<span class="zone-delta${near?' near':''}">${sign}${d.toFixed(2)}%</span>`;
       }
+      const protoHtml=z.proto?`<span class="zone-proto" title="Протокол (предложен AI)">${PROTO_LABELS[z.proto]||z.proto}</span>`:'';
       // group separator
       let grpLabel='';
       const grp=isDone||isExpired?'done':isActive?'active':'s'+st;
@@ -1300,7 +1332,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           <div class="zc-acts">${expBadge}${trigBadge}${closeBtn}<button class="zone-edit" onclick="editZone(${i})" title="Править">✎</button><button class="zone-del" onclick="delZone(${i})" title="Удалить">×</button></div>
         </div>
         <div class="zc-bot">
-          <span class="zone-note">${z.note?escapeHtml(z.note):'<span style="color:var(--text-faint)">план не записан</span>'}${z.stop?` · <span style="color:var(--danger);font-size:10px">SL ${z.stop}</span>`:''}</span>
+          <span class="zone-note">${protoHtml}${z.note?escapeHtml(z.note):'<span style="color:var(--text-faint)">план не записан</span>'}${z.stop?` · <span style="color:var(--danger);font-size:10px">SL ${z.stop}</span>`:''}</span>
           ${sizeHtml}
         </div>
       </div>`;
@@ -2088,17 +2120,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     ta.value='⏳ Анализирую скриншот...';
     ta.disabled=true;
     const prompts={
-      dom:'Опиши скриншот стакана (DOM/Order Book) для крипто-скальпинга. Только факты: крупные лимитные заявки (стены) на bid и ask, их примерный уровень и размер, дисбаланс. 2–3 предложения, без торговых рекомендаций и конкретных точек входа.',
-      tape:'Опиши скриншот ленты сделок (tape/time&sales) для крипто-скальпинга. Только факты: преобладающий агрессор, характер дельты, есть ли поглощение, признаки инициации или реакции. 2–3 предложения, без рекомендаций.',
-      liq:'Опиши скриншот карты ликвидаций Coinglass. Только факты: кластеры ликвидаций выше/ниже текущей цены, смётённые пулы, вакуум между уровнями. 2–3 предложения, без рекомендаций.',
-      chart:'Опиши скриншот графика с VPVR для крипто-скальпинга. Только факты: POC, VAH, VAL, LVN, ключевые свечи, паттерн структуры (волны, коррекция, фибы если есть). 2–3 предложения, без рекомендаций.'
+      dom:'Анализируешь скриншот стакана (DOM/order book) для разметки скальп-зон. Только то, что реально видно; нечитаемое помечай «не видно», числа не выдумывай. Без торговых директив (входов/стопов/тейков). Ответ — компактные строки с ярлыками, без вступления и итогов:\nСтены bid: <цена ≈ размер; ...>\nСтены ask: <цена ≈ размер; ...>\nДисбаланс: <где плотнее bid/ask>\nСпред/плотность у цены: <...>\nСпуфинг: <да/нет/не видно>\nНаблюдение: <стена под пробой →SQUEEZE / плотность под отбой →VALENTINI>',
+      tape:'Анализируешь скриншот ленты сделок и дельты для разметки скальп-зон. Только видимое; нечитаемое — «не видно», числа не выдумывай. Без директив. Компактные строки с ярлыками:\nАгрессор: <покупатель/продавец>\nДельта: <накопление/слив/расхождение с ценой>\nПоглощение: <да/нет, на каком уровне>\nИнициация/реакция: <...>\nКрупные принты: <...>\nНаблюдение: <абсорбция под отбой →VALENTINI / продавленная инициация →SQUEEZE>',
+      liq:'Анализируешь карту ликвидаций Coinglass для разметки скальп-зон. Только видимое; нечитаемое — «не видно». Без директив. Компактные строки с ярлыками:\nКластеры выше цены: <уровни>\nКластеры ниже цены: <уровни>\nСметённые пулы: <...>\nВакуум/разрыв: <между какими уровнями>\nМагнит: <куда тянет цену>\nНаблюдение: <корзина близких кластеров →SHOTGUN>',
+      chart:'Анализируешь график с профилем объёма (VPVR) для разметки скальп-зон. Только видимое; нечитаемое — «не видно». Без директив. Компактные строки с ярлыками:\nPOC: <цена>\nVAH / VAL: <цены>\nLVN (проскок): <уровни>\nHVN (сопротивление): <уровни>\nСтруктура: <тренд/коррекция/диапазон; волны и фибо-уровни если видны>\nНаблюдение: <фибо-откат к кластеру →ELLIOTT_CLUSTER>'
     };
     try{
       const b64=await _resizeToB64(dataUrl);
       const resp=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:200,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},{type:'text',text:prompts[field]||prompts.dom}]}]})
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:260,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},{type:'text',text:prompts[field]||prompts.dom}]}]})
       });
       if(!resp.ok)throw new Error('API '+resp.status);
       const data=await resp.json();
@@ -2119,6 +2151,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     return cvs.toDataURL('image/jpeg',.85).split(',')[1];
   }
   const _FL={dom:'Стакан MEXC (DOM)',tape:'Лента CScalp (tape)',liq:'Coinglass (ликвидации)',chart:'График/VPVR'};
+  // показать блок «Анализ ситуации» из AI-синтеза + извлечь приоритетный протокол
+  function _renderSituation(txt){
+    const box=document.getElementById('aiSituation');
+    const pm=txt&&txt.match(/Приоритет:\s*([^\n]+)/i);
+    _aiPriorityProto=pm?normProto(pm[1]):null;
+    if(!box)return;
+    if(!txt){box.style.display='none';box.innerHTML='';return;}
+    const sm=txt.match(/Ситуация:\s*([\s\S]+)/i);
+    const prioLbl=_aiPriorityProto?(PROTO_LABELS[_aiPriorityProto]||_aiPriorityProto):(pm?pm[1].trim():'');
+    const sit=(sm?sm[1]:txt).trim();
+    box.innerHTML=`<div class="ai-sit-head">📊 Анализ ситуации${prioLbl?' · приоритет <b>'+prioLbl+'</b>':''}</div><div class="ai-sit-body">${escapeHtml(sit)}</div>`;
+    box.style.display='block';
+  }
   async function analyzeAllShots(imgs,apiKey){
     const pasteIn=document.getElementById('pasteIn');
     const pbLabel=document.getElementById('pbParsedLabel');
@@ -2136,18 +2181,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         return [{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},{type:'text',text:`[${_FL[field]||field}]`}];
       }));
       const flat=imgContent.flat();
-      flat.push({type:'text',text:`Контекст: ${ticker} · ${tf} · плечо ×${lev} · текущая цена ~${price}\n\nПо всем скринам выдели 3-6 ключевых ценовых уровня для скальп-сессии. Ответ СТРОГО в формате:\nЗОНЫ:\nцена | тип | краткий план | стоп\n...\n\nТип: fade/break/watch/stand. Стоп — опционально. Без объяснений, без торговых рекомендаций, без конкретных директив входа. Только структурные уровни и наблюдения.`});
+      flat.push({type:'text',text:`Контекст: ${ticker} · ${tf} · плечо ×${lev} · текущая цена ~${price}\n\nНа основе наблюдений со всех скринов выдели 3-6 КАНДИДАТНЫХ структурных уровня для скальп-сессии (НЕ директивы — трейдер проверяет и подтверждает). Ответ СТРОГО в двух блоках:\n\nЗОНЫ:\nцена | тип | краткий план | стоп | протокол\n...\n\nАНАЛИЗ:\nПриоритет: <один протокол: VALENTINI/SQUEEZE/SHOTGUN/ELLIOTT_CLUSTER>\nСитуация: <2-3 коротких предложения — общая картина по скринам, какой сценарий вероятнее и почему, на что смотреть в первую очередь. Без команд входа/стопа/тейка.>\n\nПравила: тип зоны — fade/break/watch/stand. протокол зоны — VALENTINI/SQUEEZE/SHOTGUN/ELLIOTT_CLUSTER (подбери по структуре). стоп опционален: если нет — пустое поле, но сохрани все разделители «|». «Приоритет» — самый уместный протокол под текущую ситуацию. Никакого текста вне этих двух блоков.`});
       const resp=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:600,messages:[{role:'user',content:flat}]})
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:700,messages:[{role:'user',content:flat}]})
       });
       if(!resp.ok)throw new Error('API '+resp.status);
       const data=await resp.json();
       const text=(data.content&&data.content[0]&&data.content[0].text)||'';
-      const m=text.match(/ЗОНЫ:\n?([\s\S]+)/i);
-      if(m){pasteIn.value=m[1].trim();}
-      else{pasteIn.value=text.trim();}
+      const zoneM=text.match(/ЗОНЫ:\s*([\s\S]*?)(?:\nАНАЛИЗ:|$)/i);
+      const anaM=text.match(/АНАЛИЗ:\s*([\s\S]+)/i);
+      pasteIn.value=(zoneM?zoneM[1]:text).trim();
+      _renderSituation(anaM?anaM[1].trim():'');
+      if(_aiPriorityProto)selectProto(_aiPriorityProto);
       pbLabel.textContent='↑ AI подобрал зоны — проверь и нажми «Разобрать»';
     }catch(err){
       pasteIn.value=prevVal||'';
