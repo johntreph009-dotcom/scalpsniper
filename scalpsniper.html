@@ -166,6 +166,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .pos-pnl-up{color:var(--green)}
   .pos-pnl-down{color:var(--danger)}
   .pos-pnl-pct{font-size:14px;font-weight:700;opacity:.8}
+  @keyframes posFlashUp{0%{background:rgba(63,185,80,.45);box-shadow:0 0 18px rgba(63,185,80,.5)}100%{background:transparent;box-shadow:none}}
+  @keyframes posFlashDown{0%{background:rgba(240,69,74,.45);box-shadow:0 0 18px rgba(240,69,74,.5)}100%{background:transparent;box-shadow:none}}
+  .pos-pnl{border-radius:6px;padding:0 4px;transition:none}
+  .pos-pnl.flash-up{animation:posFlashUp .7s ease-out}
+  .pos-pnl.flash-down{animation:posFlashDown .7s ease-out}
+  .pos-tick{font-size:13px;margin-left:6px;font-weight:700}
+  .pos-tick.up{color:var(--green)} .pos-tick.down{color:var(--danger)}
   .pos-levels{margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.3px}
   .pos-side-btn.sel#psLong{color:var(--green);border-color:var(--green);background:rgba(63,185,80,.12)}
   .pos-side-btn.sel#psShort{color:var(--danger);border-color:var(--danger);background:rgba(240,69,74,.12)}
@@ -1593,14 +1600,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     closeZoneIdx=-1; pendingOutcome=null; closingPos=false;
   }
   // ── demo position ──
-  let pos=null, closingPos=false, pendingPosSide=null, pos_kindHint='fade';
+  let pos=null, closingPos=false, pendingPosSide=null, pos_kindHint='fade', _prevPnl=null;
   function savePos(){ try{pos?localStorage.setItem('msa_pos_v1',JSON.stringify(pos)):localStorage.removeItem('msa_pos_v1');}catch(e){} }
   function loadPos(){ try{pos=JSON.parse(localStorage.getItem('msa_pos_v1')||'null');}catch(e){pos=null;} }
   function _livePx(){ return parseFloat(document.getElementById('livePrice')?.value)||null; }
   function renderPosition(){
     const el=document.getElementById('posBlock'); if(!el)return;
     const lp=_livePx();
-    if(!pos){ el.innerHTML = lp? '<button class="pos-open-btn" onclick="openPosForm()">▶ Открыть демо-позицию</button>' : ''; return; }
+    if(!pos){ el.innerHTML = lp? '<button class="pos-open-btn" onclick="openPosForm()">▶ Открыть демо-позицию</button>' : ''; _prevPnl=null; return; }
     const dir=pos.side==='long'?1:-1;
     const notional=pos.units*pos.entry;
     const pnl=lp?(lp-pos.entry)*pos.units*dir:0;
@@ -1614,6 +1621,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <div class="pos-pnl ${pnl>=0?'pos-pnl-up':'pos-pnl-down'}">${pnl>=0?'+':''}${pnl.toFixed(2)} USDT <span class="pos-pnl-pct">(${pnlPct>=0?'+':''}${pnlPct.toFixed(2)}%)</span></div>
       <div class="pos-levels">${sl} · ${tp}</div>
     </div>`;
+    const pnlEl=el.querySelector('.pos-pnl');
+    if(pnlEl&&_prevPnl!=null&&Math.abs(pnl-_prevPnl)>0.001){
+      const up=pnl>_prevPnl;
+      pnlEl.classList.add(up?'flash-up':'flash-down');
+      pnlEl.insertAdjacentHTML('beforeend',`<span class="pos-tick ${up?'up':'down'}">${up?'▲':'▼'}</span>`);
+    }
+    _prevPnl=pnl;
   }
   function setPosSide(s){ pendingPosSide=s; document.getElementById('psLong').classList.toggle('sel',s==='long'); document.getElementById('psShort').classList.toggle('sel',s==='short'); document.getElementById('posErr').style.display='none'; }
   function openPosForm(){
