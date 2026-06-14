@@ -2412,7 +2412,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const base=(_symFromTicker(raw).replace(/USDT$/i,'')||'BTC');
     const urls={
       dom:'https://futures.mexc.com/exchange/'+base+'_USDT',
-      liq:'https://www.coinglass.com/currencies/'+base,
+      liq:'https://www.coinglass.com/pro/futures/LiquidationHeatMapNew',
       chart:'https://www.tradingview.com/chart/?symbol=MEXC%3A'+base+'USDT.P'
     };
     const u=urls[kind];
