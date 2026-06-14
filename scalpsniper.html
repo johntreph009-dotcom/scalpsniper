@@ -147,6 +147,28 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .live-status{font-size:12px;font-weight:700}
   .live-card{background:linear-gradient(180deg,#241407,#16100a);border:1px solid var(--accent);border-radius:10px;padding:18px;box-shadow:0 0 22px rgba(255,122,24,.2)}
   .live-card.flat{background:var(--panel);border-color:var(--line);box-shadow:none}
+  /* ── demo position ── */
+  .pos-block{margin-top:12px}
+  .pos-open-btn{width:100%;background:rgba(255,255,255,.04);border:1px dashed var(--glass-border);color:var(--text-dim);font-family:inherit;font-size:12px;font-weight:700;letter-spacing:.5px;padding:11px;border-radius:8px;cursor:pointer;transition:color .15s,border-color .15s;text-transform:uppercase}
+  .pos-open-btn:hover{color:var(--accent);border-color:var(--accent-dim)}
+  .pos-card{border-radius:10px;padding:14px 16px;border:1px solid var(--line)}
+  .pos-card.pos-win{background:rgba(63,185,80,.07);border-color:rgba(63,185,80,.4);box-shadow:0 0 22px rgba(63,185,80,.12)}
+  .pos-card.pos-loss{background:rgba(240,69,74,.06);border-color:rgba(240,69,74,.4);box-shadow:0 0 22px rgba(240,69,74,.12)}
+  .pos-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  .pos-side{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.5px;padding:3px 9px;border-radius:4px}
+  .pos-side.long{color:var(--green);background:rgba(63,185,80,.12);border:1px solid rgba(63,185,80,.4)}
+  .pos-side.short{color:var(--danger);background:rgba(240,69,74,.12);border:1px solid rgba(240,69,74,.4)}
+  .pos-entry{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text)}
+  .pos-units{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint)}
+  .pos-close{margin-left:auto;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--text-dim);font-family:inherit;font-size:11px;font-weight:700;padding:6px 12px;border-radius:5px;cursor:pointer;transition:all .15s}
+  .pos-close:hover{color:var(--text);border-color:var(--text-faint)}
+  .pos-pnl{font-family:'Archivo',sans-serif;font-weight:800;font-size:26px;line-height:1.1}
+  .pos-pnl-up{color:var(--green)}
+  .pos-pnl-down{color:var(--danger)}
+  .pos-pnl-pct{font-size:14px;font-weight:700;opacity:.8}
+  .pos-levels{margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.3px}
+  .pos-side-btn.sel#psLong{color:var(--green);border-color:var(--green);background:rgba(63,185,80,.12)}
+  .pos-side-btn.sel#psShort{color:var(--danger);border-color:var(--danger);background:rgba(240,69,74,.12)}
   .lc-top{display:flex;align-items:center;gap:12px;margin-bottom:14px}
   .lc-num{font-family:'Archivo',sans-serif;font-weight:800;font-size:30px;color:var(--accent)}
   .lc-kind{font-size:13px;font-weight:700;letter-spacing:1px;padding:5px 12px;border-radius:5px}
@@ -850,6 +872,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <div class="lc-note" id="lcNote">—</div>
       <button class="calc-fill-btn" id="calcFillBtn" onclick="fillCalcFromZone()" style="display:none">→ Подставить в калькулятор</button>
     </div>
+    <div class="pos-block" id="posBlock"></div>
   </div>
   <!-- ===== RISK CALC (shared) ===== -->
   <div class="section-title">Калькулятор риска <span class="tag">детерминированно, по твоим уровням</span></div>
@@ -965,6 +988,27 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   </div>
 </div>
 
+<!-- ===== OPEN DEMO POSITION MODAL ===== -->
+<div class="modal-overlay hide" id="posModal" onclick="if(event.target===this)closePosModal()">
+  <div class="modal-box">
+    <div class="modal-head">Открыть демо-позицию</div>
+    <div class="ob-row">
+      <button type="button" class="ob pos-side-btn" id="psLong" onclick="setPosSide('long')">▲ LONG</button>
+      <button type="button" class="ob pos-side-btn" id="psShort" onclick="setPosSide('short')">▼ SHORT</button>
+    </div>
+    <div class="modal-fields">
+      <div><span class="mini-label">Вход</span><input id="p_entry" type="number" placeholder="63700"></div>
+      <div><span class="mini-label">Размер (ед.)</span><input id="p_units" type="number" step="0.0001" placeholder="0.3101"></div>
+      <div><span class="mini-label">Стоп (опц.)</span><input id="p_stop" type="number" placeholder="64080"></div>
+      <div><span class="mini-label">Тейк (опц.)</span><input id="p_target" type="number" placeholder="63500"></div>
+    </div>
+    <div class="modal-err" id="posErr">Выбери сторону и укажи вход</div>
+    <div class="modal-btns">
+      <button class="mok" onclick="confirmOpenPos()">Открыть позицию</button>
+      <button class="mcancel" onclick="closePosModal()">Отмена</button>
+    </div>
+  </div>
+</div>
 <!-- ===== CLOSE ZONE MODAL ===== -->
 <div class="modal-overlay hide" id="closeModal" onclick="if(event.target===this)closeModal()">
   <div class="modal-box">
@@ -1391,6 +1435,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       _updateHdrZone(null);
     }
     renderZones();
+    renderPosition();
   }
   /* ── phase-nav zone accent ── */
   function _updateHdrZone(zoneObj){
@@ -1493,6 +1538,30 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function submitClose(){
     if(!pendingOutcome){document.getElementById('modalErr').style.display='block';return;}
+    if(closingPos&&pos){
+      const lp=parseFloat(document.getElementById('livePrice').value)||pos.entry;
+      const dir=pos.side==='long'?1:-1;
+      const isTradeP=pendingOutcome!=='skip';
+      const entry={
+        id:Date.now(), ts:new Date().toISOString(),
+        ticker:document.getElementById('ticker').value.trim()||'—',
+        tf:document.getElementById('tf').value, protocol:selProto,
+        zPx:pos.entry, zKind:pos.kind||'stand', zNote:(pos.side==='long'?'LONG':'SHORT')+' демо-позиция', zStop:pos.stop||null,
+        outcome:pendingOutcome, side:pos.side,
+        entryPx:isTradeP?(parseFloat(document.getElementById('jEntryPx').value)||pos.entry):null,
+        notional:isTradeP?(parseFloat(document.getElementById('jNotional').value)||pos.units*pos.entry):null,
+        pnl:isTradeP?(parseFloat(document.getElementById('jPnl').value)||((lp-pos.entry)*pos.units*dir)):null,
+        plan:document.getElementById('jPlan').checked, note:document.getElementById('jNote').value.trim(),
+        grade:pendingGrade||null, stars:2, triggered:true
+      };
+      journal.unshift(entry); saveJournal();
+      if(entry.outcome==='loss'){consecutiveLosses++;if(consecutiveLosses>=2)setTimeout(showTiltGuard,400);}
+      else if(entry.outcome==='win'){consecutiveLosses=0;}
+      pos=null; savePos(); closingPos=false;
+      updateSessionCtx();updateStreakBadge();renderPosition();
+      closeModal(); _chartRedraw();
+      return;
+    }
     const z=zones[closeZoneIdx];
     const isTrade=pendingOutcome!=='skip';
     const entry={
@@ -1521,7 +1590,80 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function closeModal(){
     document.getElementById('closeModal').classList.add('hide');
-    closeZoneIdx=-1; pendingOutcome=null;
+    closeZoneIdx=-1; pendingOutcome=null; closingPos=false;
+  }
+  // ── demo position ──
+  let pos=null, closingPos=false, pendingPosSide=null, pos_kindHint='fade';
+  function savePos(){ try{pos?localStorage.setItem('msa_pos_v1',JSON.stringify(pos)):localStorage.removeItem('msa_pos_v1');}catch(e){} }
+  function loadPos(){ try{pos=JSON.parse(localStorage.getItem('msa_pos_v1')||'null');}catch(e){pos=null;} }
+  function _livePx(){ return parseFloat(document.getElementById('livePrice')?.value)||null; }
+  function renderPosition(){
+    const el=document.getElementById('posBlock'); if(!el)return;
+    const lp=_livePx();
+    if(!pos){ el.innerHTML = lp? '<button class="pos-open-btn" onclick="openPosForm()">▶ Открыть демо-позицию</button>' : ''; return; }
+    const dir=pos.side==='long'?1:-1;
+    const notional=pos.units*pos.entry;
+    const pnl=lp?(lp-pos.entry)*pos.units*dir:0;
+    const pnlPct=lp?((lp-pos.entry)/pos.entry*100*dir):0;
+    const slPct=(lp&&pos.stop)?((pos.stop-lp)/lp*100):null;
+    const tpPct=(lp&&pos.target)?((pos.target-lp)/lp*100):null;
+    const sl=pos.stop?`SL ${pos.stop}${slPct!=null?` (${slPct>=0?'+':''}${slPct.toFixed(2)}%)`:''}`:'SL —';
+    const tp=pos.target?`TP ${pos.target}${tpPct!=null?` (${tpPct>=0?'+':''}${tpPct.toFixed(2)}%)`:''}`:'TP —';
+    el.innerHTML=`<div class="pos-card ${pnl>=0?'pos-win':'pos-loss'}">
+      <div class="pos-top"><span class="pos-side ${pos.side}">${pos.side==='long'?'▲ LONG':'▼ SHORT'}</span><span class="pos-entry">вход ${pos.entry}</span><span class="pos-units">${pos.units.toFixed(4)} ед · ${Math.round(notional)} USDT</span><button class="pos-close" onclick="closePosition()">Закрыть</button></div>
+      <div class="pos-pnl ${pnl>=0?'pos-pnl-up':'pos-pnl-down'}">${pnl>=0?'+':''}${pnl.toFixed(2)} USDT <span class="pos-pnl-pct">(${pnlPct>=0?'+':''}${pnlPct.toFixed(2)}%)</span></div>
+      <div class="pos-levels">${sl} · ${tp}</div>
+    </div>`;
+  }
+  function setPosSide(s){ pendingPosSide=s; document.getElementById('psLong').classList.toggle('sel',s==='long'); document.getElementById('psShort').classList.toggle('sel',s==='short'); document.getElementById('posErr').style.display='none'; }
+  function openPosForm(){
+    const lp=_livePx();
+    const a=(typeof activeZoneIdx==='function')?activeZoneIdx():-1;
+    const z=a>=0?zones[a]:null;
+    pendingPosSide=null;
+    document.getElementById('psLong').classList.remove('sel');
+    document.getElementById('psShort').classList.remove('sel');
+    document.getElementById('p_entry').value=lp||(z?z.px:'');
+    document.getElementById('p_stop').value=(z&&z.stop)?z.stop:'';
+    document.getElementById('p_target').value='';
+    const ps=z?posSize(z):null;
+    document.getElementById('p_units').value=ps?ps.units.toFixed(4):'';
+    pos_kindHint=z?z.kind:'fade';
+    document.getElementById('posErr').style.display='none';
+    document.getElementById('posModal').classList.remove('hide');
+  }
+  function closePosModal(){ document.getElementById('posModal').classList.add('hide'); }
+  function confirmOpenPos(){
+    const entry=parseFloat(document.getElementById('p_entry').value);
+    if(!pendingPosSide||!entry){document.getElementById('posErr').style.display='block';return;}
+    let units=parseFloat(document.getElementById('p_units').value);
+    const stop=parseFloat(document.getElementById('p_stop').value)||null;
+    const target=parseFloat(document.getElementById('p_target').value)||null;
+    if(!units||!isFinite(units)){
+      const dep=parseFloat(document.getElementById('deposit').value), risk=parseFloat(document.getElementById('depRisk').value);
+      units=(dep&&risk&&stop)?((dep*risk/100)/Math.abs(entry-stop)):0;
+    }
+    pos={side:pendingPosSide, entry:+entry, units:+units, stop:stop, target:target, kind:pos_kindHint||'fade', openedAt:Date.now()};
+    savePos(); closePosModal(); renderPosition(); _chartRedraw();
+  }
+  function closePosition(){
+    if(!pos)return;
+    const lp=_livePx()||pos.entry;
+    const dir=pos.side==='long'?1:-1;
+    const pnl=(lp-pos.entry)*pos.units*dir;
+    closingPos=true; closeZoneIdx=-1; pendingOutcome=null; pendingGrade=null;
+    document.getElementById('modalZoneLabel').textContent=`${pos.side==='long'?'LONG':'SHORT'} · вход ${pos.entry} · ${pnl>=0?'+':''}${pnl.toFixed(2)} USDT`;
+    document.getElementById('jEntryPx').value=pos.entry;
+    document.getElementById('jNotional').value=Math.round(pos.units*pos.entry);
+    document.getElementById('jPnl').value=pnl.toFixed(2);
+    document.getElementById('jPlan').checked=true;
+    document.getElementById('jNote').value='';
+    document.querySelectorAll('.ob-grade').forEach(b=>b.classList.remove('sel'));
+    document.querySelectorAll('.ob').forEach(b=>b.classList.remove('sel'));
+    document.getElementById('jTradeFields').classList.remove('hide');
+    document.getElementById('modalErr').style.display='none';
+    document.getElementById('closeModal').classList.remove('hide');
+    setOutcome(pnl>=0?'win':'loss');
   }
   function delJournalEntry(id){
     journal=journal.filter(e=>e.id!==id);
@@ -2331,6 +2473,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const top=Math.min(toY(c.o),toY(c.c)),ht=Math.max(1,Math.abs(toY(c.o)-toY(c.c)));
       ctx.fillStyle=col;ctx.fillRect(x-bw/2,top,bw,ht);
     });
+    // demo position lines (вход / стоп / тейк)
+    if(typeof pos!=='undefined'&&pos){
+      const posLine=(price,col,lbl)=>{
+        price=+price; if(!isFinite(price)||price<minP||price>maxP)return;
+        const y=toY(price);
+        ctx.strokeStyle=col;ctx.lineWidth=1;ctx.setLineDash([6,3]);
+        ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W-LBL,y);ctx.stroke();ctx.setLineDash([]);
+        ctx.fillStyle=col;ctx.font='bold 8px JetBrains Mono,monospace';
+        ctx.fillText(lbl,4,y-2);
+      };
+      posLine(pos.entry,'rgba(255,176,32,.95)',(pos.side==='long'?'LONG ':'SHORT ')+pos.entry);
+      if(pos.stop)posLine(pos.stop,'rgba(239,68,68,.9)','SL '+pos.stop);
+      if(pos.target)posLine(pos.target,'rgba(63,185,80,.9)','TP '+pos.target);
+    }
     if(currentPrice&&isFinite(currentPrice)){
       const py=toY(currentPrice);
       ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=1;ctx.setLineDash([4,3]);
@@ -2549,7 +2705,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _onScroll();
   })();
 
-  load(); loadJournal(); loadSettings(); loadRules(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers();
+  load(); loadJournal(); loadSettings(); loadRules(); loadPos(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers(); renderPosition();
   try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
   renderZones();recalc();
 </script>
