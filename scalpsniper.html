@@ -117,6 +117,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .ai-sit-head{font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
   .ai-sit-head b{color:var(--text)}
   .ai-sit-body{font-size:11px;line-height:1.5;color:var(--text-dim);white-space:pre-wrap}
+  .quick-status{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-top:6px;min-height:12px;letter-spacing:.2px}
+  .zones-fresh{display:flex;align-items:center;gap:8px;margin:2px 0 8px;font-size:10px;font-family:'JetBrains Mono',monospace;letter-spacing:.2px}
+  #zonesFreshTxt{flex:1}
+  .zones-fresh.fresh #zonesFreshTxt{color:var(--green)}
+  .zones-fresh.aging #zonesFreshTxt{color:var(--warn)}
+  .zones-fresh.stale #zonesFreshTxt{color:var(--danger)}
+  .zf-refresh{background:rgba(255,122,24,.1);border:1px solid var(--accent-dim);color:var(--accent);font-family:inherit;font-size:10px;font-weight:700;padding:3px 9px;border-radius:4px;cursor:pointer;transition:all .12s;white-space:nowrap}
+  .zf-refresh:hover{background:var(--accent-soft);border-color:var(--accent)}
   .zone-delta.near{color:var(--accent);border-color:var(--accent-dim)}
   .zc-acts{display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0}
   /* ── zone group separator ── */
@@ -833,9 +841,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div id="protoChecks" class="proto-checks"></div>
     <div class="actions prep-sticky-bar">
       <span id="readinessBadge" class="rs-inline-badge">—</span>
-      <button class="btn primary" style="flex:2" onclick="buildRequest()">Сформировать запрос ↗</button>
+      <button class="btn primary" style="flex:2" id="quickBtn" onclick="quickAnalyze()">⚡ Обновить зоны (без скринов)</button>
+      <button class="btn" onclick="buildRequest()" title="Текстовый запрос для разбора по скриншотам">Запрос по скринам ↗</button>
       <button class="btn" onclick="resetPrep()">Сброс</button>
     </div>
+    <div id="quickStatus" class="quick-status"></div>
     <div class="output hide" id="outBox">
       <div class="output-head"><div class="ot">Запрос на разбор · AI подберёт зоны-кандидаты</div><button class="copy-btn" onclick="copyOut()">Копировать</button></div>
       <pre id="outPre"></pre>
@@ -935,6 +945,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div class="t-side">
   <!-- ===== ZONES (shared, always visible) ===== -->
   <div class="section-title" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация зоны по времени · Клик по цене внутри карточки зоны копирует её в буфер</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
+  <div class="zones-fresh" id="zonesFresh"><span id="zonesFreshTxt"></span><button class="zf-refresh" onclick="quickAnalyze()" title="Пересобрать зоны из стакана Binance (без скринов)">↻ Обновить</button></div>
   <!-- input tools: collapsible (вставка + ручное добавление + депозит) -->
   <div class="zone-tools open" id="zoneTools">
   <button class="zone-tools-toggle" type="button" onclick="toggleZoneTools()">
@@ -1335,7 +1346,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function renderZones(){
     if(phase==='live')_chartRedraw();
     const wrap=document.getElementById('zonesList');
-    if(!zones.length){wrap.innerHTML='<div class="empty">Зон пока нет. Добавь уровни из разбора — цена, тип, план.</div>';return;}
+    if(!zones.length){wrap.innerHTML='<div class="empty">Зон пока нет. «↻ Обновить» соберёт из стакана Binance, или добавь из разбора.</div>';renderZonesFresh();return;}
     const act=phase==='live'?activeZoneIdx():-1;
     const lp=parseFloat(document.getElementById('livePrice')?.value||document.getElementById('price')?.value)||null;
     // group: active first, then by stars desc, then done/expired last
@@ -1398,6 +1409,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       </div>`;
     });
     wrap.innerHTML=html;
+    renderZonesFresh();
   }
   function onDepositChange(){
     const r=document.getElementById('depRisk').value;
@@ -1447,6 +1459,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }
     renderZones();
     renderPosition();
+    _posAlerts();
   }
   /* ── phase-nav zone accent ── */
   function _updateHdrZone(zoneObj){
@@ -1669,7 +1682,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const dep=parseFloat(document.getElementById('deposit').value), risk=parseFloat(document.getElementById('depRisk').value);
       units=(dep&&risk&&stop)?((dep*risk/100)/Math.abs(entry-stop)):0;
     }
-    pos={side:pendingPosSide, entry:+entry, units:+units, stop:stop, target:target, kind:pos_kindHint||'fade', ticker:_tkKey(), openedAt:Date.now()};
+    pos={side:pendingPosSide, entry:+entry, units:+units, stop:stop, target:target, kind:pos_kindHint||'fade', ticker:_tkKey(), openedAt:Date.now()}; _posAlertFlags={};
     savePos(); closePosModal(); renderPosition(); _chartRedraw();
   }
   function closePosition(){
@@ -2591,6 +2604,70 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // ── Live Price (Binance → MEXC fallback) ──
   let _pxPoll=null;
   function _symFromTicker(raw){return raw.replace(/[\/\-_ ]/g,'').toUpperCase();}
+  // ── Быстрый разбор: зоны из стакана Binance без скринов, относительно стратегии ──
+  function _niceBucket(price){ const raw=price*0.0007; if(!isFinite(raw)||raw<=0)return 1; const mag=Math.pow(10,Math.floor(Math.log10(raw))); const n=raw/mag; const nice=n<1.5?1:n<3.5?2:n<7.5?5:10; return nice*mag; }
+  let _quickBusy=false;
+  async function quickAnalyze(){
+    if(_quickBusy)return;
+    const raw=document.getElementById('ticker').value.trim()||'BTC/USDT';
+    const sym=_symFromTicker(raw);
+    const btn=document.getElementById('quickBtn'); const oldT=btn?btn.textContent:'';
+    const st=document.getElementById('quickStatus');
+    if(btn){btn.disabled=true;btn.textContent='⏳ Тяну Binance…';}
+    if(st)st.textContent='⏳ '+sym+': стакан, POC, фандинг, OI…';
+    _quickBusy=true;
+    try{
+      const j=async u=>{const r=await fetch(u,{cache:'no-store'}); if(!r.ok)throw new Error('http '+r.status); return r.json();};
+      const price=parseFloat((await j('https://api.binance.com/api/v3/ticker/price?symbol='+sym)).price);
+      if(!price||!isFinite(price))throw new Error('нет цены');
+      const depth=await j('https://api.binance.com/api/v3/depth?symbol='+sym+'&limit=1000');
+      const b=_niceBucket(price);
+      let poc=null,funding=null,oi=null;
+      try{const kl=await j('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval=5m&limit=96'); const m={}; kl.forEach(k=>{const tp=(+k[2]+ +k[3]+ +k[4])/3,v=+k[5],key=Math.round(tp/b)*b; m[key]=(m[key]||0)+v;}); let bv=-1; for(const k in m){if(m[k]>bv){bv=m[k];poc=+k;}}}catch(e){}
+      try{const fr=await j('https://fapi.binance.com/fapi/v1/premiumIndex?symbol='+sym); funding=+(+fr.lastFundingRate*100).toFixed(4);}catch(e){}
+      try{const o=await j('https://fapi.binance.com/fapi/v1/openInterest?symbol='+sym); oi=Math.round(+o.openInterest);}catch(e){}
+      const agg=arr=>{const m={}; arr.forEach(a=>{const p=+a[0],q=+a[1],key=Math.round(p/b)*b; m[key]=(m[key]||0)+p*q;}); return m;};
+      const within=0.025;
+      const pick=(m,side)=>Object.entries(m).map(([p,n])=>({p:+p,n})).filter(o=>{const d=(o.p-price)/price; return side==='ask'?(d>0.0003&&d<=within):(d<-0.0003&&d>=-within);}).sort((a,c)=>c.n-a.n).slice(0,3);
+      const asks=pick(agg(depth.asks),'ask'), bids=pick(agg(depth.bids),'bid');
+      if(!asks.length&&!bids.length)throw new Error('нет крупных стен в ±2.5%');
+      const proto=selProto||'VALENTINI';
+      const fmtM=n=>n>=1e6?(n/1e6).toFixed(1)+'M':(n/1e3).toFixed(0)+'K';
+      const all=[...asks,...bids]; const maxN=Math.max(...all.map(o=>o.n));
+      const stars=o=>{const nr=o.n/maxN, prox=1-Math.min(Math.abs((o.p-price)/price)/within,1), s=nr*0.6+prox*0.4; return s>0.66?3:s>0.4?2:1;};
+      const z=[];
+      asks.forEach(o=>{const sq=proto==='SQUEEZE'; z.push({px:Math.round(o.p),kind:sq?'break':'fade',note:(sq?'пробой ':'отбой от ')+'ask-стены '+fmtM(o.n),stop:Math.round(o.p*1.003),proto:proto,stars:stars(o)});});
+      bids.forEach(o=>{z.push({px:Math.round(o.p),kind:'fade',note:'отбой от bid-стены '+fmtM(o.n),stop:Math.round(o.p*0.997),proto:proto==='SHOTGUN'?'SHOTGUN':proto,stars:stars(o)});});
+      z.sort((a,c)=>c.px-a.px);
+      zones=z; save(); renderZones(); if(typeof renderLadder==='function')renderLadder(); recalc(); renderReadinessScore();
+      _setZonesFresh(Date.now());
+      if(st)st.textContent='✓ '+raw+': '+z.length+' зон · цена '+price+' · POC '+(poc??'н/д')+(funding!=null?' · фанд '+funding+'%':'')+(oi!=null?' · OI '+oi:'')+' · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+    }catch(e){ if(st)st.textContent='⚠ '+sym+': '+(e.message||'ошибка')+' (пара есть на Binance?)'; }
+    finally{ _quickBusy=false; if(btn){btn.disabled=false;btn.textContent=oldT||'⚡ Обновить зоны (без скринов)';} }
+  }
+  // ── свежесть зон ──
+  function _setZonesFresh(ts){ try{const m=JSON.parse(localStorage.getItem('msa_zones_fresh_v1')||'{}'); m[_tkKey()]=ts; localStorage.setItem('msa_zones_fresh_v1',JSON.stringify(m));}catch(e){} renderZonesFresh(); }
+  function _getZonesFresh(){ try{return (JSON.parse(localStorage.getItem('msa_zones_fresh_v1')||'{}'))[_tkKey()]||null;}catch(e){return null;} }
+  function renderZonesFresh(){
+    const wrap=document.getElementById('zonesFresh'), txt=document.getElementById('zonesFreshTxt'); if(!wrap||!txt)return;
+    if(!zones.length){ wrap.className='zones-fresh'; txt.textContent='зон нет — «↻ Обновить» соберёт из стакана'; return; }
+    const ts=_getZonesFresh(), lp=parseFloat(document.getElementById('livePrice')?.value||document.getElementById('price')?.value)||null;
+    let cls='zones-fresh', parts=[];
+    if(ts){const min=Math.floor((Date.now()-ts)/60000); parts.push('обновлено '+(min<1?'<1':min)+' мин назад'); cls+=min<10?' fresh':min<30?' aging':' stale';}
+    else parts.push('разметка вручную/из разбора');
+    if(lp){const pxs=zones.filter(z=>!z.closed&&!z.expired).map(z=>+z.px); if(pxs.length){const lo=Math.min(...pxs),hi=Math.max(...pxs),pad=(hi-lo)*0.1||lo*0.005; if(lp>hi+pad||lp<lo-pad){parts.push('⚠ цена вне диапазона зон'); cls='zones-fresh stale';}}}
+    wrap.className=cls; txt.textContent=parts.join(' · ');
+  }
+  // ── умные алерты по позиции (близко к стопу/тейку) ──
+  let _posAlertFlags={};
+  function _posAlerts(){
+    if(!pos)return; if((pos.ticker||'BTC/USDT').toUpperCase()!==_tkKey())return;
+    const lp=_livePx(); if(!lp)return;
+    if(pos.stop){const dist=Math.abs(pos.entry-pos.stop)||1, adv=(pos.side==='long')?(pos.entry-lp):(lp-pos.entry), f=adv/dist;
+      if(f>=0.8&&!_posAlertFlags.stop){_posAlertFlags.stop=true; if(typeof _zoneBeep==='function')_zoneBeep(); if(typeof _zoneTitleFlash==='function')_zoneTitleFlash();} if(f<0.6)_posAlertFlags.stop=false;}
+    if(pos.target){const dist=Math.abs(pos.target-pos.entry)||1, prog=(pos.side==='long')?(lp-pos.entry):(pos.entry-lp), f=prog/dist;
+      if(f>=0.8&&!_posAlertFlags.tgt){_posAlertFlags.tgt=true; if(typeof _zoneBeep==='function')_zoneBeep(); if(typeof _zoneTitleFlash==='function')_zoneTitleFlash();} if(f<0.6)_posAlertFlags.tgt=false;}
+  }
   // открыть источник для слота наблюдения под текущий тикер (один клик — на нужную страницу для скрина)
   function openSource(kind){
     const raw=document.getElementById('ticker').value.trim()||'BTC/USDT';
