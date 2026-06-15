@@ -766,7 +766,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <div class="row4">
         <div><span class="label">Тикер</span>
           <div class="ticker-input-wrap" id="tickerWrap">
-            <input id="ticker" placeholder="BTC/USDT" autocomplete="off" oninput="saveSettings();triggerPriceFetch();_filterTickerDD()" onfocus="_openTickerDD()">
+            <input id="ticker" placeholder="BTC/USDT" autocomplete="off" oninput="saveSettings();triggerPriceFetch();_filterTickerDD()" onchange="reloadZonesForTicker()" onfocus="_openTickerDD()">
             <button type="button" class="ticker-dd-toggle" id="tickerDDToggle" onclick="_toggleTickerDD(event)" aria-label="Список тикеров">▾</button>
             <div class="ticker-dd" id="tickerDD"></div>
           </div>
@@ -1078,8 +1078,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   const KEY='msa_zones_v2', JKEY='msa_journal_v1';
   let journal=[], closeZoneIdx=-1, pendingOutcome=null;
   // ---- persistence ----
-  function save(){ try{localStorage.setItem(KEY,JSON.stringify(zones))}catch(e){} }
-  function load(){ try{const r=localStorage.getItem(KEY); if(r)zones=JSON.parse(r)}catch(e){zones=[]} }
+  // зоны сегментированы по тикеру: { "BTC/USDT":[...], "ETH/USDT":[...] }
+  function _tkKey(){ let t=document.getElementById('ticker')?.value?.trim(); if(!t){try{t=JSON.parse(localStorage.getItem(SKEY)||'{}').ticker;}catch(e){}} return (t||'BTC/USDT').toUpperCase(); }
+  function _loadZMap(){ try{const raw=JSON.parse(localStorage.getItem(KEY)||'{}'); if(Array.isArray(raw))return {'BTC/USDT':raw}; return (raw&&typeof raw==='object')?raw:{}; }catch(e){return {};} }
+  function save(){ const m=_loadZMap(); m[_tkKey()]=zones; try{localStorage.setItem(KEY,JSON.stringify(m))}catch(e){} }
+  function load(){ const m=_loadZMap(); const z=m[_tkKey()]; zones=Array.isArray(z)?z:[]; }
+  function reloadZonesForTicker(){ load(); editingIdx=-1; renderZones(); if(typeof renderLadder==='function')renderLadder(); if(typeof renderReadinessScore==='function')renderReadinessScore(); if(typeof renderPosition==='function')renderPosition(); if(typeof _chartRedraw==='function'&&phase==='live')_chartRedraw(); }
   function saveJournal(){ try{localStorage.setItem(JKEY,JSON.stringify(journal))}catch(e){} }
   function loadJournal(){ try{const r=localStorage.getItem(JKEY); if(r)journal=JSON.parse(r)}catch(e){journal=[]} }
   // ---- export / import (перенос между устройствами) ----
@@ -1546,18 +1550,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function submitClose(){
     if(!pendingOutcome){document.getElementById('modalErr').style.display='block';return;}
     if(closingPos&&pos){
+      const posTk=(pos.ticker||'BTC/USDT').toUpperCase();
+      const matchedP=posTk===_tkKey();
       const lp=parseFloat(document.getElementById('livePrice').value)||pos.entry;
       const dir=pos.side==='long'?1:-1;
       const isTradeP=pendingOutcome!=='skip';
+      const jp=parseFloat(document.getElementById('jPnl').value);
       const entry={
         id:Date.now(), ts:new Date().toISOString(),
-        ticker:document.getElementById('ticker').value.trim()||'—',
+        ticker:posTk,
         tf:document.getElementById('tf').value, protocol:selProto,
-        zPx:pos.entry, zKind:pos.kind||'stand', zNote:(pos.side==='long'?'LONG':'SHORT')+' демо-позиция', zStop:pos.stop||null,
+        zPx:pos.entry, zKind:pos.kind||'stand', zNote:(pos.side==='long'?'LONG':'SHORT')+' демо-позиция ('+posTk+')', zStop:pos.stop||null,
         outcome:pendingOutcome, side:pos.side,
         entryPx:isTradeP?(parseFloat(document.getElementById('jEntryPx').value)||pos.entry):null,
         notional:isTradeP?(parseFloat(document.getElementById('jNotional').value)||pos.units*pos.entry):null,
-        pnl:isTradeP?(parseFloat(document.getElementById('jPnl').value)||((lp-pos.entry)*pos.units*dir)):null,
+        pnl:isTradeP?(isFinite(jp)?jp:(matchedP?(lp-pos.entry)*pos.units*dir:null)):null,
         plan:document.getElementById('jPlan').checked, note:document.getElementById('jNote').value.trim(),
         grade:pendingGrade||null, stars:2, triggered:true
       };
@@ -1608,6 +1615,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const el=document.getElementById('posBlock'); if(!el)return;
     const lp=_livePx();
     if(!pos){ el.innerHTML = lp? '<button class="pos-open-btn" onclick="openPosForm()">▶ Открыть демо-позицию</button>' : ''; _prevPnl=null; return; }
+    const posTk=(pos.ticker||'BTC/USDT').toUpperCase();
+    if(posTk!==_tkKey()){
+      el.innerHTML=`<div class="pos-card pos-loss" style="border-style:dashed;opacity:.85"><div class="pos-top"><span class="pos-side ${pos.side}">${pos.side==='long'?'▲ LONG':'▼ SHORT'}</span><span class="pos-entry">вход ${pos.entry}</span><span class="pos-units">${posTk}</span><button class="pos-close" onclick="closePosition()">Закрыть</button></div><div class="pos-levels">Позиция открыта по <b>${posTk}</b> — переключи тикер на ${posTk}, чтобы видеть живой PnL (на текущем инструменте не считается).</div></div>`;
+      _prevPnl=null; return;
+    }
     const dir=pos.side==='long'?1:-1;
     const notional=pos.units*pos.entry;
     const pnl=lp?(lp-pos.entry)*pos.units*dir:0;
@@ -1657,19 +1669,22 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const dep=parseFloat(document.getElementById('deposit').value), risk=parseFloat(document.getElementById('depRisk').value);
       units=(dep&&risk&&stop)?((dep*risk/100)/Math.abs(entry-stop)):0;
     }
-    pos={side:pendingPosSide, entry:+entry, units:+units, stop:stop, target:target, kind:pos_kindHint||'fade', openedAt:Date.now()};
+    pos={side:pendingPosSide, entry:+entry, units:+units, stop:stop, target:target, kind:pos_kindHint||'fade', ticker:_tkKey(), openedAt:Date.now()};
     savePos(); closePosModal(); renderPosition(); _chartRedraw();
   }
   function closePosition(){
     if(!pos)return;
-    const lp=_livePx()||pos.entry;
+    const posTk=(pos.ticker||'BTC/USDT').toUpperCase();
+    const matched=posTk===_tkKey();
+    if(!matched && !confirm('Позиция по '+posTk+'. Для корректного PnL переключи тикер на '+posTk+'. Закрыть сейчас без расчёта PnL?'))return;
     const dir=pos.side==='long'?1:-1;
-    const pnl=(lp-pos.entry)*pos.units*dir;
+    const lp=matched?(_livePx()||pos.entry):pos.entry;
+    const pnl=matched?((lp-pos.entry)*pos.units*dir):null;
     closingPos=true; closeZoneIdx=-1; pendingOutcome=null; pendingGrade=null;
-    document.getElementById('modalZoneLabel').textContent=`${pos.side==='long'?'LONG':'SHORT'} · вход ${pos.entry} · ${pnl>=0?'+':''}${pnl.toFixed(2)} USDT`;
+    document.getElementById('modalZoneLabel').textContent=`${pos.side==='long'?'LONG':'SHORT'} ${posTk} · вход ${pos.entry}`+(pnl!=null?` · ${pnl>=0?'+':''}${pnl.toFixed(2)} USDT`:' · PnL н/д (другой тикер)');
     document.getElementById('jEntryPx').value=pos.entry;
     document.getElementById('jNotional').value=Math.round(pos.units*pos.entry);
-    document.getElementById('jPnl').value=pnl.toFixed(2);
+    document.getElementById('jPnl').value=pnl!=null?pnl.toFixed(2):'';
     document.getElementById('jPlan').checked=true;
     document.getElementById('jNote').value='';
     document.querySelectorAll('.ob-grade').forEach(b=>b.classList.remove('sel'));
@@ -2487,8 +2502,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const top=Math.min(toY(c.o),toY(c.c)),ht=Math.max(1,Math.abs(toY(c.o)-toY(c.c)));
       ctx.fillStyle=col;ctx.fillRect(x-bw/2,top,bw,ht);
     });
-    // demo position lines (вход / стоп / тейк)
-    if(typeof pos!=='undefined'&&pos){
+    // demo position lines (вход / стоп / тейк) — только на тикере позиции
+    if(typeof pos!=='undefined'&&pos&&(pos.ticker||'BTC/USDT').toUpperCase()===_tkKey()){
       const posLine=(price,col,lbl)=>{
         price=+price; if(!isFinite(price)||price<minP||price>maxP)return;
         const y=toY(price);
@@ -2634,6 +2649,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const el=document.getElementById('ticker');
     el.value=sym+'/USDT';
     saveSettings();triggerPriceFetch();
+    reloadZonesForTicker();
     if(phase==='live')_chartRefresh();
     _markActiveChip();
     _closeTickerDD();
