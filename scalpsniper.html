@@ -2104,7 +2104,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!el)return;
     const checks=PROTO_CHECKS[selProto];
     if(!checks){el.classList.remove('visible');return;}
-    if(!protoCheckState[selProto])protoCheckState[selProto]=checks.map(()=>false);
+    if(!protoCheckState[selProto])protoCheckState[selProto]=checks.map(()=>true);
     const state=protoCheckState[selProto];
     const done=state.filter(Boolean).length;
     const all=done===checks.length;
@@ -2678,7 +2678,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       z.sort((a,c)=>c.px-a.px);
       const topZ=z.slice().sort((a,c)=>(c.stars-a.stars)||(Math.abs(a.px-price)-Math.abs(c.px-price)))[0];
       _lastQuickPrice=price;
-      zones=z; save(); if(topZ&&typeof selectProto==='function')selectProto(topZ.proto); renderZones(); if(typeof renderLadder==='function')renderLadder(); recalc(); renderReadinessScore();
+      zones=z; save(); if(topZ){if(typeof protoCheckState!=='undefined')protoCheckState[topZ.proto]=null; if(typeof selectProto==='function')selectProto(topZ.proto);} renderZones(); if(typeof renderLadder==='function')renderLadder(); recalc(); renderReadinessScore();
       _setZonesFresh(Date.now());
       const mix=[...new Set(z.map(x=>x.proto))].join('/');
       if(st)st.textContent='✓ '+raw+': '+z.length+' зон ('+mix+') · цена '+price+(momUp===true?' · импульс↑':momUp===false?' · импульс↓':'')+' · POC '+(poc??'н/д')+(funding!=null?' · фанд '+funding+'%':'')+' · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
