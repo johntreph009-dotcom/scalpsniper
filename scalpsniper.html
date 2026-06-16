@@ -146,6 +146,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .zone-dir{font-family:'JetBrains Mono',monospace;font-size:11px;flex-shrink:0;font-weight:700}
   .zone-dir.up{color:var(--green)}
   .zone-dir.down{color:var(--danger)}
+  /* ── device sync ── */
+  .sync-box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:8px;display:flex;flex-direction:column;gap:8px}
+  .sync-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .sync-row input{flex:1;min-width:160px}
+  .sync-row .btn{flex-shrink:0}
+  .sync-code-wrap{display:flex;gap:8px;align-items:center}
+  .sync-code-wrap input{flex:1;font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:1px;color:var(--accent);background:var(--accent-soft);border-color:var(--accent-dim)}
+  .sync-copy{flex-shrink:0}
+  .sync-status{font-size:11px;font-family:'JetBrains Mono',monospace;min-height:13px;letter-spacing:.2px}
   /* ── zone group separator ── */
   .zones-group-lbl{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-faint);padding:4px 2px 2px;border-top:1px solid var(--line-soft);margin-top:4px;margin-bottom:2px;font-family:'JetBrains Mono',monospace}
   .zones-group-lbl:first-child{border-top:none;margin-top:0}
@@ -961,7 +970,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <button class="btn" onclick="triggerImport()">⭱ Загрузить из файла</button>
       <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importData(this)">
     </div>
-    <p class="phase-desc" style="margin-top:10px">localStorage не синхронизируется между устройствами. Выгрузи файл и загрузи его на другом устройстве — перенесутся зоны, журнал и настройки.</p>
+    <p class="phase-desc" style="margin-top:10px">Файл-бэкап — полный перенос (включая API-ключ), хранится только у тебя. Для быстрой синхронизации между устройствами — код ниже.</p>
+    <div class="section-title" style="margin-top:16px">Синхронизация устройств <span class="tag">облачный код · 7 дней · без API-ключа</span></div>
+    <div class="sync-box">
+      <div class="sync-row">
+        <button class="btn" id="syncPushBtn" onclick="syncPush()">⟳ Создать код с этого устройства</button>
+      </div>
+      <div class="sync-code-wrap" id="syncCodeWrap" style="display:none">
+        <input id="syncCode" readonly onclick="this.select()">
+        <button class="btn sync-copy" id="syncCopyBtn" onclick="copySyncCode()">Копировать</button>
+      </div>
+      <div class="sync-row">
+        <input id="syncIn" placeholder="код с другого устройства (XXXX-YYYY)">
+        <button class="btn" onclick="syncPull()">Применить код</button>
+      </div>
+      <div class="sync-status" id="syncStatus"></div>
+    </div>
+    <p class="phase-desc" style="margin-top:8px">На первом устройстве — «Создать код», скопируй. На втором — вставь код и «Применить». Передаются зоны, журнал, позиции и настройки в зашифрованном виде (AES-GCM, пароль внутри кода). API-ключ не уезжает на сервер.</p>
   </div>
   </div><!-- /t-main -->
 
@@ -1121,7 +1146,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function saveJournal(){ try{localStorage.setItem(JKEY,JSON.stringify(journal))}catch(e){} }
   function loadJournal(){ try{const r=localStorage.getItem(JKEY); if(r)journal=JSON.parse(r)}catch(e){journal=[]} }
   // ---- export / import (перенос между устройствами) ----
-  const IO_KEYS=['msa_zones_v2','msa_journal_v1','msa_dep','msa_settings_v1','msa_rules_v1','msa_apikey_v1'];
+  const IO_KEYS=['msa_zones_v2','msa_journal_v1','msa_pos_v2','msa_dep','msa_settings_v1','msa_rules_v1','msa_zones_fresh_v1','msa_apikey_v1'];
+  // sync keys = всё кроме API-ключа (он НЕ уезжает на сторонний сервис)
+  const SYNC_KEYS=['msa_zones_v2','msa_journal_v1','msa_pos_v2','msa_dep','msa_settings_v1','msa_rules_v1','msa_zones_fresh_v1'];
   function exportData(){
     try{
       const dump={app:'ScalpSniper',type:'backup',version:1,exportedAt:new Date().toISOString(),data:{}};
@@ -1151,6 +1178,70 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       }catch(e){ alert('Не удалось импортировать: '+e.message); input.value=''; }
     };
     reader.readAsText(file);
+  }
+  // ---- device sync (облачный код-пейринг, AES-GCM, без API-ключа) ----
+  function _b64e(buf){let s='';const b=new Uint8Array(buf);for(let i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);return btoa(s);}
+  function _b64d(s){return Uint8Array.from(atob(s),c=>c.charCodeAt(0));}
+  async function _deriveKey(pass,salt){
+    const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pass),'PBKDF2',false,['deriveKey']);
+    return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+  }
+  async function _encryptSync(text,pass){
+    const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
+    const key=await _deriveKey(pass,salt);
+    const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(text));
+    const out=new Uint8Array(28+ct.byteLength); out.set(salt,0); out.set(iv,16); out.set(new Uint8Array(ct),28);
+    return _b64e(out.buffer);
+  }
+  async function _decryptSync(b64,pass){
+    const raw=_b64d(b64),salt=raw.slice(0,16),iv=raw.slice(16,28),ct=raw.slice(28);
+    const key=await _deriveKey(pass,salt);
+    const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct);
+    return new TextDecoder().decode(pt);
+  }
+  function _genPass(){const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let s='';const r=crypto.getRandomValues(new Uint8Array(10));for(let i=0;i<10;i++)s+=a[r[i]%a.length];return s;}
+  function _syncStat(msg,col){const st=document.getElementById('syncStatus'); if(st){st.textContent=msg; st.style.color=col||'var(--text-dim)';}}
+  async function syncPush(){
+    const btn=document.getElementById('syncPushBtn');
+    try{
+      btn.disabled=true; _syncStat('Шифрую и загружаю…');
+      const data={}; SYNC_KEYS.forEach(k=>{const v=localStorage.getItem(k); if(v!==null)data[k]=v;});
+      if(!Object.keys(data).length){_syncStat('Нет данных для синхронизации','var(--warn)'); btn.disabled=false; return;}
+      const bundle=JSON.stringify({app:'ScalpSniper',type:'sync',version:1,at:new Date().toISOString(),data});
+      const pass=_genPass();
+      const enc=await _encryptSync(bundle,pass);
+      const r=await fetch('https://dpaste.com/api/v2/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'content='+encodeURIComponent(enc)+'&syntax=text&expiry_days=7'});
+      if(!r.ok)throw new Error('сервис недоступен ('+r.status+')');
+      const url=(await r.text()).trim(); const m=url.match(/dpaste\.com\/(\w+)/); if(!m)throw new Error('не получил код');
+      const code=m[1]+'-'+pass;
+      document.getElementById('syncCode').value=code;
+      document.getElementById('syncCodeWrap').style.display='flex';
+      _syncStat('Код готов · действует 7 дней · API-ключ НЕ включён','var(--green)');
+    }catch(e){ _syncStat('Ошибка: '+e.message,'var(--danger)'); }
+    finally{ btn.disabled=false; }
+  }
+  function copySyncCode(){
+    const i=document.getElementById('syncCode'); if(!i.value)return; i.select();
+    try{navigator.clipboard&&navigator.clipboard.writeText(i.value);}catch(e){document.execCommand&&document.execCommand('copy');}
+    const b=document.getElementById('syncCopyBtn'),t=b.textContent; b.textContent='✓ скопировано'; setTimeout(()=>b.textContent=t,1300);
+  }
+  async function syncPull(){
+    const raw=(document.getElementById('syncIn').value||'').trim().replace(/\s+/g,'');
+    const parts=raw.split('-'); if(parts.length<2||!parts[0]||!parts[1]){_syncStat('Код неполный (формат XXXX-YYYY)','var(--danger)'); return;}
+    const id=parts[0], pass=parts.slice(1).join('-');
+    if(!confirm('Применение кода заменит зоны, журнал, позиции и настройки на ЭТОМ устройстве данными с другого. API-ключ не затрагивается. Продолжить?'))return;
+    try{
+      _syncStat('Загружаю…');
+      const g=await fetch('https://dpaste.com/'+id+'.txt'); if(!g.ok)throw new Error('код не найден или истёк ('+g.status+')');
+      const enc=(await g.text()).trim();
+      let txt; try{txt=await _decryptSync(enc,pass);}catch(_){throw new Error('неверный код или пароль');}
+      const obj=JSON.parse(txt); const d=obj&&obj.data; if(!d)throw new Error('повреждённые данные');
+      const found=SYNC_KEYS.filter(k=>k in d&&d[k]!=null);
+      if(!found.length)throw new Error('в коде нет данных ScalpSniper');
+      found.forEach(k=>localStorage.setItem(k,String(d[k])));
+      _syncStat('Готово · блоков: '+found.length+' · перезагрузка…','var(--green)');
+      setTimeout(()=>location.reload(),900);
+    }catch(e){ _syncStat('Ошибка: '+e.message,'var(--danger)'); }
   }
   // ---- phase ----
   function setPhase(p){
