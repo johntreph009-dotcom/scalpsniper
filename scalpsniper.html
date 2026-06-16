@@ -131,7 +131,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .zf-refresh{background:rgba(255,122,24,.1);border:1px solid var(--accent-dim);color:var(--accent);font-family:inherit;font-size:10px;font-weight:700;padding:3px 9px;border-radius:4px;cursor:pointer;transition:all .12s;white-space:nowrap}
   .zf-refresh:hover{background:var(--accent-soft);border-color:var(--accent)}
   .zone-delta.near{color:var(--accent);border-color:var(--accent-dim)}
-  .zc-acts{display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0}
+  .zc-acts{display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0;opacity:0;transition:opacity .14s}
+  .zone-card:hover .zc-acts,.zone-card.expanded .zc-acts{opacity:1}
+  /* ── expandable zone card ── */
+  .zc-top{cursor:pointer;-webkit-user-select:none;user-select:none}
+  .zc-chev{font-size:10px;color:var(--text-faint);transition:transform .18s,color .18s;font-family:'JetBrains Mono',monospace;flex-shrink:0;margin-left:2px}
+  .zone-card.expanded .zc-chev{transform:rotate(180deg);color:var(--accent)}
+  .zc-bot{display:none}
+  .zone-card.expanded .zc-bot{display:flex}
+  .zc-actrow{display:flex;align-items:center;gap:6px;flex-basis:100%;margin-top:7px;padding-top:7px;border-top:1px dashed var(--line-soft);flex-wrap:wrap}
+  .zc-topos{background:var(--accent-soft);border:1px solid var(--accent-dim);color:var(--accent);font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;letter-spacing:.4px;padding:5px 12px;border-radius:5px;cursor:pointer;transition:all .12s;white-space:nowrap}
+  .zc-topos:hover{background:var(--accent);color:#16100a;border-color:var(--accent)}
+  .zc-sub{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-faint)}
+  .zone-dir{font-family:'JetBrains Mono',monospace;font-size:11px;flex-shrink:0;font-weight:700}
+  .zone-dir.up{color:var(--green)}
+  .zone-dir.down{color:var(--danger)}
   /* ── zone group separator ── */
   .zones-group-lbl{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-faint);padding:4px 2px 2px;border-top:1px solid var(--line-soft);margin-top:4px;margin-bottom:2px;font-family:'JetBrains Mono',monospace}
   .zones-group-lbl:first-child{border-top:none;margin-top:0}
@@ -1352,6 +1366,26 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     return {units,riskMoney,notional};
   }
   const _KIND_RAW={fade:'#bc8cff',break:'#3fb950',watch:'#58a6ff',stand:'#666'};
+  let _expandedZones=new Set();
+  function toggleZoneExpand(i){
+    if(_expandedZones.has(i))_expandedZones.delete(i);else _expandedZones.add(i);
+    renderZones();
+  }
+  function openPosFromZone(i){
+    const z=zones[i];if(!z)return;
+    const lp=(typeof _livePx==='function')?_livePx():null;
+    pendingPosSide=null;
+    document.getElementById('psLong').classList.remove('sel');
+    document.getElementById('psShort').classList.remove('sel');
+    document.getElementById('p_entry').value=z.px||lp||'';
+    document.getElementById('p_stop').value=z.stop||'';
+    document.getElementById('p_target').value='';
+    const ps=posSize(z);
+    document.getElementById('p_units').value=ps?ps.units.toFixed(4):'';
+    pos_kindHint=z.kind||'fade';
+    document.getElementById('posErr').style.display='none';
+    document.getElementById('posModal').classList.remove('hide');
+  }
   function renderZones(){
     if(phase==='live')_chartRedraw();
     const wrap=document.getElementById('zonesList');
@@ -1389,7 +1423,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         const d=((+z.px-lp)/lp*100);
         const sign=d>=0?'+':'';
         const near=Math.abs(d)<0.5;
-        deltaHtml=`<span class="zone-delta${near?' near':''}">${sign}${d.toFixed(2)}%</span>`;
+        const above=(+z.px)>=lp;
+        deltaHtml=`<span class="zone-dir ${above?'up':'down'}" title="${above?'над ценой':'под ценой'}">${above?'↑':'↓'}</span><span class="zone-delta${near?' near':''}">${sign}${d.toFixed(2)}%</span>`;
       }
       const protoHtml=z.proto?`<span class="zone-proto" title="Протокол (предложен AI)">${PROTO_LABELS[z.proto]||z.proto}</span>`:'';
       // group separator
@@ -1400,20 +1435,24 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         if(labels[grp])grpLabel=`<div class="zones-group-lbl">${labels[grp]}</div>`;
         lastGroup=grp;
       }
-      html+=grpLabel+`<div class="zone-card ${isActive?'live':''} ${i===editingIdx?'editing':''} ${isDone?'done':''} ${isExpired?'expired':''} ${dimCls}" style="border-left-color:${isDone||isExpired?'var(--line)':k.col}">
-        <div class="zc-top">
+      const isExp=_expandedZones.has(i)||isActive;
+      const posBtn=(!isDone&&!isExpired)?`<button class="zc-topos" onclick="event.stopPropagation();openPosFromZone(${i})" title="Открыть демо-позицию из этой зоны">→ В позицию</button>`:'';
+      html+=grpLabel+`<div class="zone-card ${isActive?'live':''} ${isExp?'expanded':''} ${i===editingIdx?'editing':''} ${isDone?'done':''} ${isExpired?'expired':''} ${dimCls}" style="border-left-color:${isDone||isExpired?'var(--line)':k.col}">
+        <div class="zc-top" onclick="toggleZoneExpand(${i})">
           <span class="zone-num">${i+1}</span>
-          <span class="zone-px zone-px-cp" onclick="copyToClip(${z.px},this)" title="Скопировать">${z.px}</span>
+          <span class="zone-px zone-px-cp" onclick="event.stopPropagation();copyToClip(${z.px},this)" title="Скопировать">${z.px}</span>
           <span class="zone-kind ${k.cls}">${k.lbl}</span>
           <span class="${stCls}">${stStr}</span>
           ${deltaHtml}
           ${isActive?'<span class="zone-live-tag">● ЗДЕСЬ</span>':''}
           ${doneTag}
-          <div class="zc-acts">${expBadge}${trigBadge}${closeBtn}<button class="zone-edit" onclick="editZone(${i})" title="Править">✎</button><button class="zone-del" onclick="delZone(${i})" title="Удалить">×</button></div>
+          <div class="zc-acts">${expBadge}${trigBadge}${closeBtn}<button class="zone-edit" onclick="event.stopPropagation();editZone(${i})" title="Править">✎</button><button class="zone-del" onclick="event.stopPropagation();delZone(${i})" title="Удалить">×</button></div>
+          <span class="zc-chev">▾</span>
         </div>
         <div class="zc-bot">
           <span class="zone-note">${protoHtml}${z.note?escapeHtml(z.note):'<span style="color:var(--text-faint)">план не записан</span>'}${z.stop?` · <span style="color:var(--danger);font-size:10px">SL ${z.stop}</span>`:''}</span>
           ${sizeHtml}
+          <div class="zc-actrow">${posBtn}</div>
         </div>
       </div>`;
     });
