@@ -201,6 +201,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   @keyframes pf-fl-up{0%{text-shadow:0 0 10px var(--green)}100%{text-shadow:none}}
   @keyframes pf-fl-down{0%{text-shadow:0 0 10px var(--danger)}100%{text-shadow:none}}
   @media(max-width:640px){.pos-float{right:10px;bottom:10px;width:210px}}
+  .zl-row{cursor:pointer}
+  .zl-stars{font-size:8px;color:var(--accent);letter-spacing:-1px;flex-shrink:0;white-space:nowrap}
+  .zl-stars.s1{opacity:.45}.zl-stars.s2{opacity:.75}.zl-stars.s3{opacity:1}
+  .zl-bar{width:24px;height:4px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden;flex-shrink:0}
+  .zl-bar-fill{display:block;height:100%;border-radius:2px;background:var(--accent)}
+  .zl-bar-fill.s1{background:var(--text-faint)}.zl-bar-fill.s2{background:var(--warn)}.zl-bar-fill.s3{background:var(--accent)}
+  .zl-nearest{box-shadow:inset 2px 0 0 var(--accent);background:rgba(255,122,24,.05)}
+  .zl-vb{font-size:9px;font-weight:800;flex-shrink:0}
+  .zl-vb.zv-worked{color:var(--green)}.zl-vb.zv-failed{color:var(--danger)}.zl-vb.zv-notreached{color:var(--text-faint)}
+  .zl-divider{display:flex;align-items:center;gap:6px;margin:4px 0}
+  .zl-div-line{flex:1;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.55}
+  .zl-div-px{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--accent);letter-spacing:.5px;white-space:nowrap}
+  .zl-flash{animation:zl-flash-a 1.1s ease}
+  @keyframes zl-flash-a{0%{box-shadow:0 0 0 2px var(--accent),0 0 18px rgba(255,122,24,.55)}100%{box-shadow:0 0 0 0 transparent}}
   .zr-item{flex:1;display:flex;flex-direction:column;gap:1px;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 10px}
   .zr-lbl{font-size:8.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--text-faint);font-family:'JetBrains Mono',monospace}
   .zr-val{font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;line-height:1.1}
@@ -1477,27 +1491,47 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const _act=zones.filter(z=>!z.closed&&!z.expired).length;
     document.getElementById('liveZoneCount').textContent=_trig?`${zones.length} зон · 🎯 ${_trig}/${_act} срабатываний`:zones.length+' зон';
     const act=lp?activeZoneIdx():-1;
-    el.innerHTML=zones.map((z,i)=>{
-      const k=KIND[z.kind];
+    let nearestIdx=-1,nd=Infinity;
+    if(lp)zones.forEach((z,i)=>{ if(z.closed||z.expired)return; const d=Math.abs(z.px-lp); if(d<nd){nd=d;nearestIdx=i;} });
+    const divHtml=`<div class="zl-divider"><span class="zl-div-line"></span><span class="zl-div-px">▸ ${lp} цена ◂</span><span class="zl-div-line"></span></div>`;
+    let html='',divPlaced=false;
+    zones.forEach((z,i)=>{
+      if(lp&&!divPlaced&&z.px<lp){ html+=divHtml; divPlaced=true; }
+      const k=KIND[z.kind];const st=z.stars||2;
       let rowCls='zl-row',distTxt='';
       if(lp){
-        const dist=(z.px-lp)/lp*100;
-        const distAbs=Math.abs(dist);
-        const sign=dist>0?'+':'';
+        const dist=(z.px-lp)/lp*100;const sign=dist>0?'+':'';
         distTxt=sign+dist.toFixed(2)+'%';
-        if(i===act){rowCls+=' zl-active';}
-        else if(dist>0){rowCls+=' zl-above';}
-        else{rowCls+=' zl-below';}
+        if(i===act)rowCls+=' zl-active';else if(dist>0)rowCls+=' zl-above';else rowCls+=' zl-below';
         if(z.closed)rowCls+=' done-row';
       }
-      const distCls=i===act?'zl-dist active':Math.abs(parseFloat(distTxt))<0.3?'zl-dist near':'zl-dist';
-      return `<div class="${rowCls}">
+      if(i===nearestIdx&&i!==act)rowCls+=' zl-nearest';
+      const distCls=i===act?'zl-dist active':(distTxt&&Math.abs(parseFloat(distTxt))<0.3?'zl-dist near':'zl-dist');
+      const stars=`<span class="zl-stars s${st}">${'★'.repeat(st)}</span>`;
+      const bar=`<span class="zl-bar"><span class="zl-bar-fill s${st}" style="width:${Math.round(st/3*100)}%"></span></span>`;
+      const vb=z.verdict?`<span class="zl-vb zv-${z.verdict}" title="отработка">${z.verdict==='worked'?'✓':z.verdict==='failed'?'✗':'·'}</span>`:'';
+      html+=`<div class="${rowCls}" onclick="_ladderGoZone(${z.px})" title="К зоне ${z.px}">
         <span class="zone-kind ${k.cls}" style="font-size:8px">${k.lbl}</span>
         <span class="zl-px">${z.px}</span>
-        <span class="zl-note">${z.note?escapeHtml(z.note.slice(0,40)):''}</span>
+        ${stars}${bar}
+        <span class="zl-note">${z.note?escapeHtml(z.note.slice(0,30)):''}</span>
+        ${vb}
         ${lp?`<span class="${distCls}">${distTxt}</span>`:''}
       </div>`;
-    }).join('');
+    });
+    if(lp&&!divPlaced)html+=divHtml;
+    el.innerHTML=html;
+  }
+  function _ladderGoZone(px){
+    if(typeof zones==='undefined')return;
+    const idx=zones.findIndex(z=>z.px===px); if(idx<0)return;
+    if(typeof _expandedZones!=='undefined')_expandedZones.add(idx);
+    if(typeof renderZones==='function')renderZones();
+    setTimeout(()=>{
+      let target=null;
+      document.querySelectorAll('#zonesList .zone-card').forEach(c=>{const pe=c.querySelector('.zone-px');if(pe&&pe.textContent.trim()===String(px))target=c;});
+      if(target){target.scrollIntoView({behavior:'smooth',block:'center'});target.classList.remove('zl-flash');void target.offsetWidth;target.classList.add('zl-flash');}
+    },60);
   }
 
   // ---- zones ----
