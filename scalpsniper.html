@@ -117,6 +117,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .ai-sit-head{font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
   .ai-sit-head b{color:var(--text)}
   .ai-sit-body{font-size:11px;line-height:1.5;color:var(--text-dim);white-space:pre-wrap}
+  .ai-mode{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin:2px 0 6px}
+  .ai-mode b{color:var(--accent)}
+  .ai-scen{margin-top:8px;display:flex;flex-direction:column;gap:5px}
+  .ai-scen-item{font-size:10px;line-height:1.45;color:var(--text-dim);padding:6px 9px;border-left:2px solid var(--accent-dim);background:rgba(255,255,255,.025);border-radius:0 5px 5px 0}
+  .ai-scen-item:first-child{border-left-color:var(--accent);color:var(--text)}
   .quick-status{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-top:6px;min-height:12px;letter-spacing:.2px}
   .zones-fresh{display:flex;align-items:center;gap:8px;margin:2px 0 8px;font-size:10px;font-family:'JetBrains Mono',monospace;letter-spacing:.2px}
   #zonesFreshTxt{flex:1}
@@ -167,6 +172,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .pos-side.long{color:var(--green);background:rgba(63,185,80,.12);border:1px solid rgba(63,185,80,.4)}
   .pos-side.short{color:var(--danger);background:rgba(240,69,74,.12);border:1px solid rgba(240,69,74,.4)}
   .pos-entry{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text)}
+  .pos-tkbadge{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.3px;color:var(--text-dim);background:rgba(255,255,255,.06);border:1px solid var(--line);padding:2px 6px;border-radius:3px}
+  .sess-tk{width:104px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;padding:3px 8px;background:rgba(255,122,24,.06);border:1px solid var(--accent-dim);border-radius:5px;color:var(--accent);vertical-align:middle;text-transform:uppercase}
+  .sess-tk:focus{border-color:var(--accent);outline:none}
   .pos-units{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint)}
   .pos-close{margin-left:auto;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--text-dim);font-family:inherit;font-size:11px;font-weight:700;padding:6px 12px;border-radius:5px;cursor:pointer;transition:all .15s}
   .pos-close:hover{color:var(--text);border-color:var(--text-faint)}
@@ -854,7 +862,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <!-- ===== LIVE PHASE ===== -->
   <div id="livePhase" class="hide">
     <div id="readinessBar" class="readiness-bar" style="display:none"></div>
-    <div class="section-title">Текущая цена <span class="tag" id="liveZoneCount"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Цена с Binance · обновляется каждые 5с · При входе в зону — звуковой сигнал + вспышка вкладки · Клик по полосе на графике → прокрутит к карточке зоны</span></span></div>
+    <div class="section-title">Текущая цена <input id="sessTicker" class="sess-tk" list="sessTkList" onchange="setSessionTicker(this.value)" title="Переключить инструмент в сессии"><datalist id="sessTkList"></datalist> <span class="tag" id="liveZoneCount"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Цена с Binance · обновляется каждые 5с · Переключай инструмент тут — зоны и позиции подхватятся · При входе в зону — звук + вспышка</span></span></div>
     <div class="live-bar">
       <span class="label" style="margin:0">Цена сейчас</span>
       <input id="livePrice" type="number" placeholder="103200" oninput="onLivePriceInput()" style="max-width:180px;font-size:16px;font-weight:700">
@@ -1095,7 +1103,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _loadZMap(){ try{const raw=JSON.parse(localStorage.getItem(KEY)||'{}'); if(Array.isArray(raw))return {'BTC/USDT':raw}; return (raw&&typeof raw==='object')?raw:{}; }catch(e){return {};} }
   function save(){ const m=_loadZMap(); m[_tkKey()]=zones; try{localStorage.setItem(KEY,JSON.stringify(m))}catch(e){} }
   function load(){ const m=_loadZMap(); const z=m[_tkKey()]; zones=Array.isArray(z)?z:[]; }
-  function reloadZonesForTicker(){ load(); editingIdx=-1; renderZones(); if(typeof renderLadder==='function')renderLadder(); if(typeof renderReadinessScore==='function')renderReadinessScore(); if(typeof renderPosition==='function')renderPosition(); if(typeof _chartRedraw==='function'&&phase==='live')_chartRedraw(); }
+  function reloadZonesForTicker(){ load(); editingIdx=-1; renderZones(); if(typeof renderLadder==='function')renderLadder(); if(typeof renderReadinessScore==='function')renderReadinessScore(); if(typeof renderPosition==='function')renderPosition(); if(typeof _syncSessTicker==='function')_syncSessTicker(); if(typeof _chartRedraw==='function'&&phase==='live')_chartRedraw(); }
   function saveJournal(){ try{localStorage.setItem(JKEY,JSON.stringify(journal))}catch(e){} }
   function loadJournal(){ try{const r=localStorage.getItem(JKEY); if(r)journal=JSON.parse(r)}catch(e){journal=[]} }
   // ---- export / import (перенос между устройствами) ----
@@ -1150,7 +1158,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const lpEl=document.getElementById('livePrice');
       const prepPx=document.getElementById('price').value;
       updateSessionCtx(); checkSessionReadiness();
-      startMiniChart();
+      startMiniChart(); if(typeof _syncSessTicker==='function')_syncSessTicker();
       if(lpEl && !lpEl.value && prepPx){ lpEl.value=prepPx; updateLive(); return; }
     } else { stopMiniChart(); }
     if(p==='journal') renderJournal();
@@ -1563,31 +1571,32 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function submitClose(){
     if(!pendingOutcome){document.getElementById('modalErr').style.display='block';return;}
-    if(closingPos&&pos){
-      const posTk=(pos.ticker||'BTC/USDT').toUpperCase();
-      const matchedP=posTk===_tkKey();
-      const lp=parseFloat(document.getElementById('livePrice').value)||pos.entry;
-      const dir=pos.side==='long'?1:-1;
-      const isTradeP=pendingOutcome!=='skip';
-      const jp=parseFloat(document.getElementById('jPnl').value);
-      const entry={
-        id:Date.now(), ts:new Date().toISOString(),
-        ticker:posTk,
-        tf:document.getElementById('tf').value, protocol:selProto,
-        zPx:pos.entry, zKind:pos.kind||'stand', zNote:(pos.side==='long'?'LONG':'SHORT')+' демо-позиция ('+posTk+')', zStop:pos.stop||null,
-        outcome:pendingOutcome, side:pos.side,
-        entryPx:isTradeP?(parseFloat(document.getElementById('jEntryPx').value)||pos.entry):null,
-        notional:isTradeP?(parseFloat(document.getElementById('jNotional').value)||pos.units*pos.entry):null,
-        pnl:isTradeP?(isFinite(jp)?jp:(matchedP?(lp-pos.entry)*pos.units*dir:null)):null,
-        plan:document.getElementById('jPlan').checked, note:document.getElementById('jNote').value.trim(),
-        grade:pendingGrade||null, stars:2, triggered:true
-      };
-      journal.unshift(entry); saveJournal();
-      if(entry.outcome==='loss'){consecutiveLosses++;if(consecutiveLosses>=2)setTimeout(showTiltGuard,400);}
-      else if(entry.outcome==='win'){consecutiveLosses=0;}
-      pos=null; savePos(); closingPos=false;
+    if(closingPosId){
+      const p=positions.find(x=>String(x.id)===String(closingPosId));
+      if(p){
+        const tk=(p.ticker||'BTC/USDT').toUpperCase();
+        const px=_pxFor(tk); const dir=p.side==='long'?1:-1;
+        const isTradeP=pendingOutcome!=='skip';
+        const jp=parseFloat(document.getElementById('jPnl').value);
+        const entry={
+          id:Date.now(), ts:new Date().toISOString(), ticker:tk,
+          tf:document.getElementById('tf').value, protocol:selProto,
+          zPx:p.entry, zKind:p.kind||'stand', zNote:(p.side==='long'?'LONG':'SHORT')+' демо-позиция ('+tk+')', zStop:p.stop||null,
+          outcome:pendingOutcome, side:p.side,
+          entryPx:isTradeP?(parseFloat(document.getElementById('jEntryPx').value)||p.entry):null,
+          notional:isTradeP?(parseFloat(document.getElementById('jNotional').value)||p.units*p.entry):null,
+          pnl:isTradeP?(isFinite(jp)?jp:(px!=null?(px-p.entry)*p.units*dir:null)):null,
+          plan:document.getElementById('jPlan').checked, note:document.getElementById('jNote').value.trim(),
+          grade:pendingGrade||null, stars:2, triggered:true
+        };
+        journal.unshift(entry); saveJournal();
+        if(entry.outcome==='loss'){consecutiveLosses++;if(consecutiveLosses>=2)setTimeout(showTiltGuard,400);}
+        else if(entry.outcome==='win'){consecutiveLosses=0;}
+        positions=positions.filter(x=>String(x.id)!==String(closingPosId)); savePos(); delete _prevPnlById[closingPosId];
+      }
+      closingPosId=null;
       updateSessionCtx();updateStreakBadge();renderPosition();
-      closeModal(); _chartRedraw();
+      closeModal(); if(typeof _chartRedraw==='function')_chartRedraw();
       return;
     }
     const z=zones[closeZoneIdx];
@@ -1618,42 +1627,53 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function closeModal(){
     document.getElementById('closeModal').classList.add('hide');
-    closeZoneIdx=-1; pendingOutcome=null; closingPos=false;
+    closeZoneIdx=-1; pendingOutcome=null; closingPosId=null;
   }
-  // ── demo position ──
-  let pos=null, closingPos=false, pendingPosSide=null, pos_kindHint='fade', _prevPnl=null;
-  function savePos(){ try{pos?localStorage.setItem('msa_pos_v1',JSON.stringify(pos)):localStorage.removeItem('msa_pos_v1');}catch(e){} }
-  function loadPos(){ try{pos=JSON.parse(localStorage.getItem('msa_pos_v1')||'null');}catch(e){pos=null;} }
+  // ── demo positions (мультипозиции, сегментированы по тикеру) ──
+  let positions=[], closingPosId=null, pendingPosSide=null, pos_kindHint='fade';
+  let _pxMap={}, _prevPnlById={};
+  function savePos(){ try{positions.length?localStorage.setItem('msa_pos_v2',JSON.stringify(positions)):localStorage.removeItem('msa_pos_v2');}catch(e){} }
+  function loadPos(){
+    try{
+      const v2=localStorage.getItem('msa_pos_v2');
+      if(v2){positions=JSON.parse(v2)||[];}
+      else{ const v1=JSON.parse(localStorage.getItem('msa_pos_v1')||'null'); positions=v1?[Object.assign({id:String(Date.now())},v1)]:[]; if(v1){savePos();localStorage.removeItem('msa_pos_v1');} }
+      if(!Array.isArray(positions))positions=[];
+    }catch(e){positions=[];}
+  }
   function _livePx(){ return parseFloat(document.getElementById('livePrice')?.value)||null; }
+  function _pxFor(tk){ tk=(tk||'BTC/USDT').toUpperCase(); if(tk===_tkKey()){const lp=_livePx(); if(lp)return lp;} return _pxMap[tk]||null; }
+  function _pnlOf(p,px){ const dir=p.side==='long'?1:-1; return px?(px-p.entry)*p.units*dir:null; }
+  async function _refreshPosPrices(){
+    const need=[...new Set(positions.map(p=>(p.ticker||'BTC/USDT').toUpperCase()))].filter(tk=>tk!==_tkKey());
+    if(!need.length)return;
+    await Promise.all(need.map(async tk=>{ try{const sym=tk.replace(/[\/\-_ ]/g,''); const r=await fetch('https://api.binance.com/api/v3/ticker/price?symbol='+sym,{cache:'no-store'}); if(r.ok){const p=parseFloat((await r.json()).price); if(isFinite(p))_pxMap[tk]=p;} }catch(e){} }));
+    renderPosition();
+  }
   function renderPosition(){
     const el=document.getElementById('posBlock'); if(!el)return;
-    const lp=_livePx();
-    if(!pos){ el.innerHTML = lp? '<button class="pos-open-btn" onclick="openPosForm()">▶ Открыть демо-позицию</button>' : ''; _prevPnl=null; return; }
-    const posTk=(pos.ticker||'BTC/USDT').toUpperCase();
-    if(posTk!==_tkKey()){
-      el.innerHTML=`<div class="pos-card pos-loss" style="border-style:dashed;opacity:.85"><div class="pos-top"><span class="pos-side ${pos.side}">${pos.side==='long'?'▲ LONG':'▼ SHORT'}</span><span class="pos-entry">вход ${pos.entry}</span><span class="pos-units">${posTk}</span><button class="pos-close" onclick="closePosition()">Закрыть</button></div><div class="pos-levels">Позиция открыта по <b>${posTk}</b> — переключи тикер на ${posTk}, чтобы видеть живой PnL (на текущем инструменте не считается).</div></div>`;
-      _prevPnl=null; return;
-    }
-    const dir=pos.side==='long'?1:-1;
-    const notional=pos.units*pos.entry;
-    const pnl=lp?(lp-pos.entry)*pos.units*dir:0;
-    const pnlPct=lp?((lp-pos.entry)/pos.entry*100*dir):0;
-    const slPct=(lp&&pos.stop)?((pos.stop-lp)/lp*100):null;
-    const tpPct=(lp&&pos.target)?((pos.target-lp)/lp*100):null;
-    const sl=pos.stop?`SL ${pos.stop}${slPct!=null?` (${slPct>=0?'+':''}${slPct.toFixed(2)}%)`:''}`:'SL —';
-    const tp=pos.target?`TP ${pos.target}${tpPct!=null?` (${tpPct>=0?'+':''}${tpPct.toFixed(2)}%)`:''}`:'TP —';
-    el.innerHTML=`<div class="pos-card ${pnl>=0?'pos-win':'pos-loss'}">
-      <div class="pos-top"><span class="pos-side ${pos.side}">${pos.side==='long'?'▲ LONG':'▼ SHORT'}</span><span class="pos-entry">вход ${pos.entry}</span><span class="pos-units">${pos.units.toFixed(4)} ед · ${Math.round(notional)} USDT</span><button class="pos-close" onclick="closePosition()">Закрыть</button></div>
-      <div class="pos-pnl ${pnl>=0?'pos-pnl-up':'pos-pnl-down'}">${pnl>=0?'+':''}${pnl.toFixed(2)} USDT <span class="pos-pnl-pct">(${pnlPct>=0?'+':''}${pnlPct.toFixed(2)}%)</span></div>
-      <div class="pos-levels">${sl} · ${tp}</div>
-    </div>`;
-    const pnlEl=el.querySelector('.pos-pnl');
-    if(pnlEl&&_prevPnl!=null&&Math.abs(pnl-_prevPnl)>0.001){
-      const up=pnl>_prevPnl;
-      pnlEl.classList.add(up?'flash-up':'flash-down');
-      pnlEl.insertAdjacentHTML('beforeend',`<span class="pos-tick ${up?'up':'down'}">${up?'▲':'▼'}</span>`);
-    }
-    _prevPnl=pnl;
+    let html='';
+    positions.forEach(p=>{
+      const tk=(p.ticker||'BTC/USDT').toUpperCase(), cur=tk===_tkKey(), px=_pxFor(tk);
+      const pnl=_pnlOf(p,px); const dir=p.side==='long'?1:-1;
+      const pnlPct=(px&&p.entry)?((px-p.entry)/p.entry*100*dir):null;
+      const notional=p.units*p.entry;
+      const cls=pnl==null?'':(pnl>=0?'pos-win':'pos-loss');
+      const tkBadge=cur?'':`<span class="pos-tkbadge">${tk}</span>`;
+      const pnlBlock = pnl!=null
+        ? `<div class="pos-pnl ${pnl>=0?'pos-pnl-up':'pos-pnl-down'}" data-id="${p.id}">${pnl>=0?'+':''}${pnl.toFixed(2)} USDT <span class="pos-pnl-pct">(${pnlPct>=0?'+':''}${pnlPct.toFixed(2)}%)</span></div>`
+        : `<div class="pos-levels">${cur?'жду цену':'цена '+tk+' загружается…'} · PnL н/д</div>`;
+      html+=`<div class="pos-card ${cls}" style="margin-bottom:8px${cur?'':';opacity:.92'}">
+        <div class="pos-top"><span class="pos-side ${p.side}">${p.side==='long'?'▲ LONG':'▼ SHORT'}</span>${tkBadge}<span class="pos-entry">вход ${p.entry}</span><span class="pos-units">${p.units.toFixed(4)} ед · ${Math.round(notional)} USDT</span><button class="pos-close" onclick="closePosition('${p.id}')">Закрыть</button></div>
+        ${pnlBlock}
+        <div class="pos-levels">${p.stop?'SL '+p.stop:'SL —'} · ${p.target?'TP '+p.target:'TP —'}${cur?'':' · '+tk}</div>
+      </div>`;
+    });
+    html+=`<button class="pos-open-btn" onclick="openPosForm()">▶ ${positions.length?'Добавить позицию':'Открыть демо-позицию'}</button>`;
+    el.innerHTML=html;
+    positions.forEach(p=>{ const px=_pxFor((p.ticker||'BTC/USDT').toUpperCase()); const pnl=_pnlOf(p,px); if(pnl==null)return; const prev=_prevPnlById[p.id];
+      if(prev!=null&&Math.abs(pnl-prev)>0.001){ const pe=el.querySelector('.pos-pnl[data-id="'+p.id+'"]'); if(pe){const up=pnl>prev; pe.classList.add(up?'flash-up':'flash-down'); pe.insertAdjacentHTML('beforeend',`<span class="pos-tick ${up?'up':'down'}">${up?'▲':'▼'}</span>`);} }
+      _prevPnlById[p.id]=pnl; });
   }
   function setPosSide(s){ pendingPosSide=s; document.getElementById('psLong').classList.toggle('sel',s==='long'); document.getElementById('psShort').classList.toggle('sel',s==='short'); document.getElementById('posErr').style.display='none'; }
   function openPosForm(){
@@ -1683,21 +1703,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const dep=parseFloat(document.getElementById('deposit').value), risk=parseFloat(document.getElementById('depRisk').value);
       units=(dep&&risk&&stop)?((dep*risk/100)/Math.abs(entry-stop)):0;
     }
-    pos={side:pendingPosSide, entry:+entry, units:+units, stop:stop, target:target, kind:pos_kindHint||'fade', ticker:_tkKey(), openedAt:Date.now()}; _posAlertFlags={};
-    savePos(); closePosModal(); renderPosition(); _chartRedraw();
+    positions.push({id:String(Date.now()), side:pendingPosSide, entry:+entry, units:+units, stop:stop, target:target, kind:pos_kindHint||'fade', ticker:_tkKey(), openedAt:Date.now()}); _posAlertFlags={};
+    savePos(); closePosModal(); renderPosition(); if(typeof _chartRedraw==='function')_chartRedraw();
   }
-  function closePosition(){
-    if(!pos)return;
-    const posTk=(pos.ticker||'BTC/USDT').toUpperCase();
-    const matched=posTk===_tkKey();
-    if(!matched && !confirm('Позиция по '+posTk+'. Для корректного PnL переключи тикер на '+posTk+'. Закрыть сейчас без расчёта PnL?'))return;
-    const dir=pos.side==='long'?1:-1;
-    const lp=matched?(_livePx()||pos.entry):pos.entry;
-    const pnl=matched?((lp-pos.entry)*pos.units*dir):null;
-    closingPos=true; closeZoneIdx=-1; pendingOutcome=null; pendingGrade=null;
-    document.getElementById('modalZoneLabel').textContent=`${pos.side==='long'?'LONG':'SHORT'} ${posTk} · вход ${pos.entry}`+(pnl!=null?` · ${pnl>=0?'+':''}${pnl.toFixed(2)} USDT`:' · PnL н/д (другой тикер)');
-    document.getElementById('jEntryPx').value=pos.entry;
-    document.getElementById('jNotional').value=Math.round(pos.units*pos.entry);
+  function closePosition(id){
+    const p=positions.find(x=>String(x.id)===String(id)); if(!p)return;
+    const tk=(p.ticker||'BTC/USDT').toUpperCase(), matched=tk===_tkKey(), px=_pxFor(tk);
+    if(!matched && px==null && !confirm('Позиция по '+tk+'. Цена ещё не подгрузилась. Закрыть без расчёта PnL?'))return;
+    const pnl=_pnlOf(p,px);
+    closingPosId=String(id); closeZoneIdx=-1; pendingOutcome=null; pendingGrade=null;
+    document.getElementById('modalZoneLabel').textContent=`${p.side==='long'?'LONG':'SHORT'} ${tk} · вход ${p.entry}`+(pnl!=null?` · ${pnl>=0?'+':''}${pnl.toFixed(2)} USDT`:' · PnL н/д');
+    document.getElementById('jEntryPx').value=p.entry;
+    document.getElementById('jNotional').value=Math.round(p.units*p.entry);
     document.getElementById('jPnl').value=pnl!=null?pnl.toFixed(2):'';
     document.getElementById('jPlan').checked=true;
     document.getElementById('jNote').value='';
@@ -1706,7 +1723,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     document.getElementById('jTradeFields').classList.remove('hide');
     document.getElementById('modalErr').style.display='none';
     document.getElementById('closeModal').classList.remove('hide');
-    setOutcome(pnl>=0?'win':'loss');
+    setOutcome(pnl!=null&&pnl>=0?'win':'loss');
   }
   function delJournalEntry(id){
     journal=journal.filter(e=>e.id!==id);
@@ -2348,10 +2365,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _aiPriorityProto=pm?normProto(pm[1]):null;
     if(!box)return;
     if(!txt){box.style.display='none';box.innerHTML='';return;}
-    const sm=txt.match(/Ситуация:\s*([\s\S]+)/i);
+    const modeM=txt.match(/Режим:\s*([^\n]+)/i);
+    const sitM=txt.match(/Ситуация:\s*([\s\S]*?)(?=\nСценарии:|$)/i);
+    const scenM=txt.match(/Сценарии:\s*([\s\S]+)/i);
     const prioLbl=_aiPriorityProto?(PROTO_LABELS[_aiPriorityProto]||_aiPriorityProto):(pm?pm[1].trim():'');
-    const sit=(sm?sm[1]:txt).trim();
-    box.innerHTML=`<div class="ai-sit-head">📊 Анализ ситуации${prioLbl?' · приоритет <b>'+prioLbl+'</b>':''}</div><div class="ai-sit-body">${escapeHtml(sit)}</div>`;
+    const sit=(sitM?sitM[1]:(scenM||modeM?'':txt)).trim();
+    let scenHtml='';
+    if(scenM){
+      const items=scenM[1].split(/\n/).map(s=>s.replace(/^[•\-\*\d\)\.\s]+/,'').trim()).filter(Boolean);
+      if(items.length)scenHtml='<div class="ai-scen">'+items.map(it=>'<div class="ai-scen-item">'+escapeHtml(it)+'</div>').join('')+'</div>';
+    }
+    const modeHtml=modeM?'<div class="ai-mode">режим-подсказка: <b>'+escapeHtml(modeM[1].trim())+'</b></div>':'';
+    box.innerHTML='<div class="ai-sit-head">📊 Анализ ситуации'+(prioLbl?' · приоритет <b>'+prioLbl+'</b>':'')+'</div>'+modeHtml+(sit?'<div class="ai-sit-body">'+escapeHtml(sit)+'</div>':'')+scenHtml;
     box.style.display='block';
   }
   async function analyzeAllShots(imgs,apiKey){
@@ -2371,7 +2396,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         return [{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},{type:'text',text:`[${_FL[field]||field}]`}];
       }));
       const flat=imgContent.flat();
-      flat.push({type:'text',text:`Контекст: ${ticker} · ${tf} · плечо ×${lev} · текущая цена ~${price}\n\nНа основе наблюдений со всех скринов выдели 3-6 КАНДИДАТНЫХ структурных уровня для скальп-сессии (НЕ директивы — трейдер проверяет и подтверждает). Тон телеграфный, рубленый, без воды. Ответ СТРОГО в двух блоках:\n\nЗОНЫ:\nцена | тип | план | стоп | протокол\n...\n\nАНАЛИЗ:\nПриоритет: <один протокол: VALENTINI/SQUEEZE/SHOTGUN/ELLIOTT_CLUSTER>\nСитуация: <2-3 рубленых предложения: где цена относительно стен/кластеров, какой сценарий вероятнее, что ждать. Без команд входа/стопа/тейка.>\n\nПравила:\n- тип: fade/break/watch/stand.\n- «план» — КОНКРЕТНОЕ наблюдение-триггер с привязкой к структуре и числу: что именно ждать в зоне (напр. «съедание ask-стенки 78M лентой» / «отбой от bid-стенки 69M + liq-кластер»). 4-7 слов, без воды, без команды входа.\n- протокол зоны — подбери по структуре.\n- стоп опционален: нет — пустое поле, но сохрани все разделители «|».\n- Приоритет — самый уместный протокол под текущую ситуацию.\n- Никакого текста вне этих двух блоков.`});
+      flat.push({type:'text',text:`Контекст: ${ticker} · ${tf} · плечо ×${lev} · текущая цена ~${price}\n\nНа основе наблюдений со всех скринов выдели 3-6 КАНДИДАТНЫХ структурных уровня для скальп-сессии (НЕ директивы — трейдер проверяет и подтверждает). Тон телеграфный, рубленый, без воды. Ответ СТРОГО в двух блоках:\n\nЗОНЫ:\nцена | тип | план | стоп | протокол\n...\n\nАНАЛИЗ:\nПриоритет: <один протокол: VALENTINI/SQUEEZE/SHOTGUN/ELLIOTT_CLUSTER>\nРежим: <направленный фильтр (только лонг/только шорт) | двусторонний флэт | вне рынка> (подсказка трейдеру, НЕ блокировка)\nСитуация: <2-3 рубленых предложения: где цена относительно стен/кластеров, что ждать. Без команд входа/стопа/тейка.>\nСценарии:\n• Базовый (высокая/средняя/низкая): <модель> — слом при <уровень>, цели <зоны>\n• Альтернативный (выс/ср/низ): <модель> — слом при <уровень>, цели <зоны>\n• Шум (если уместно): <боковик/распил>\n\nПравила:\n- тип: fade/break/watch/stand.\n- «план» — КОНКРЕТНОЕ наблюдение-триггер с привязкой к структуре и числу: что именно ждать в зоне (напр. «съедание ask-стенки 78M лентой» / «отбой от bid-стенки 69M + liq-кластер»). 4-7 слов, без воды, без команды входа.\n- протокол зоны — подбери по структуре.\n- стоп опционален: нет — пустое поле, но сохрани все разделители «|».\n- Приоритет — самый уместный протокол под текущую ситуацию.\n- Вероятность сценариев — КАЧЕСТВЕННАЯ (высокая/средняя/низкая), НЕ проценты. Слом и цели сценариев — наблюдения, не директивы. Режим — подсказка трейдеру, не аппаратная блокировка.\n- Никакого текста вне этих двух блоков.`});
       const resp=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
@@ -2516,8 +2541,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const top=Math.min(toY(c.o),toY(c.c)),ht=Math.max(1,Math.abs(toY(c.o)-toY(c.c)));
       ctx.fillStyle=col;ctx.fillRect(x-bw/2,top,bw,ht);
     });
-    // demo position lines (вход / стоп / тейк) — только на тикере позиции
-    if(typeof pos!=='undefined'&&pos&&(pos.ticker||'BTC/USDT').toUpperCase()===_tkKey()){
+    // demo position lines (вход / стоп / тейк) — для всех позиций текущего тикера
+    if(typeof positions!=='undefined'&&positions.length){
       const posLine=(price,col,lbl)=>{
         price=+price; if(!isFinite(price)||price<minP||price>maxP)return;
         const y=toY(price);
@@ -2526,9 +2551,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         ctx.fillStyle=col;ctx.font='bold 8px JetBrains Mono,monospace';
         ctx.fillText(lbl,4,y-2);
       };
-      posLine(pos.entry,'rgba(255,176,32,.95)',(pos.side==='long'?'LONG ':'SHORT ')+pos.entry);
-      if(pos.stop)posLine(pos.stop,'rgba(239,68,68,.9)','SL '+pos.stop);
-      if(pos.target)posLine(pos.target,'rgba(63,185,80,.9)','TP '+pos.target);
+      positions.filter(p=>(p.ticker||'BTC/USDT').toUpperCase()===_tkKey()).forEach(p=>{
+        posLine(p.entry,'rgba(255,176,32,.95)',(p.side==='long'?'LONG ':'SHORT ')+p.entry);
+        if(p.stop)posLine(p.stop,'rgba(239,68,68,.9)','SL '+p.stop);
+        if(p.target)posLine(p.target,'rgba(63,185,80,.9)','TP '+p.target);
+      });
     }
     if(currentPrice&&isFinite(currentPrice)){
       const py=toY(currentPrice);
@@ -2663,12 +2690,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // ── умные алерты по позиции (близко к стопу/тейку) ──
   let _posAlertFlags={};
   function _posAlerts(){
-    if(!pos)return; if((pos.ticker||'BTC/USDT').toUpperCase()!==_tkKey())return;
-    const lp=_livePx(); if(!lp)return;
-    if(pos.stop){const dist=Math.abs(pos.entry-pos.stop)||1, adv=(pos.side==='long')?(pos.entry-lp):(lp-pos.entry), f=adv/dist;
-      if(f>=0.8&&!_posAlertFlags.stop){_posAlertFlags.stop=true; if(typeof _zoneBeep==='function')_zoneBeep(); if(typeof _zoneTitleFlash==='function')_zoneTitleFlash();} if(f<0.6)_posAlertFlags.stop=false;}
-    if(pos.target){const dist=Math.abs(pos.target-pos.entry)||1, prog=(pos.side==='long')?(lp-pos.entry):(pos.entry-lp), f=prog/dist;
-      if(f>=0.8&&!_posAlertFlags.tgt){_posAlertFlags.tgt=true; if(typeof _zoneBeep==='function')_zoneBeep(); if(typeof _zoneTitleFlash==='function')_zoneTitleFlash();} if(f<0.6)_posAlertFlags.tgt=false;}
+    const lp=_livePx(); if(!lp||typeof positions==='undefined')return;
+    positions.filter(p=>(p.ticker||'BTC/USDT').toUpperCase()===_tkKey()).forEach(p=>{
+      if(p.stop){const dist=Math.abs(p.entry-p.stop)||1, adv=(p.side==='long')?(p.entry-lp):(lp-p.entry), f=adv/dist, k=p.id+'_s';
+        if(f>=0.8&&!_posAlertFlags[k]){_posAlertFlags[k]=true; if(typeof _zoneBeep==='function')_zoneBeep(); if(typeof _zoneTitleFlash==='function')_zoneTitleFlash();} if(f<0.6)_posAlertFlags[k]=false;}
+      if(p.target){const dist=Math.abs(p.target-p.entry)||1, prog=(p.side==='long')?(lp-p.entry):(p.entry-lp), f=prog/dist, k=p.id+'_t';
+        if(f>=0.8&&!_posAlertFlags[k]){_posAlertFlags[k]=true; if(typeof _zoneBeep==='function')_zoneBeep(); if(typeof _zoneTitleFlash==='function')_zoneTitleFlash();} if(f<0.6)_posAlertFlags[k]=false;}
+    });
   }
   // открыть источник для слота наблюдения под текущий тикер (один клик — на нужную страницу для скрина)
   function openSource(kind){
@@ -2728,6 +2756,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         _applyPx(px);
       }catch{_setLiveInd('○ нет','var(--text-faint)');}
     }
+    _refreshPosPrices();
   }
   function triggerPriceFetch(){
     _manualLive=false; const _rb=document.getElementById('liveResumeBtn'); if(_rb)_rb.style.display='none';
@@ -2749,6 +2778,22 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(phase==='live')_chartRefresh();
     _markActiveChip();
     _closeTickerDD();
+  }
+  // переключатель инструмента прямо в Сессии
+  function setSessionTicker(v){
+    v=(v||'').trim(); if(!v)return;
+    if(!/\//.test(v))v=v.toUpperCase()+'/USDT';
+    document.getElementById('ticker').value=v;
+    saveSettings(); reloadZonesForTicker(); triggerPriceFetch();
+    if(typeof _chartRefresh==='function')_chartRefresh();
+    if(typeof _markActiveChip==='function')_markActiveChip();
+    renderPosition(); _syncSessTicker();
+  }
+  function _syncSessTicker(){
+    const sel=document.getElementById('sessTicker'); if(!sel)return;
+    sel.value=document.getElementById('ticker').value||'BTC/USDT';
+    const dl=document.getElementById('sessTkList');
+    if(dl&&!dl.children.length)dl.innerHTML=(_DEFAULT_TICKERS||['BTC','ETH','SOL']).map(s=>'<option value="'+s+'/USDT">').join('');
   }
   function _markActiveChip(){
     const cur=(document.getElementById('ticker').value||'').replace(/[\/\-_ ]/g,'').replace(/USDT$/i,'').toUpperCase();
