@@ -155,6 +155,26 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .sync-code-wrap input{flex:1;font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:1px;color:var(--accent);background:var(--accent-soft);border-color:var(--accent-dim)}
   .sync-copy{flex-shrink:0}
   .sync-status{font-size:11px;font-family:'JetBrains Mono',monospace;min-height:13px;letter-spacing:.2px}
+  /* ── отработка зон (вердикт чтения + дисциплина) ── */
+  .zone-read{display:flex;gap:8px;margin:0 0 8px}
+  .zr-item{flex:1;display:flex;flex-direction:column;gap:1px;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 10px}
+  .zr-lbl{font-size:8.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--text-faint);font-family:'JetBrains Mono',monospace}
+  .zr-val{font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;line-height:1.1}
+  .zr-val.green{color:var(--green)}.zr-val.warn{color:var(--warn)}.zr-val.danger{color:var(--danger)}.zr-val.dim{color:var(--text-faint)}
+  .zr-sub{font-size:9px;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
+  .zv-badge{font-family:'Archivo',sans-serif;font-weight:800;font-size:12px;width:17px;height:17px;display:inline-flex;align-items:center;justify-content:center;border-radius:4px;flex-shrink:0}
+  .zv-badge.zv-worked{color:var(--green);background:rgba(63,185,80,.14)}
+  .zv-badge.zv-failed{color:var(--danger);background:rgba(240,69,74,.14)}
+  .zv-badge.zv-notreached{color:var(--text-faint);background:rgba(255,255,255,.05)}
+  .zc-verdict,.zc-adh{display:flex;align-items:center;gap:6px;flex-basis:100%;margin-top:7px;flex-wrap:wrap}
+  .zc-adh{margin-top:5px}
+  .zc-vlabel{font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-faint);font-family:'JetBrains Mono',monospace;flex-shrink:0}
+  .zv-btn,.za-btn{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;padding:4px 9px;border-radius:5px;cursor:pointer;background:var(--panel-2);border:1px solid var(--line);color:var(--text-dim);transition:all .12s}
+  .zv-btn:hover,.za-btn:hover{color:var(--text);border-color:var(--text-faint)}
+  .zv-btn.zv-worked.sel{background:rgba(63,185,80,.16);border-color:var(--green);color:var(--green)}
+  .zv-btn.zv-failed.sel{background:rgba(240,69,74,.16);border-color:var(--danger);color:var(--danger)}
+  .zv-btn.zv-nr.sel{background:rgba(255,255,255,.06);border-color:var(--text-faint);color:var(--text)}
+  .za-btn.sel{background:var(--accent-soft);border-color:var(--accent-dim);color:var(--accent)}
   /* ── zone group separator ── */
   .zones-group-lbl{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-faint);padding:4px 2px 2px;border-top:1px solid var(--line-soft);margin-top:4px;margin-bottom:2px;font-family:'JetBrains Mono',monospace}
   .zones-group-lbl:first-child{border-top:none;margin-top:0}
@@ -994,6 +1014,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <!-- ===== ZONES (shared, always visible) ===== -->
   <div class="section-title" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация зоны по времени · Клик по цене внутри карточки зоны копирует её в буфер</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
   <div class="zones-fresh" id="zonesFresh"><span id="zonesFreshTxt"></span><button class="zf-refresh" onclick="quickAnalyze()" title="Пересобрать зоны из стакана Binance (без скринов)">↻ Обновить</button></div>
+  <div class="zone-read" id="zoneRead" style="display:none"></div>
   <!-- input tools: collapsible (вставка + ручное добавление + депозит) -->
   <div class="zone-tools" id="zoneTools">
   <button class="zone-tools-toggle" type="button" onclick="toggleZoneTools()">
@@ -1145,10 +1166,45 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function reloadZonesForTicker(){ load(); editingIdx=-1; renderZones(); if(typeof renderLadder==='function')renderLadder(); if(typeof renderReadinessScore==='function')renderReadinessScore(); if(typeof renderPosition==='function')renderPosition(); if(typeof _syncSessTicker==='function')_syncSessTicker(); if(typeof _chartRedraw==='function'&&phase==='live')_chartRedraw(); }
   function saveJournal(){ try{localStorage.setItem(JKEY,JSON.stringify(journal))}catch(e){} }
   function loadJournal(){ try{const r=localStorage.getItem(JKEY); if(r)journal=JSON.parse(r)}catch(e){journal=[]} }
+  // ---- отработка зон: вердикт чтения + дисциплина (накопительный лог) ----
+  const RKEY='msa_zonereview_v1';
+  let zoneReviews=[];
+  function loadReviews(){ try{const r=localStorage.getItem(RKEY); zoneReviews=r?JSON.parse(r):[];}catch(e){zoneReviews=[];} if(!Array.isArray(zoneReviews))zoneReviews=[]; }
+  function saveReviews(){ try{localStorage.setItem(RKEY,JSON.stringify(zoneReviews))}catch(e){} }
+  function _revKey(tk,px,kind){ return tk+'|'+px+'|'+kind+'|'+new Date().toISOString().slice(0,10); }
+  function _upsertReview(z){
+    const tk=_tkKey(), key=_revKey(tk,z.px,z.kind);
+    let r=zoneReviews.find(x=>x.key===key);
+    if(!z.verdict){ if(r)zoneReviews=zoneReviews.filter(x=>x!==r); saveReviews(); return; }
+    if(!r){ r={key,id:Date.now(),ts:new Date().toISOString(),ticker:tk,zPx:z.px,zKind:z.kind,protocol:z.proto||null,stars:z.stars||2}; zoneReviews.unshift(r); }
+    r.verdict=z.verdict; r.adhered=(z.verdict==='notreached')?null:(z.adhered||null);
+    saveReviews();
+  }
+  function setZoneVerdict(i,v){
+    const z=zones[i]; if(!z)return;
+    z.verdict=(z.verdict===v)?null:v;
+    if(z.verdict==='notreached'||!z.verdict)z.adhered=null;
+    save(); _upsertReview(z); renderZones();
+  }
+  function setZoneAdh(i,a){
+    const z=zones[i]; if(!z||!z.verdict||z.verdict==='notreached')return;
+    z.adhered=(z.adhered===a)?null:a;
+    save(); _upsertReview(z); renderZones();
+  }
+  function zoneReadStats(){
+    const w=zoneReviews.filter(r=>r.verdict==='worked').length;
+    const f=zoneReviews.filter(r=>r.verdict==='failed').length;
+    const nr=zoneReviews.filter(r=>r.verdict==='notreached').length;
+    const reached=w+f;
+    const reachedRecs=zoneReviews.filter(r=>r.verdict==='worked'||r.verdict==='failed');
+    const plan=reachedRecs.filter(r=>r.adhered==='plan').length;
+    const adhRated=reachedRecs.filter(r=>r.adhered).length;
+    return {w,f,nr,reached,acc:reached?Math.round(w/reached*100):null,plan,adhRated,disc:adhRated?Math.round(plan/adhRated*100):null,total:zoneReviews.length};
+  }
   // ---- export / import (перенос между устройствами) ----
-  const IO_KEYS=['msa_zones_v2','msa_journal_v1','msa_pos_v2','msa_dep','msa_settings_v1','msa_rules_v1','msa_zones_fresh_v1','msa_apikey_v1'];
+  const IO_KEYS=['msa_zones_v2','msa_journal_v1','msa_pos_v2','msa_zonereview_v1','msa_dep','msa_settings_v1','msa_rules_v1','msa_zones_fresh_v1','msa_apikey_v1'];
   // sync keys = всё кроме API-ключа (он НЕ уезжает на сторонний сервис)
-  const SYNC_KEYS=['msa_zones_v2','msa_journal_v1','msa_pos_v2','msa_dep','msa_settings_v1','msa_rules_v1','msa_zones_fresh_v1'];
+  const SYNC_KEYS=['msa_zones_v2','msa_journal_v1','msa_pos_v2','msa_zonereview_v1','msa_dep','msa_settings_v1','msa_rules_v1','msa_zones_fresh_v1'];
   function exportData(){
     try{
       const dump={app:'ScalpSniper',type:'backup',version:1,exportedAt:new Date().toISOString(),data:{}};
@@ -1528,6 +1584,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       }
       const isExp=_expandedZones.has(i)||isActive;
       const posBtn=(!isDone&&!isExpired)?`<button class="zc-topos" onclick="event.stopPropagation();openPosFromZone(${i})" title="Открыть демо-позицию из этой зоны">→ В позицию</button>`:'';
+      const VGLY={worked:'✓',failed:'✗',notreached:'·'};
+      const vBadge=z.verdict?`<span class="zv-badge zv-${z.verdict}" title="Отработка зоны">${VGLY[z.verdict]}</span>`:'';
+      const vSel=v=>z.verdict===v?' sel':'';
+      const aSel=a=>z.adhered===a?' sel':'';
+      const verdictRow=`<div class="zc-verdict"><span class="zc-vlabel">Отработка:</span>`+
+        `<button class="zv-btn zv-worked${vSel('worked')}" onclick="event.stopPropagation();setZoneVerdict(${i},'worked')">✓ сработала</button>`+
+        `<button class="zv-btn zv-failed${vSel('failed')}" onclick="event.stopPropagation();setZoneVerdict(${i},'failed')">✗ не сработала</button>`+
+        `<button class="zv-btn zv-nr${vSel('notreached')}" onclick="event.stopPropagation();setZoneVerdict(${i},'notreached')">· не дошла</button></div>`;
+      const adhRow=(z.verdict&&z.verdict!=='notreached')?`<div class="zc-adh"><span class="zc-vlabel">Я:</span>`+
+        `<button class="za-btn${aSel('plan')}" onclick="event.stopPropagation();setZoneAdh(${i},'plan')">по плану</button>`+
+        `<button class="za-btn${aSel('deviated')}" onclick="event.stopPropagation();setZoneAdh(${i},'deviated')">отклонился</button>`+
+        `<button class="za-btn${aSel('missed')}" onclick="event.stopPropagation();setZoneAdh(${i},'missed')">не вошёл</button></div>`:'';
       html+=grpLabel+`<div class="zone-card ${isActive?'live':''} ${isExp?'expanded':''} ${i===editingIdx?'editing':''} ${isDone?'done':''} ${isExpired?'expired':''} ${dimCls}" style="border-left-color:${isDone||isExpired?'var(--line)':k.col}">
         <div class="zc-top" onclick="toggleZoneExpand(${i})">
           <span class="zone-num">${i+1}</span>
@@ -1535,6 +1603,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           <span class="zone-kind ${k.cls}">${k.lbl}</span>
           <span class="${stCls}">${stStr}</span>
           ${deltaHtml}
+          ${vBadge}
           ${isActive?'<span class="zone-live-tag">● ЗДЕСЬ</span>':''}
           ${doneTag}
           <div class="zc-acts">${expBadge}${trigBadge}${closeBtn}<button class="zone-edit" onclick="event.stopPropagation();editZone(${i})" title="Править">✎</button><button class="zone-del" onclick="event.stopPropagation();delZone(${i})" title="Удалить">×</button></div>
@@ -1544,11 +1613,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           <span class="zone-note">${protoHtml}${z.note?escapeHtml(z.note):'<span style="color:var(--text-faint)">план не записан</span>'}${z.stop?` · <span style="color:var(--danger);font-size:10px">SL ${z.stop}</span>`:''}</span>
           ${sizeHtml}
           <div class="zc-actrow">${posBtn}</div>
+          ${verdictRow}
+          ${adhRow}
         </div>
       </div>`;
     });
     wrap.innerHTML=html;
     renderZonesFresh();
+    renderZoneRead();
   }
   function onDepositChange(){
     const r=document.getElementById('depRisk').value;
@@ -2828,6 +2900,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(lp){const pxs=zones.filter(z=>!z.closed&&!z.expired).map(z=>+z.px); if(pxs.length){const lo=Math.min(...pxs),hi=Math.max(...pxs),pad=(hi-lo)*0.1||lo*0.005; if(lp>hi+pad||lp<lo-pad){parts.push('⚠ цена вне диапазона зон'); cls='zones-fresh stale';}}}
     wrap.className=cls; txt.textContent=parts.join(' · ');
   }
+  function renderZoneRead(){
+    const el=document.getElementById('zoneRead'); if(!el)return;
+    const s=zoneReadStats();
+    if(!s.total){ el.style.display='none'; return; }
+    el.style.display='flex';
+    const accCls=s.acc==null?'dim':s.acc>=60?'green':s.acc>=40?'warn':'danger';
+    const discCls=s.disc==null?'dim':s.disc>=60?'green':s.disc>=40?'warn':'danger';
+    el.innerHTML=
+      `<div class="zr-item" title="Из дошедших зон — сколько отработали по чтению (сработала / сработала+не сработала). Накопительно.">`+
+        `<span class="zr-lbl">точность чтения</span><span class="zr-val ${accCls}">${s.acc==null?'—':s.acc+'%'}</span>`+
+        `<span class="zr-sub">${s.w}✓ · ${s.f}✗ · ${s.nr} не дошли</span></div>`+
+      `<div class="zr-item" title="Дисциплина на дошедших зонах: вход по плану / (план+отклонился+не вошёл).">`+
+        `<span class="zr-lbl">дисциплина</span><span class="zr-val ${discCls}">${s.disc==null?'—':s.disc+'%'}</span>`+
+        `<span class="zr-sub">${s.plan} по плану / ${s.adhRated}</span></div>`;
+  }
   // ── умные алерты по позиции (близко к стопу/тейку) ──
   let _posAlertFlags={};
   function _posAlerts(){
@@ -3017,7 +3104,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _onScroll();
   })();
 
-  load(); loadJournal(); loadSettings(); loadRules(); loadPos(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers(); renderPosition();
+  load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers(); renderPosition();
   try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
   renderZones();recalc();
 </script>
