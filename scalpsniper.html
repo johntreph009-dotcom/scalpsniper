@@ -1167,10 +1167,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function saveJournal(){ try{localStorage.setItem(JKEY,JSON.stringify(journal))}catch(e){} }
   function loadJournal(){ try{const r=localStorage.getItem(JKEY); if(r)journal=JSON.parse(r)}catch(e){journal=[]} }
   // ---- отработка зон: вердикт чтения + дисциплина (накопительный лог) ----
-  const RKEY='msa_zonereview_v1';
+  const ZRKEY='msa_zonereview_v1';
   let zoneReviews=[];
-  function loadReviews(){ try{const r=localStorage.getItem(RKEY); zoneReviews=r?JSON.parse(r):[];}catch(e){zoneReviews=[];} if(!Array.isArray(zoneReviews))zoneReviews=[]; }
-  function saveReviews(){ try{localStorage.setItem(RKEY,JSON.stringify(zoneReviews))}catch(e){} }
+  function loadReviews(){ try{const r=localStorage.getItem(ZRKEY); zoneReviews=r?JSON.parse(r):[];}catch(e){zoneReviews=[];} if(!Array.isArray(zoneReviews))zoneReviews=[]; }
+  function saveReviews(){ try{localStorage.setItem(ZRKEY,JSON.stringify(zoneReviews))}catch(e){} }
   function _revKey(tk,px,kind){ return tk+'|'+px+'|'+kind+'|'+new Date().toISOString().slice(0,10); }
   function _upsertReview(z){
     const tk=_tkKey(), key=_revKey(tk,z.px,z.kind);
