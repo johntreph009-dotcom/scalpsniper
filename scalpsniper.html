@@ -970,15 +970,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div class="section-title" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация зоны по времени · Клик по цене внутри карточки зоны копирует её в буфер</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
   <div class="zones-fresh" id="zonesFresh"><span id="zonesFreshTxt"></span><button class="zf-refresh" onclick="quickAnalyze()" title="Пересобрать зоны из стакана Binance (без скринов)">↻ Обновить</button></div>
   <!-- input tools: collapsible (вставка + ручное добавление + депозит) -->
-  <div class="zone-tools open" id="zoneTools">
+  <div class="zone-tools" id="zoneTools">
   <button class="zone-tools-toggle" type="button" onclick="toggleZoneTools()">
-    <span>Ввод зон<span class="ztt-hint">вставка · ручное · депозит</span></span>
+    <span>Ввод зон<span class="ztt-hint">глубокий разбор · ручное · депозит</span></span>
     <span class="tog-ico">▾</span>
   </button>
   <div class="zt-body">
   <!-- paste zones from analysis -->
   <div class="paste-box" id="pasteBox">
-    <span class="mini-label" style="margin:0 0 8px">Вставить зоны из разбора <span class="tag" style="text-transform:none">один блок вместо ручного ввода</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Формат: цена | тип | план | стоп | протокол · Один ряд = одна зона · стоп и протокол опциональны · «Сформировать запрос» → AI выдаёт готовый блок с протоколами, вставляй сюда целиком</span></span></span>
+    <span class="mini-label" style="margin:0 0 8px">Вставить глубокий разбор по скринам <span class="tag" style="text-transform:none">когда нужен анализ скриншотов</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Быстрые зоны из стакана — кнопка «↻ Обновить» выше. Этот блок — для глубокого разбора по скринам: «Запрос по скринам» → AI выдаёт готовый блок зон → вставляй сюда целиком. Формат: цена | тип | план | стоп | протокол · один ряд = одна зона · стоп и протокол опциональны</span></span></span>
     <textarea id="pasteIn" placeholder="103200 | fade | отбой от POC, абсорбция в ленте | 103050 | VALENTINI&#10;103480 | break | пробой стенки 2.1М | 103560 | SQUEEZE&#10;102900 | watch | реакция на нижний кластер |  | SHOTGUN"></textarea>
     <div class="paste-row">
       <button class="paste-btn" onclick="parseZones()">Разобрать в зоны ↓</button>
