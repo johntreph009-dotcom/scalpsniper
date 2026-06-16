@@ -175,6 +175,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .zv-btn.zv-failed.sel{background:rgba(240,69,74,.16);border-color:var(--danger);color:var(--danger)}
   .zv-btn.zv-nr.sel{background:rgba(255,255,255,.06);border-color:var(--text-faint);color:var(--text)}
   .za-btn.sel{background:var(--accent-soft);border-color:var(--accent-dim);color:var(--accent)}
+  .zc-auto{font-size:8px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--info);background:rgba(88,166,255,.12);border:1px solid rgba(88,166,255,.3);padding:1px 5px;border-radius:3px;font-family:'JetBrains Mono',monospace}
+  .zv-badge.zv-auto{outline:1px dashed rgba(88,166,255,.5);outline-offset:1px}
+  .zc-touch{font-size:9.5px;font-family:'JetBrains Mono',monospace;color:var(--text-faint);letter-spacing:.2px}
   /* ── zone group separator ── */
   .zones-group-lbl{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-faint);padding:4px 2px 2px;border-top:1px solid var(--line-soft);margin-top:4px;margin-bottom:2px;font-family:'JetBrains Mono',monospace}
   .zones-group-lbl:first-child{border-top:none;margin-top:0}
@@ -1184,6 +1187,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const z=zones[i]; if(!z)return;
     z.verdict=(z.verdict===v)?null:v;
     if(z.verdict==='notreached'||!z.verdict)z.adhered=null;
+    if(z.verdict)z.autoVerdict=false;        // ручной перебивает авто (sticky)
+    else delete z.autoVerdict;               // снял вердикт — снова можно авто
     save(); _upsertReview(z); renderZones();
   }
   function setZoneAdh(i,a){
@@ -1200,6 +1205,67 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const plan=reachedRecs.filter(r=>r.adhered==='plan').length;
     const adhRated=reachedRecs.filter(r=>r.adhered).length;
     return {w,f,nr,reached,acc:reached?Math.round(w/reached*100):null,plan,adhRated,disc:adhRated?Math.round(plan/adhRated*100):null,total:zoneReviews.length};
+  }
+  // ---- авто-оценка отработки зон по свечам Binance (любое касание + реакция + проскальзывание) ----
+  let _autoEvalBusy=false, _lastAutoEval=0;
+  async function autoEvalZones(opts){
+    opts=opts||{};
+    if(_autoEvalBusy||!zones.length)return;
+    if(!opts.force && Date.now()-_lastAutoEval<8000)return; // не чаще раза в 8с
+    _autoEvalBusy=true;
+    try{
+      const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):null;
+      if(!sym){_autoEvalBusy=false;return;}
+      let kl;
+      try{ const r=await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval=1m&limit=480',{cache:'no-store'}); if(!r.ok)throw 0; kl=await r.json(); }
+      catch(e){ _autoEvalBusy=false; return; }
+      if(!Array.isArray(kl)||!kl.length){_autoEvalBusy=false;return;}
+      const cndl=kl.map(k=>({t:+k[0],h:+k[2],l:+k[3],c:+k[4]}));
+      const firstT=cndl[0].t;
+      let changed=false;
+      zones.forEach(z=>{
+        if(z.autoVerdict===false)return;           // ручной вердикт — не трогаем
+        const px=+z.px; if(!isFinite(px)||px<=0)return;
+        const reach=px*0.0008, react=px*0.003;     // касание ~0.08%, реакция ~0.3%
+        const startT=(z.createdAt&&z.createdAt>firstT)?z.createdAt:firstT;
+        const win=cndl.filter(c=>c.t>=startT);
+        if(!win.length)return;
+        let touches=0, firstIdx=-1, minDist=Infinity;
+        win.forEach((c,i)=>{
+          const hit=(c.l<=px+reach && c.h>=px-reach);
+          if(hit){touches++; if(firstIdx<0)firstIdx=i;}
+          const d=(c.l<=px&&c.h>=px)?0:Math.min(Math.abs(c.h-px),Math.abs(c.l-px));
+          if(d<minDist)minDist=d;
+        });
+        z.touchCount=touches;
+        let verdict=null;
+        if(touches===0){
+          verdict=(z.kind==='watch'||z.kind==='stand')?null:'notreached';
+          z.nearPct=isFinite(minDist)?+(minDist/px*100).toFixed(3):null;
+          z.slipPct=null; z.firstTouchAt=null;
+        }else{
+          z.firstTouchAt=win[firstIdx].t; z.nearPct=0;
+          const prev=firstIdx>0?win[firstIdx-1]:win[firstIdx];
+          const fromAbove=prev.c>=px;              // сторона подхода
+          const post=win.slice(firstIdx);
+          const brokeThrough=post.some(c=> fromAbove ? (c.c<=px-react) : (c.c>=px+react) );
+          const rejected   =post.some(c=> fromAbove ? (c.c>=px+react) : (c.c<=px-react) );
+          const overs=post.map(c=>Math.max(0, fromAbove?(px-c.l):(c.h-px)));
+          z.slipPct=overs.length?+(Math.max(...overs)/px*100).toFixed(3):0;
+          if(z.kind==='fade'){ verdict=brokeThrough?'failed':(rejected?'worked':null); }
+          else if(z.kind==='break'){ verdict=brokeThrough?'worked':(rejected?'failed':null); }
+          else verdict=null;                        // watch/stand — только касание
+          if(!z.triggeredAt){z.triggeredAt=z.firstTouchAt; changed=true;}
+        }
+        if(verdict && z.autoVerdict!==false){
+          if(z.verdict!==verdict){z.verdict=verdict; changed=true;}
+          z.autoVerdict=true; _upsertReview(z);
+        }
+      });
+      _lastAutoEval=Date.now();
+      if(changed){ save(); renderZones(); }
+      else renderZoneRead();
+    }finally{ _autoEvalBusy=false; }
   }
   // ---- export / import (перенос между устройствами) ----
   const IO_KEYS=['msa_zones_v2','msa_journal_v1','msa_pos_v2','msa_zonereview_v1','msa_dep','msa_settings_v1','msa_rules_v1','msa_zones_fresh_v1','msa_apikey_v1'];
@@ -1390,7 +1456,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const dup=findDup(px);
       if(dup&&!confirm('Зона '+dup.px+' уже есть (отличие '+(Math.abs(dup.px-px)/px*100).toFixed(3)+'%). Добавить всё равно?'))return;
     }
-    const z={px,kind:document.getElementById('z_kind').value,note:document.getElementById('z_note').value.trim(),stop:parseFloat(document.getElementById('z_stop').value)||null,stars:zStars,exp:document.getElementById('z_exp')?.value||null};
+    const z={px,kind:document.getElementById('z_kind').value,note:document.getElementById('z_note').value.trim(),stop:parseFloat(document.getElementById('z_stop').value)||null,stars:zStars,exp:document.getElementById('z_exp')?.value||null,createdAt:Date.now()};
     if(editingIdx>=0){z.proto=zones[editingIdx].proto||null;zones[editingIdx]=z;editingIdx=-1;}
     else{zones.push(z);}
     zones.sort((a,b)=>b.px-a.px);
@@ -1442,7 +1508,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       let stop=null;
       if(parts[3]){const s=cleanNum(parts[3]);if(s&&isFinite(s))stop=s;}
       const proto=normProto(parts[4]);
-      zones.push({px,kind,note,stop,proto});
+      zones.push({px,kind,note,stop,proto,createdAt:Date.now()});
       added++;
     });
     zones.sort((a,b)=>b.px-a.px);
@@ -1585,10 +1651,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const isExp=_expandedZones.has(i)||isActive;
       const posBtn=(!isDone&&!isExpired)?`<button class="zc-topos" onclick="event.stopPropagation();openPosFromZone(${i})" title="Открыть демо-позицию из этой зоны">→ В позицию</button>`:'';
       const VGLY={worked:'✓',failed:'✗',notreached:'·'};
-      const vBadge=z.verdict?`<span class="zv-badge zv-${z.verdict}" title="Отработка зоны">${VGLY[z.verdict]}</span>`:'';
+      const vBadge=z.verdict?`<span class="zv-badge zv-${z.verdict}${z.autoVerdict?' zv-auto':''}" title="Отработка зоны${z.autoVerdict?' — авто по свечам':' — вручную'}">${VGLY[z.verdict]}</span>`:'';
       const vSel=v=>z.verdict===v?' sel':'';
       const aSel=a=>z.adhered===a?' sel':'';
-      const verdictRow=`<div class="zc-verdict"><span class="zc-vlabel">Отработка:</span>`+
+      const tParts=[];
+      if(z.touchCount)tParts.push('касаний '+z.touchCount);
+      if(z.slipPct!=null&&z.slipPct>0)tParts.push('прокол '+z.slipPct+'%');
+      if((!z.touchCount)&&z.nearPct!=null)tParts.push('ближе '+z.nearPct+'% — не дошла');
+      const touchInfo=tParts.length?`<span class="zc-touch">${tParts.join(' · ')}</span>`:'';
+      const autoTag=z.autoVerdict?`<span class="zc-auto" title="Авто-вердикт по свечам Binance. Нажми кнопку — зафиксируешь вручную.">авто</span>`:'';
+      const verdictRow=`<div class="zc-verdict"><span class="zc-vlabel">Отработка:</span>${autoTag}`+
         `<button class="zv-btn zv-worked${vSel('worked')}" onclick="event.stopPropagation();setZoneVerdict(${i},'worked')">✓ сработала</button>`+
         `<button class="zv-btn zv-failed${vSel('failed')}" onclick="event.stopPropagation();setZoneVerdict(${i},'failed')">✗ не сработала</button>`+
         `<button class="zv-btn zv-nr${vSel('notreached')}" onclick="event.stopPropagation();setZoneVerdict(${i},'notreached')">· не дошла</button></div>`;
@@ -1612,7 +1684,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <div class="zc-bot">
           <span class="zone-note">${protoHtml}${z.note?escapeHtml(z.note):'<span style="color:var(--text-faint)">план не записан</span>'}${z.stop?` · <span style="color:var(--danger);font-size:10px">SL ${z.stop}</span>`:''}</span>
           ${sizeHtml}
-          <div class="zc-actrow">${posBtn}</div>
+          <div class="zc-actrow">${posBtn}${touchInfo}</div>
           ${verdictRow}
           ${adhRow}
         </div>
@@ -2872,15 +2944,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       asks.forEach(o=>{ let kind,proto,note;
         if(momUp===true&&o===nearestAsk){kind='break';proto='SQUEEZE';note='пробой ask-стены '+fmtM(o.n)+' (импульс↑)';}
         else{kind='fade';proto='VALENTINI';note='отбой от ask-стены '+fmtM(o.n);}
-        z.push({px:Math.round(o.p),kind,note,stop:Math.round(o.p*1.003),proto,stars:stars(o)}); });
+        z.push({px:Math.round(o.p),kind,note,stop:Math.round(o.p*1.003),proto,stars:stars(o),createdAt:Date.now()}); });
       bids.forEach(o=>{ let kind,proto,note;
         if(momUp===false&&o===nearestBid){kind='break';proto='SQUEEZE';note='пробой bid-стены '+fmtM(o.n)+' (импульс↓)';}
         else{kind='fade';proto='VALENTINI';note='отбой от bid-стены '+fmtM(o.n);}
-        z.push({px:Math.round(o.p),kind,note,stop:Math.round(o.p*0.997),proto,stars:stars(o)}); });
+        z.push({px:Math.round(o.p),kind,note,stop:Math.round(o.p*0.997),proto,stars:stars(o),createdAt:Date.now()}); });
       z.sort((a,c)=>c.px-a.px);
       const topZ=z.slice().sort((a,c)=>(c.stars-a.stars)||(Math.abs(a.px-price)-Math.abs(c.px-price)))[0];
       _lastQuickPrice=price;
-      zones=z; save(); if(topZ){if(typeof protoCheckState!=='undefined')protoCheckState[topZ.proto]=null; if(typeof selectProto==='function')selectProto(topZ.proto);} renderZones(); if(typeof renderLadder==='function')renderLadder(); recalc(); renderReadinessScore();
+      zones=z; save(); if(topZ){if(typeof protoCheckState!=='undefined')protoCheckState[topZ.proto]=null; if(typeof selectProto==='function')selectProto(topZ.proto);} renderZones(); if(typeof renderLadder==='function')renderLadder(); recalc(); renderReadinessScore(); if(typeof autoEvalZones==='function')autoEvalZones({force:true});
       _setZonesFresh(Date.now());
       const mix=[...new Set(z.map(x=>x.proto))].join('/');
       if(st)st.textContent='✓ '+raw+': '+z.length+' зон ('+mix+') · цена '+price+(momUp===true?' · импульс↑':momUp===false?' · импульс↓':'')+' · POC '+(poc??'н/д')+(funding!=null?' · фанд '+funding+'%':'')+' · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
@@ -2985,6 +3057,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       }catch{_setLiveInd('○ нет','var(--text-faint)');}
     }
     _refreshPosPrices();
+    if(typeof autoEvalZones==='function')autoEvalZones();
   }
   function triggerPriceFetch(){
     _manualLive=false; const _rb=document.getElementById('liveResumeBtn'); if(_rb)_rb.style.display='none';
@@ -3107,6 +3180,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers(); renderPosition();
   try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
   renderZones();recalc();
+  if(typeof autoEvalZones==='function')setTimeout(()=>autoEvalZones({force:true}),1500);
 </script>
 </body>
 </html>
