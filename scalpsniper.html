@@ -156,7 +156,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .sync-copy{flex-shrink:0}
   .sync-status{font-size:11px;font-family:'JetBrains Mono',monospace;min-height:13px;letter-spacing:.2px}
   /* ── отработка зон (вердикт чтения + дисциплина) ── */
-  .zone-read{display:flex;gap:8px;margin:0 0 8px}
+  .zone-read{display:flex;flex-direction:column;gap:6px;margin:0 0 8px}
+  .zr-top{display:flex;gap:8px}
+  .zr-break{display:flex;flex-wrap:wrap;gap:5px}
+  .zr-chip{display:inline-flex;align-items:center;gap:5px;background:var(--panel);border:1px solid var(--line-soft);border-radius:5px;padding:2px 7px}
+  .zr-chip-k{font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
+  .zr-chip-v{font-family:'Archivo',sans-serif;font-weight:800;font-size:11px}
+  .zr-chip-v.green{color:var(--green)}.zr-chip-v.warn{color:var(--warn)}.zr-chip-v.danger{color:var(--danger)}
+  .zr-reset{align-self:flex-start;background:none;border:none;color:var(--text-faint);font-size:9.5px;font-family:'JetBrains Mono',monospace;cursor:pointer;padding:1px 2px;text-decoration:underline;letter-spacing:.2px}
+  .zr-reset:hover{color:var(--danger)}
   .zr-item{flex:1;display:flex;flex-direction:column;gap:1px;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 10px}
   .zr-lbl{font-size:8.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--text-faint);font-family:'JetBrains Mono',monospace}
   .zr-val{font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;line-height:1.1}
@@ -2972,6 +2980,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(lp){const pxs=zones.filter(z=>!z.closed&&!z.expired).map(z=>+z.px); if(pxs.length){const lo=Math.min(...pxs),hi=Math.max(...pxs),pad=(hi-lo)*0.1||lo*0.005; if(lp>hi+pad||lp<lo-pad){parts.push('⚠ цена вне диапазона зон'); cls='zones-fresh stale';}}}
     wrap.className=cls; txt.textContent=parts.join(' · ');
   }
+  function zoneReadBreakdown(field){
+    const g={};
+    zoneReviews.filter(r=>r.verdict==='worked'||r.verdict==='failed').forEach(r=>{
+      const key=field==='kind'?(r.zKind||'—'):(r.protocol||'—');
+      if(!g[key])g[key]={w:0,n:0};
+      g[key].n++; if(r.verdict==='worked')g[key].w++;
+    });
+    return Object.keys(g).map(k=>({key:k,w:g[k].w,n:g[k].n,acc:Math.round(g[k].w/g[k].n*100)})).sort((a,b)=>b.acc-a.acc);
+  }
+  function resetZoneReads(){
+    if(!confirm('Сбросить накопленную статистику точности чтения и снять авто-вердикты с текущих зон? Журнал сделок не затрагивается.'))return;
+    zoneReviews=[]; saveReviews();
+    zones.forEach(z=>{ if(z.autoVerdict){delete z.verdict;delete z.adhered;} delete z.autoVerdict; delete z.touchCount; delete z.slipPct; delete z.nearPct; });
+    save(); renderZones();
+  }
   function renderZoneRead(){
     const el=document.getElementById('zoneRead'); if(!el)return;
     const s=zoneReadStats();
@@ -2979,13 +3002,26 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     el.style.display='flex';
     const accCls=s.acc==null?'dim':s.acc>=60?'green':s.acc>=40?'warn':'danger';
     const discCls=s.disc==null?'dim':s.disc>=60?'green':s.disc>=40?'warn':'danger';
+    const chipCls=a=>a>=60?'green':a>=40?'warn':'danger';
+    const kindBd=zoneReadBreakdown('kind').filter(x=>x.n>=1);
+    let bdHtml='';
+    if(kindBd.length){
+      bdHtml='<div class="zr-break">'+kindBd.map(x=>{
+        const kd=KIND[x.key]; const lbl=kd?kd.lbl:x.key;
+        return `<span class="zr-chip" title="${lbl}: ${x.w} из ${x.n} сработали"><span class="zr-chip-k">${lbl}</span><span class="zr-chip-v ${chipCls(x.acc)}">${x.acc}%</span></span>`;
+      }).join('')+'</div>';
+    }
     el.innerHTML=
+      `<div class="zr-top">`+
       `<div class="zr-item" title="Из дошедших зон — сколько отработали по чтению (сработала / сработала+не сработала). Накопительно.">`+
         `<span class="zr-lbl">точность чтения</span><span class="zr-val ${accCls}">${s.acc==null?'—':s.acc+'%'}</span>`+
         `<span class="zr-sub">${s.w}✓ · ${s.f}✗ · ${s.nr} не дошли</span></div>`+
       `<div class="zr-item" title="Дисциплина на дошедших зонах: вход по плану / (план+отклонился+не вошёл).">`+
         `<span class="zr-lbl">дисциплина</span><span class="zr-val ${discCls}">${s.disc==null?'—':s.disc+'%'}</span>`+
-        `<span class="zr-sub">${s.plan} по плану / ${s.adhRated}</span></div>`;
+        `<span class="zr-sub">${s.plan} по плану / ${s.adhRated}</span></div>`+
+      `</div>`+
+      bdHtml+
+      `<button class="zr-reset" onclick="resetZoneReads()" title="Обнулить статистику точности чтения">сбросить статистику чтения</button>`;
   }
   // ── умные алерты по позиции (близко к стопу/тейку) ──
   let _posAlertFlags={};
