@@ -317,7 +317,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .pos-side.short{color:var(--danger);background:rgba(240,69,74,.12);border:1px solid rgba(240,69,74,.4)}
   .pos-entry{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text)}
   .pos-tkbadge{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.3px;color:var(--text-dim);background:rgba(255,255,255,.06);border:1px solid var(--line);padding:2px 6px;border-radius:3px}
-  .sess-tk{width:104px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;padding:3px 8px;background:rgba(255,122,24,.06);border:1px solid var(--accent-dim);border-radius:5px;color:var(--accent);vertical-align:middle;text-transform:uppercase}
+  .sess-tkwrap{position:relative;display:inline-block;vertical-align:middle}
+  .sess-tk{width:128px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;padding:3px 26px 3px 8px;background:rgba(255,122,24,.06);border:1px solid var(--accent-dim);border-radius:5px;color:var(--accent);vertical-align:middle;text-transform:uppercase}
   .sess-tk:focus{border-color:var(--accent);outline:none}
   .pos-units{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint)}
   .pos-close{margin-left:auto;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--text-dim);font-family:inherit;font-size:11px;font-weight:700;padding:6px 12px;border-radius:5px;cursor:pointer;transition:all .15s}
@@ -416,17 +417,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .ticker-dd-toggle{position:absolute;right:1px;top:1px;bottom:1px;width:28px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;border-left:1px solid var(--line);color:var(--text-dim);cursor:pointer;font-size:12px;border-radius:0 3px 3px 0;transition:color .12s,transform .12s}
   .ticker-dd-toggle:hover{color:var(--accent)}
   .ticker-input-wrap.open .ticker-dd-toggle{color:var(--accent);transform:rotate(180deg)}
-  .ticker-dd{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;max-height:240px;overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,.5);display:none;padding:3px}
+  .ticker-dd{position:absolute;left:0;top:calc(100% + 4px);z-index:40;min-width:230px;max-width:min(92vw,360px);max-height:300px;overflow-y:auto;overflow-x:hidden;background:var(--panel);border:1px solid var(--line);border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,.5);display:none;padding:3px}
   .ticker-input-wrap.open .ticker-dd{display:block}
-  .ticker-dd-item{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.3px;padding:5px 9px;border-radius:3px;color:var(--text-dim);cursor:pointer;line-height:1.4;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .ticker-dd-item{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.3px;padding:6px 9px;border-radius:3px;color:var(--text-dim);cursor:pointer;line-height:1.35;display:block}
   .ticker-dd-item:hover{background:var(--accent-soft);color:var(--accent)}
   .ticker-dd-item.active{color:var(--accent);background:var(--accent-soft)}
-  .ticker-dd-item .tdd-sym{flex:0 0 auto}
-  .tdd-meta{display:flex;align-items:center;gap:7px;font-size:10px;opacity:.92}
+  .ticker-dd-item .tdd-sym{display:block;font-weight:600;white-space:nowrap}
+  .tdd-meta{display:flex;align-items:center;gap:11px;font-size:10px;margin-top:3px;opacity:.95;white-space:nowrap}
   .tdd-rng{color:var(--accent);font-weight:600}
   .tdd-chg.up{color:var(--green)} .tdd-chg.down{color:var(--danger)}
   .tdd-vol{color:var(--text-faint)}
-  .ticker-dd-head{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.4px;color:var(--text-faint);padding:4px 9px 5px;border-bottom:1px solid var(--line);margin-bottom:2px;text-transform:uppercase}
+  .ticker-dd-head{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.4px;color:var(--text-faint);padding:4px 7px 5px;border-bottom:1px solid var(--line);margin-bottom:2px;text-transform:uppercase;display:flex;align-items:center;justify-content:space-between;gap:6px;position:sticky;top:0;background:var(--panel);z-index:1}
+  .tdd-sorts{display:inline-flex;gap:3px}
+  .tdd-sort{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.3px;padding:2px 5px;border:1px solid var(--line);border-radius:3px;background:transparent;color:var(--text-faint);cursor:pointer;text-transform:uppercase;line-height:1}
+  .tdd-sort.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  .tdd-sort:hover{color:var(--accent)}
   .ticker-dd-empty{font-size:10px;color:var(--text-faint);padding:6px 9px}
   /* ── hint tooltips ── */
   .hint-wrap{position:relative;display:inline-flex;align-items:center;vertical-align:middle;margin-left:6px}
@@ -1019,7 +1024,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <!-- ===== LIVE PHASE ===== -->
   <div id="livePhase" class="hide">
     <div id="readinessBar" class="readiness-bar" style="display:none"></div>
-    <div class="section-title">Текущая цена <input id="sessTicker" class="sess-tk" list="sessTkList" onchange="setSessionTicker(this.value)" title="Переключить инструмент в сессии"><datalist id="sessTkList"></datalist> <span class="tag" id="liveZoneCount"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Цена с Binance · обновляется каждые 5с · Переключай инструмент тут — зоны и позиции подхватятся · При входе в зону — звук + вспышка</span></span></div>
+    <div class="section-title">Текущая цена <span class="ticker-input-wrap sess-tkwrap" id="sessTkWrap"><input id="sessTicker" class="sess-tk" autocomplete="off" placeholder="BTC/USDT" onfocus="_openSessDD()" oninput="_filterSessDD()" onchange="setSessionTicker(this.value)" title="Переключить инструмент в сессии"><button type="button" class="ticker-dd-toggle" id="sessDDToggle" onclick="_toggleSessDD(event)" aria-label="Список тикеров">▾</button><div class="ticker-dd" id="sessTickerDD"></div></span> <span class="tag" id="liveZoneCount"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Цена с Binance · обновляется каждые 5с · Переключай инструмент тут — зоны и позиции подхватятся · При входе в зону — звук + вспышка</span></span></div>
     <div class="live-bar">
       <span class="label" style="margin:0">Цена сейчас</span>
       <input id="livePrice" type="number" placeholder="103200" oninput="onLivePriceInput()" style="max-width:180px;font-size:16px;font-weight:700">
@@ -3632,28 +3637,43 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function _syncSessTicker(){
     const sel=document.getElementById('sessTicker'); if(!sel)return;
-    sel.value=document.getElementById('ticker').value||'BTC/USDT';
-    const dl=document.getElementById('sessTkList');
-    if(dl&&!dl.children.length)dl.innerHTML=(_DEFAULT_TICKERS||['BTC','ETH','SOL']).map(s=>'<option value="'+s+'/USDT">').join('');
+    if(document.activeElement!==sel)sel.value=document.getElementById('ticker').value||'BTC/USDT';
   }
+  // ── сессионный дропдаун тикера (тот же кастомный список, что в Подготовке) ──
+  function _renderSessDD(useFilter){
+    const dd=document.getElementById('sessTickerDD'); if(!dd)return;
+    const base=(_tickerSyms&&_tickerSyms.length)?_tickerSyms:(_DEFAULT_TICKERS||[]);
+    let syms=base;
+    if(useFilter){ const q=(document.getElementById('sessTicker').value||'').replace(/[\/\-_ ]/g,'').replace(/USDT$/i,'').toUpperCase(); syms=q?base.filter(s=>s.includes(q)):base; }
+    dd.innerHTML=_tdInner(syms,'_pickSess'); _markActiveChip();
+  }
+  function _openSessDD(){ const w=document.getElementById('sessTkWrap'); if(w){_renderSessDD(false);w.classList.add('open');} }
+  function _closeSessDD(){ const w=document.getElementById('sessTkWrap'); if(w)w.classList.remove('open'); }
+  function _toggleSessDD(e){ e.preventDefault();e.stopPropagation(); const w=document.getElementById('sessTkWrap'); if(!w)return; if(w.classList.contains('open'))_closeSessDD(); else {_openSessDD();document.getElementById('sessTicker').focus();} }
+  function _filterSessDD(){ _renderSessDD(true); _openSessDD(); }
+  function _pickSess(s){ const el=document.getElementById('sessTicker'); el.value=s+'/USDT'; setSessionTicker(s+'/USDT'); _closeSessDD(); }
+  document.addEventListener('click',e=>{ if(!e.target.closest('#sessTkWrap'))_closeSessDD(); });
   function _markActiveChip(){
-    const cur=(document.getElementById('ticker').value||'').replace(/[\/\-_ ]/g,'').replace(/USDT$/i,'').toUpperCase();
-    document.querySelectorAll('.ticker-dd-item').forEach(c=>c.classList.toggle('active',c.dataset.sym===cur));
+    const norm=v=>(v||'').replace(/[\/\-_ ]/g,'').replace(/USDT$/i,'').toUpperCase();
+    const a=norm(document.getElementById('ticker')?.value), b=norm(document.getElementById('sessTicker')?.value);
+    document.querySelectorAll('.ticker-dd-item').forEach(c=>c.classList.toggle('active',c.dataset.sym===a||c.dataset.sym===b));
   }
-  let _tkMeta={};
-  function _renderTickerDD(syms){
-    const dd=document.getElementById('tickerDD');
-    if(!dd)return;
+  let _tkMeta={}, _tkSort='rng';
+  function _tdMetaHtml(m){ return m?`<span class="tdd-meta"><span class="tdd-rng" title="дневной диапазон high-low">${m.rng.toFixed(1)}%</span><span class="tdd-chg ${m.chg>=0?'up':'down'}" title="изменение за 24ч">${m.chg>=0?'+':''}${m.chg.toFixed(1)}%</span><span class="tdd-vol" title="оборот за 24ч">$${(m.qv/1e6).toFixed(0)}M</span></span>`:''; }
+  function _tdSort(syms){ const k=_tkSort; return [...syms].sort((a,b)=>{const A=_tkMeta[a],B=_tkMeta[b]; if(!A||!B)return 0; if(k==='vol')return B.qv-A.qv; if(k==='chg')return Math.abs(B.chg)-Math.abs(A.chg); return B.rng-A.rng;}); }
+  function _tdInner(syms,pick){
     const hasMeta=Object.keys(_tkMeta).length>0;
-    const head=hasMeta?'<div class="ticker-dd-head">топ дня · по волатильности</div>':'';
-    dd.innerHTML=syms.length
-      ? head+syms.map(s=>{
-          const m=_tkMeta[s];
-          const meta=m?`<span class="tdd-meta"><span class="tdd-rng" title="дневной диапазон high-low">${m.rng.toFixed(1)}%</span><span class="tdd-chg ${m.chg>=0?'up':'down'}" title="изменение за 24ч">${m.chg>=0?'+':''}${m.chg.toFixed(1)}%</span><span class="tdd-vol" title="оборот за 24ч">$${(m.qv/1e6).toFixed(0)}M</span></span>`:'';
-          return `<div class="ticker-dd-item" data-sym="${s}" onmousedown="event.preventDefault();_setTicker('${s}')"><span class="tdd-sym">${s}/USDT</span>${meta}</div>`;
-        }).join('')
-      : '<div class="ticker-dd-empty">нет совпадений</div>';
-    _markActiveChip();
+    let head='';
+    if(hasMeta){ const chip=(k,l)=>`<button type="button" class="tdd-sort${_tkSort===k?' on':''}" onmousedown="event.preventDefault();event.stopPropagation();_setTkSort('${k}')">${l}</button>`;
+      head=`<div class="ticker-dd-head"><span>топ дня</span><span class="tdd-sorts">${chip('rng','волат')}${chip('vol','объём')}${chip('chg','Δ%')}</span></div>`; }
+    if(!syms.length)return head+'<div class="ticker-dd-empty">нет совпадений</div>';
+    const list=hasMeta?_tdSort(syms):syms;
+    return head+list.map(s=>`<div class="ticker-dd-item" data-sym="${s}" onmousedown="event.preventDefault();${pick}('${s}')"><span class="tdd-sym">${s}/USDT</span>${_tdMetaHtml(_tkMeta[s])}</div>`).join('');
+  }
+  function _renderTickerDD(syms){ const dd=document.getElementById('tickerDD'); if(!dd)return; dd.innerHTML=_tdInner(syms.length?syms:[],'_setTicker'); _markActiveChip(); }
+  function _setTkSort(k){ _tkSort=k;
+    const pw=document.getElementById('tickerWrap'); if(pw&&pw.classList.contains('open'))_renderTickerDD(_tickerSyms);
+    const sw=document.getElementById('sessTkWrap'); if(sw&&sw.classList.contains('open'))_renderSessDD(false);
   }
   function _populateTickerList(syms){ _tickerSyms=syms; _renderTickerDD(syms); }
   function _filterTickerDD(){
