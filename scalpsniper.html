@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5.0">
 <meta name="theme-color" content="#0a0b0d">
+<link rel="manifest" href="manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ScalpSniper">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <title>ScalpSniper — Precision Trading Terminal</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Rajdhani:wght@600;700&family=Archivo:wght@600;800&display=swap');
@@ -401,6 +408,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .mc-lyr{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.3px;padding:2px 9px;background:transparent;border:1px solid var(--line);border-radius:10px;color:var(--text-faint);cursor:pointer;transition:color .12s,border-color .12s,background .12s}
   .mc-lyr:hover{color:var(--accent);border-color:var(--accent-dim)}
   .mc-lyr.active{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+  .pwa-install{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.3px;padding:5px 11px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:7px;color:var(--accent);cursor:pointer;white-space:nowrap;transition:background .12s}
+  .pwa-install:hover{background:var(--accent);color:#16100a}
   .mc-status{font-size:9px;letter-spacing:.3px;color:var(--text-dim);margin-left:auto}
   .ticker-input-wrap{position:relative}
   #ticker{padding-right:30px}
@@ -409,9 +418,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .ticker-input-wrap.open .ticker-dd-toggle{color:var(--accent);transform:rotate(180deg)}
   .ticker-dd{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;max-height:240px;overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,.5);display:none;padding:3px}
   .ticker-input-wrap.open .ticker-dd{display:block}
-  .ticker-dd-item{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.3px;padding:5px 9px;border-radius:3px;color:var(--text-dim);cursor:pointer;line-height:1.4}
+  .ticker-dd-item{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.3px;padding:5px 9px;border-radius:3px;color:var(--text-dim);cursor:pointer;line-height:1.4;display:flex;align-items:center;justify-content:space-between;gap:8px}
   .ticker-dd-item:hover{background:var(--accent-soft);color:var(--accent)}
   .ticker-dd-item.active{color:var(--accent);background:var(--accent-soft)}
+  .ticker-dd-item .tdd-sym{flex:0 0 auto}
+  .tdd-meta{display:flex;align-items:center;gap:7px;font-size:10px;opacity:.92}
+  .tdd-rng{color:var(--accent);font-weight:600}
+  .tdd-chg.up{color:var(--green)} .tdd-chg.down{color:var(--danger)}
+  .tdd-vol{color:var(--text-faint)}
+  .ticker-dd-head{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.4px;color:var(--text-faint);padding:4px 9px 5px;border-bottom:1px solid var(--line);margin-bottom:2px;text-transform:uppercase}
   .ticker-dd-empty{font-size:10px;color:var(--text-faint);padding:6px 9px}
   /* ── hint tooltips ── */
   .hint-wrap{position:relative;display:inline-flex;align-items:center;vertical-align:middle;margin-left:6px}
@@ -902,6 +917,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
+      <button class="pwa-install" id="pwaInstall" style="display:none" onclick="_pwaInstall()" title="Установить как приложение">⤓ Установить</button>
       <div class="badge" id="modeBadge">PREP</div>
     </div>
   </div>
@@ -3265,6 +3281,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _symFromTicker(raw){return raw.replace(/[\/\-_ ]/g,'').toUpperCase();}
   // ── Быстрый разбор: зоны из стакана Binance без скринов, относительно стратегии ──
   function _niceBucket(price){ const raw=price*0.0007; if(!isFinite(raw)||raw<=0)return 1; const mag=Math.pow(10,Math.floor(Math.log10(raw))); const n=raw/mag; const nice=n<1.5?1:n<3.5?2:n<7.5?5:10; return nice*mag; }
+  // округление цены под масштаб инструмента (BTC→целое, SOL→0.01, WLD→тысячные), чтобы зоны не схлопывались на дешёвых парах
+  function _rpx(v){ const a=Math.abs(v); if(!isFinite(a)||a===0)return v; const d=a>=1000?0:a>=100?2:a>=10?3:a>=1?4:a>=0.1?5:a>=0.01?6:7; return +v.toFixed(d); }
   let _quickBusy=false, _lastQuickPrice=null;
   let _dayTrendCache={};
   async function _dayTrend(sym,force){
@@ -3434,11 +3452,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       asks.forEach(o=>{ let kind,proto,note,long;
         if(tdir==='up'&&o===nearestAsk){kind='break';proto='SQUEEZE';long=true;note='пробой ask-стены '+fmtM(o.n)+' по тренду↑';}
         else{kind='fade';proto='VALENTINI';long=false;note='отбой ask-стены '+fmtM(o.n)+(tdir==='up'?' (контр-тренд)':tdir==='down'?' по тренду↓':'');}
-        z.push({px:Math.round(o.p),kind,note,stop:Math.round(o.p*1.003),proto,stars:fStars(o,long),createdAt:Date.now()}); });
+        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*1.003),proto,stars:fStars(o,long),createdAt:Date.now()}); });
       bids.forEach(o=>{ let kind,proto,note,long;
         if(tdir==='down'&&o===nearestBid){kind='break';proto='SQUEEZE';long=false;note='пробой bid-стены '+fmtM(o.n)+' по тренду↓';}
         else{kind='fade';proto='VALENTINI';long=true;note='отбой bid-стены '+fmtM(o.n)+(tdir==='down'?' (контр-тренд)':tdir==='up'?' по тренду↑':'');}
-        z.push({px:Math.round(o.p),kind,note,stop:Math.round(o.p*0.997),proto,stars:fStars(o,long),createdAt:Date.now()}); });
+        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*0.997),proto,stars:fStars(o,long),createdAt:Date.now()}); });
       z.sort((a,c)=>c.px-a.px);
       const topZ=z.slice().sort((a,c)=>(c.stars-a.stars)||(Math.abs(a.px-price)-Math.abs(c.px-price)))[0];
       _lastQuickPrice=price;
@@ -3622,11 +3640,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const cur=(document.getElementById('ticker').value||'').replace(/[\/\-_ ]/g,'').replace(/USDT$/i,'').toUpperCase();
     document.querySelectorAll('.ticker-dd-item').forEach(c=>c.classList.toggle('active',c.dataset.sym===cur));
   }
+  let _tkMeta={};
   function _renderTickerDD(syms){
     const dd=document.getElementById('tickerDD');
     if(!dd)return;
+    const hasMeta=Object.keys(_tkMeta).length>0;
+    const head=hasMeta?'<div class="ticker-dd-head">топ дня · по волатильности</div>':'';
     dd.innerHTML=syms.length
-      ? syms.map(s=>`<div class="ticker-dd-item" data-sym="${s}" onmousedown="event.preventDefault();_setTicker('${s}')">${s}/USDT</div>`).join('')
+      ? head+syms.map(s=>{
+          const m=_tkMeta[s];
+          const meta=m?`<span class="tdd-meta"><span class="tdd-rng" title="дневной диапазон high-low">${m.rng.toFixed(1)}%</span><span class="tdd-chg ${m.chg>=0?'up':'down'}" title="изменение за 24ч">${m.chg>=0?'+':''}${m.chg.toFixed(1)}%</span><span class="tdd-vol" title="оборот за 24ч">$${(m.qv/1e6).toFixed(0)}M</span></span>`:'';
+          return `<div class="ticker-dd-item" data-sym="${s}" onmousedown="event.preventDefault();_setTicker('${s}')"><span class="tdd-sym">${s}/USDT</span>${meta}</div>`;
+        }).join('')
       : '<div class="ticker-dd-empty">нет совпадений</div>';
     _markActiveChip();
   }
@@ -3645,6 +3670,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     else{_renderTickerDD(_tickerSyms);_openTickerDD();document.getElementById('ticker').focus();}
   }
   document.addEventListener('click',e=>{ if(!e.target.closest('#tickerWrap'))_closeTickerDD(); });
+  // Топ-30 инструментов дня — волатильность вперёд (диапазон high-low), с порогом ликвидности и плотностью сделок как вторичными.
+  // Один вызов 24hr по всему USDT-универсуму. Метрики кладём в _tkMeta для показа в дропдауне.
   async function _fetchTopTickers(){
     _populateTickerList(_DEFAULT_TICKERS);
     try{
@@ -3652,12 +3679,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(!r.ok)throw 0;
       const all=await r.json();
       const stables=new Set(['USDC','BUSD','TUSD','FDUSD','DAI','USDP','FRAX','USDD','EURI','EUR']);
-      const top=all
-        .filter(t=>t.symbol.endsWith('USDT')&&!stables.has(t.symbol.slice(0,-4)))
-        .sort((a,b)=>parseFloat(b.quoteVolume)-parseFloat(a.quoteVolume))
-        .slice(0,30)
-        .map(t=>t.symbol.slice(0,-4));
-      _populateTickerList(top);
+      const levTok=/(UP|DOWN|BULL|BEAR)$/;            // отсекаем плечевые токены — не для скальпа перпов
+      const MIN_QV=10e6;                              // порог ликвидности (спот 24ч): отсекает тонкое, оставляет ~40+ кандидатов на топ-30. Крутить тут.
+      const MAX_RNG=80;                               // потолок диапазона: >80% за сутки = вик-артефакт/глитч, не торгуемая волатильность
+      const rows=all
+        .filter(t=>t.symbol.endsWith('USDT'))
+        .map(t=>{const s=t.symbol.slice(0,-4),hi=+t.highPrice,lo=+t.lowPrice;return {s,qv:+t.quoteVolume,cnt:+t.count,chg:+t.priceChangePercent,rng:lo>0?(hi-lo)/lo*100:0};})
+        .filter(o=>!stables.has(o.s)&&!levTok.test(o.s)&&o.qv>=MIN_QV&&isFinite(o.rng)&&o.rng>0&&o.rng<=MAX_RNG);
+      const N=rows.length;
+      if(!N){return;}
+      // перцентильные ранги: волатильность доминирует (0.7), сделки/оборот — вторично
+      const pr=key=>{const srt=[...rows].sort((a,b)=>a[key]-b[key]);const m=new Map();srt.forEach((o,i)=>m.set(o.s,N>1?i/(N-1):1));return m;};
+      const pR=pr('rng'),pC=pr('cnt'),pQ=pr('qv');
+      rows.forEach(o=>o.score=0.7*pR.get(o.s)+0.2*pC.get(o.s)+0.1*pQ.get(o.s));
+      rows.sort((a,b)=>b.score-a.score);
+      const top=rows.slice(0,30);
+      _tkMeta={}; top.forEach(o=>_tkMeta[o.s]={rng:o.rng,chg:o.chg,qv:o.qv,cnt:o.cnt});
+      _populateTickerList(top.map(o=>o.s));
     }catch(e){}
   }
 
@@ -3703,6 +3741,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
   renderZones();recalc();
   if(typeof autoEvalZones==='function')setTimeout(()=>autoEvalZones({force:true}),1500);
+
+  // ── PWA: установка как приложение + офлайн-кэш ──
+  if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
+  let _deferredPrompt=null;
+  window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); _deferredPrompt=e; const b=document.getElementById('pwaInstall'); if(b)b.style.display=''; });
+  function _pwaInstall(){ if(!_deferredPrompt)return; _deferredPrompt.prompt(); _deferredPrompt.userChoice.finally(()=>{ _deferredPrompt=null; const b=document.getElementById('pwaInstall'); if(b)b.style.display='none'; }); }
+  window.addEventListener('appinstalled',()=>{ const b=document.getElementById('pwaInstall'); if(b)b.style.display='none'; });
 </script>
 </body>
 </html>
