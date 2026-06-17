@@ -2932,8 +2932,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const cv=document.getElementById('miniChart');if(!cv)return;
     const W=cv.parentElement.clientWidth||600;
     const mob=W<560;
-    const H=mob?Math.round(Math.min(Math.max(W*0.82,250),330)):210,LBL=mob?64:86;
-    const dpr=Math.min(window.devicePixelRatio||1,2.5);
+    const H=mob?Math.round(Math.min(Math.max(W*0.95,290),440)):260,LBL=mob?64:86;
+    const dpr=Math.min(window.devicePixelRatio||1,3);
     cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);
     cv.style.width=W+'px';cv.style.height=H+'px';
     const ctx=cv.getContext('2d');
@@ -3020,17 +3020,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const pad=4,cw=(W-pad*2-LBL)/Math.max(candles.length,1);
     const vols=candles.map(c=>+c.v||0),maxV=Math.max(1,...vols),avgV=vols.reduce((a,b)=>a+b,0)/(vols.length||1);
     candles.forEach((c,i)=>{
-      const x=pad+i*cw+cw/2,green=c.c>=c.o,col=green?'#26d07c':'#ff5a5f';
+      const xc=pad+i*cw+cw/2,green=c.c>=c.o,col=green?'#2ee08a':'#ff5a5f';
       const vn=(+c.v||0)/maxV;
-      const bw=Math.max(1.5,Math.floor(cw*(L.vol?(0.38+0.5*vn):0.62)));
-      ctx.globalAlpha=L.vol?(0.4+0.6*vn):0.92;
-      ctx.strokeStyle=col;ctx.lineWidth=mob?1:.8;ctx.setLineDash([]);
+      const bw=Math.max(2,Math.round(cw*(L.vol?(0.42+0.5*vn):0.66)));
+      const x=Math.round(xc)+0.5; // пиксель-выравнивание фитиля → чёткая 1px линия
+      ctx.globalAlpha=L.vol?(0.55+0.45*vn):1;
+      ctx.strokeStyle=col;ctx.lineWidth=mob?1.3:1;ctx.setLineDash([]);
       ctx.beginPath();ctx.moveTo(x,toY(c.h));ctx.lineTo(x,toY(c.l));ctx.stroke();
-      const top=Math.min(toY(c.o),toY(c.c)),ht=Math.max(1.2,Math.abs(toY(c.o)-toY(c.c)));
-      ctx.fillStyle=col;ctx.fillRect(x-bw/2,top,bw,ht);
+      const top=Math.round(Math.min(toY(c.o),toY(c.c))),ht=Math.max(1.5,Math.round(Math.abs(toY(c.o)-toY(c.c))));
+      ctx.fillStyle=col;ctx.fillRect(Math.round(xc-bw/2),top,bw,ht);
       ctx.globalAlpha=1;
       if(L.vol&&avgV>0&&(+c.v||0)>avgV*2){ // RVOL-спайк — где реально дрались
-        ctx.fillStyle='#ffd24a';ctx.beginPath();ctx.arc(x,toY(c.h)-6,2.3,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#ffd24a';ctx.beginPath();ctx.arc(xc,toY(c.h)-6,2.3,0,Math.PI*2);ctx.fill();
       }
     });
     // ── ТРЕНД: MA-лента, цвет по тренду дня + стрелка направления ──
