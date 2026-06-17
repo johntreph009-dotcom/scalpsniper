@@ -235,6 +235,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .dc-high{color:var(--accent)}.dc-norm{color:var(--text-dim)}.dc-low{color:var(--text-faint)}
   .dc-note{margin-left:auto;font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
   .dc-note.dc-warn{color:var(--warn);font-weight:600}
+  .dc-note.dc-slug{color:#7c8aa5;font-weight:600}
   .zr-item{flex:1;display:flex;flex-direction:column;gap:1px;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 10px}
   .zr-lbl{font-size:8.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--text-faint);font-family:'JetBrains Mono',monospace}
   .zr-val{font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;line-height:1.1}
@@ -3299,7 +3300,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{ if(sym!=='BTCUSDT'&&typeof _dayTrend==='function'){const bt=await _dayTrend('BTCUSDT',false); btc={dir:bt.dir};} }catch(e){}
     // Новости-прокси: всплеск объёма + резкий фандинг/OI = аномальная активность (возможно событие)
     const anomaly=(rvol.lvl==='high')&&(funding.state!=='norm'||Math.abs(oi.chg)>=3);
-    const val={cvd,rvol,oi,funding,btc,anomaly};
+    // вялый рынок: слабый объём + сбалансированный поток + нет притока позиций
+    const sluggish=(rvol.lvl==='low'||rvol.lvl==='dead')&&cvd.dir==='flat'&&oi.dir==='flat';
+    const val={cvd,rvol,oi,funding,btc,anomaly,sluggish};
     _dayCtxCache[sym]={at:Date.now(),val};
     return val;
   }
@@ -3326,7 +3329,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const fn=v.funding||{val:0,state:'norm'}; const fnCls=fn.state==='norm'?'dc-flat':(fn.val>0?'dc-sell':'dc-buy');
     const fnState=fn.state==='extreme'?'крайний':fn.state==='elev'?'повыш':'';
     const btcChip=(sym!=='BTCUSDT'&&v.btc)?('<span class="dc-chip" title="тренд BTC — бэкграунд рынка"><span class="dc-k">BTC</span><b class="'+(v.btc.dir==='up'?'dc-buy':v.btc.dir==='down'?'dc-sell':'dc-flat')+'">'+(v.btc.dir==='up'?'↑':v.btc.dir==='down'?'↓':'↔')+'</b></span>'):'';
-    // аномалия (новости-прокси) важнее дивергенции
+    // вялый рынок — слабый сетап (важнее обычной дивергенции)
+    if(v.sluggish){note='💤 рынок вялый — слабый поток, осторожно со входом';noteCls=' dc-slug';}
+    // аномалия (новости-прокси) важнее всего
     if(v.anomaly){note='⚡ всплеск активности (объём + фандинг/OI) — проверь события';noteCls=' dc-warn';}
     el.innerHTML='<span class="dc-lbl">КОНТЕКСТ</span>'+
       '<span class="dc-chip"><span class="dc-k">CVD</span><b class="'+cvCls+'">'+cvTxt+'</b><span class="'+cvCls+'">'+(v.cvd.ratio>=0?'+':'')+v.cvd.ratio+'%</span></span>'+
