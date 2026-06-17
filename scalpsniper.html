@@ -346,6 +346,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .lc-l{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-faint)}
   .lc-v{font-family:'Archivo',sans-serif;font-weight:700;font-size:22px;margin-top:4px}
   .lc-note{margin-top:14px;font-size:13px;color:var(--text);background:rgba(0,0,0,.2);border-radius:7px;padding:11px 14px}
+  .calc-wrap{margin:26px 0 12px}
+  .calc-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:none;border:1px solid var(--line-soft);border-radius:8px;padding:11px 14px;color:var(--text);font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;transition:border-color .15s,color .15s}
+  .calc-toggle:hover{border-color:var(--accent-dim);color:var(--accent)}
+  .calc-toggle-r{display:flex;align-items:center;gap:9px}
+  .calc-hint{font-weight:400;text-transform:none;letter-spacing:.2px;font-size:9px;color:var(--text-faint)}
+  .calc-chev{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-faint);transition:transform .18s,color .18s}
+  .calc-wrap.open .calc-chev{transform:rotate(180deg);color:var(--accent)}
+  .calc-wrap.open .calc-toggle{border-color:var(--accent-dim);color:var(--accent)}
+  .calc-body{display:none;margin-top:10px}
+  .calc-wrap.open .calc-body{display:block}
   .calc{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}
   .calc-out{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:16px}
   @media(max-width:720px){.calc-out{grid-template-columns:1fr}}
@@ -1068,8 +1078,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     </div>
     <div class="pos-block" id="posBlock"></div>
   </div>
-  <!-- ===== RISK CALC (shared) ===== -->
-  <div class="section-title">Калькулятор риска <span class="tag">детерминированно, по твоим уровням</span></div>
+  <!-- ===== RISK CALC (shared, сворачиваемый) ===== -->
+  <div class="calc-wrap" id="calcWrap">
+  <button type="button" class="calc-toggle" id="calcToggle" onclick="toggleCalc()" aria-expanded="false"><span>Калькулятор риска</span><span class="calc-toggle-r"><span class="calc-hint">детерминированно, по уровням</span><span class="calc-chev">▾</span></span></button>
+  <div class="calc-body" id="calcBody">
   <div class="calc">
     <div class="row4">
       <div><span class="label">Уровень входа</span><input id="c_entry" type="number" placeholder="103210"></div>
@@ -1083,6 +1095,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <div class="stat"><div class="sl">Risk of Ruin*</div><div class="sv" id="o_ror">—</div></div>
     </div>
     <div class="calc-note">Margin risk = (|вход − стоп| / вход) × плечо × 100. &nbsp;*Risk of ruin — упрощённая оценка (модель Гэмблера, R:R 1:1.5) вероятности слить депозит на серии сделок. Ориентир, не гарантия.</div>
+  </div>
+  </div>
   </div>
   <!-- ===== JOURNAL PHASE ===== -->
   <div id="journalPhase" class="hide">
@@ -2398,6 +2412,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(z.px){document.getElementById('c_entry').value=z.px;}
     if(z.stop){document.getElementById('c_stop').value=z.stop;}
     recalc();
+    // авто-раскрыть свёрнутый калькулятор, если подставляем значения
+    const cw=document.getElementById('calcWrap'); if(cw&&!cw.classList.contains('open')&&typeof toggleCalc==='function')toggleCalc();
     // smooth scroll to calc
     document.querySelector('.calc')?.scrollIntoView({behavior:'smooth',block:'center'});
   }
@@ -3757,7 +3773,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _onScroll();
   })();
 
-  load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers(); renderPosition();
+  function toggleCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; const open=w.classList.toggle('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded',open?'true':'false'); try{localStorage.setItem('msa_calc_open_v1',open?'1':'0');}catch(e){} }
+  function _restoreCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; let o='0'; try{o=localStorage.getItem('msa_calc_open_v1')||'0';}catch(e){} if(o==='1'){w.classList.add('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded','true');} }
+  load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers(); renderPosition(); _restoreCalc();
   try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
   renderZones();recalc();
   if(typeof autoEvalZones==='function')setTimeout(()=>autoEvalZones({force:true}),1500);
