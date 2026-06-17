@@ -1815,6 +1815,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       document.getElementById('lcSize').style.color=ps?'var(--accent)':'var(--text-faint)';
       document.getElementById('lcNote').textContent=z.note||'план не записан';
       const cfb=document.getElementById('calcFillBtn');if(cfb)cfb.style.display=z.stop?'block':'none';
+      if(z.proto && z.proto!==selProto && typeof selectProto==='function'){ selectProto(z.proto); }
       _updateHdrZone(z);
     } else {
       st.textContent='вне размеченных зон — ждать';st.style.color='var(--text-faint)';
