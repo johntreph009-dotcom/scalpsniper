@@ -226,6 +226,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .dt-str{font-size:11px;letter-spacing:2px}
   .day-trend.dt-up .dt-str{color:var(--green)}.day-trend.dt-down .dt-str{color:var(--danger)}.day-trend.dt-range .dt-str{color:var(--text-faint)}
   .dt-sub{margin-left:auto;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-dim)}
+  .day-ctx{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:-4px 0 8px;padding:7px 11px;border-radius:8px;background:var(--panel);border:1px solid var(--line);font-family:'Rajdhani',sans-serif}
+  .dc-lbl{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-faint);font-family:'JetBrains Mono',monospace}
+  .dc-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);font-size:11px;font-family:'JetBrains Mono',monospace}
+  .dc-chip b{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px}
+  .dc-chip .dc-k{color:var(--text-faint);font-size:9px;letter-spacing:1px;text-transform:uppercase}
+  .dc-buy{color:var(--green)}.dc-sell{color:var(--danger)}.dc-flat{color:var(--text-dim)}
+  .dc-high{color:var(--accent)}.dc-norm{color:var(--text-dim)}.dc-low{color:var(--text-faint)}
+  .dc-note{margin-left:auto;font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
+  .dc-note.dc-warn{color:var(--warn);font-weight:600}
   .zr-item{flex:1;display:flex;flex-direction:column;gap:1px;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 10px}
   .zr-lbl{font-size:8.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--text-faint);font-family:'JetBrains Mono',monospace}
   .zr-val{font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;line-height:1.1}
@@ -1087,6 +1096,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div class="section-title" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация зоны по времени · Клик по цене внутри карточки зоны копирует её в буфер</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
   <div class="zones-fresh" id="zonesFresh"><span id="zonesFreshTxt"></span><button class="zf-refresh" onclick="quickAnalyze()" title="Пересобрать зоны из стакана Binance (без скринов)">↻ Обновить</button></div>
   <div id="dayTrend" class="day-trend" style="display:none"></div>
+  <div id="dayCtx" class="day-ctx" style="display:none"></div>
   <div class="zone-read" id="zoneRead" style="display:none"></div>
   <!-- input tools: collapsible (вставка + ручное добавление + депозит) -->
   <div class="zone-tools" id="zoneTools">
@@ -3131,7 +3141,60 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     el.className='day-trend '+m.c;
     el.innerHTML='<span class="dt-lbl">ТРЕНД ДНЯ</span><span class="dt-dir">'+m.a+' '+m.t+'</span><span class="dt-str" title="сила тренда">'+('▮'.repeat(v.strength)||'·')+'</span><span class="dt-sub" title="от дневного открытия">'+(v.vsOpen>=0?'+':'')+v.vsOpen+'%</span>';
   }
-  function _refreshDayTrend(){ if(typeof _dayTrend==='function')_dayTrend().then(()=>renderDayTrend()); }
+  // ── Контекст дня: CVD (дельта агрессии) + RVOL (относительный объём) ──
+  let _dayCtxCache={};
+  async function _dayContext(sym,force){
+    sym=sym||_symFromTicker(_tkKey());
+    const c=_dayCtxCache[sym];
+    if(!force && c && Date.now()-c.at<90000) return c.val;
+    let cvd={ratio:0,dir:'flat'}, rvol={val:1,lvl:'norm'};
+    try{
+      const at=await (await fetch('https://fapi.binance.com/fapi/v1/aggTrades?symbol='+sym+'&limit=1000',{cache:'no-store'})).json();
+      if(Array.isArray(at)&&at.length){
+        let buy=0,sell=0;
+        at.forEach(t=>{const q=+t.q; if(t.m)sell+=q; else buy+=q;}); // m=isBuyerMaker → агрессор продавец
+        const tot=buy+sell; const r=tot?(buy-sell)/tot:0;
+        cvd={ratio:Math.round(r*100),dir:r>0.12?'buy':r<-0.12?'sell':'flat'};
+      }
+    }catch(e){}
+    try{
+      const kl=await (await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval=15m&limit=48',{cache:'no-store'})).json();
+      if(Array.isArray(kl)&&kl.length>6){
+        const vols=kl.map(k=>+k[5]);
+        const lastClosed=vols[vols.length-2];
+        const hist=vols.slice(0,-2); const avg=hist.reduce((a,b)=>a+b,0)/(hist.length||1);
+        const rv=avg?lastClosed/avg:1;
+        rvol={val:+rv.toFixed(2),lvl:rv>=1.8?'high':rv>=1.1?'norm':rv>=0.55?'low':'dead'};
+      }
+    }catch(e){}
+    const val={cvd,rvol};
+    _dayCtxCache[sym]={at:Date.now(),val};
+    return val;
+  }
+  function renderDayCtx(){
+    const el=document.getElementById('dayCtx'); if(!el)return;
+    const sym=_symFromTicker(_tkKey());
+    const c=_dayCtxCache[sym]; const v=c&&c.val;
+    if(!v){ el.style.display='none'; return; }
+    el.style.display='flex';
+    const cd=v.cvd.dir; const cvCls=cd==='buy'?'dc-buy':cd==='sell'?'dc-sell':'dc-flat';
+    const cvTxt=cd==='buy'?'покупатели':cd==='sell'?'продавцы':'баланс';
+    const rl=v.rvol.lvl; const rvCls=rl==='high'?'dc-high':rl==='low'||rl==='dead'?'dc-low':'dc-norm';
+    const rvTxt=rl==='high'?'высокий':rl==='dead'?'почти нет':rl==='low'?'низкий':'обычный';
+    // наблюдение: дивергенция тренда и потока
+    const tv=(_dayTrendCache[sym]||{}).val; let note='', noteCls='';
+    if(tv&&tv.dir==='up'&&cd==='sell'){note='⚠ дивергенция: тренд↑, поток продаёт';noteCls=' dc-warn';}
+    else if(tv&&tv.dir==='down'&&cd==='buy'){note='⚠ дивергенция: тренд↓, поток покупает';noteCls=' dc-warn';}
+    else if(tv&&tv.dir==='up'&&cd==='buy'){note='поток подтверждает тренд↑';}
+    else if(tv&&tv.dir==='down'&&cd==='sell'){note='поток подтверждает тренд↓';}
+    else if(cd==='buy'){note='перевес покупателей';}
+    else if(cd==='sell'){note='перевес продавцов';}
+    el.innerHTML='<span class="dc-lbl">КОНТЕКСТ</span>'+
+      '<span class="dc-chip"><span class="dc-k">CVD</span><b class="'+cvCls+'">'+cvTxt+'</b><span class="'+cvCls+'">'+(v.cvd.ratio>=0?'+':'')+v.cvd.ratio+'%</span></span>'+
+      '<span class="dc-chip"><span class="dc-k">RVOL</span><b class="'+rvCls+'">'+v.rvol.val+'×</b><span class="'+rvCls+'">'+rvTxt+'</span></span>'+
+      (note?'<span class="dc-note'+noteCls+'">'+note+'</span>':'');
+  }
+  function _refreshDayTrend(){ if(typeof _dayTrend==='function')_dayTrend().then(()=>{renderDayTrend(); if(typeof _dayContext==='function')_dayContext().then(()=>renderDayCtx());}); }
   async function quickAnalyze(){
     if(_quickBusy)return;
     const raw=document.getElementById('ticker').value.trim()||'BTC/USDT';
@@ -3161,7 +3224,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const all=[...asks,...bids]; const maxN=Math.max(...all.map(o=>o.n));
       const baseStars=o=>{const nr=o.n/maxN, prox=1-Math.min(Math.abs((o.p-price)/price)/within,1), s=nr*0.6+prox*0.4; return s>0.66?3:s>0.4?2:1;};
       const trend=await _dayTrend(sym,true); const tdir=trend.dir;
-      const align=long=>tdir==='up'?(long?1:-1):tdir==='down'?(long?-1:1):0;
+      const ctx=await _dayContext(sym,true); const cvdDir=ctx.cvd.dir;
+      const align=long=>{ let a=0;
+        if(tdir==='up')a+=long?1:-1; else if(tdir==='down')a+=long?-1:1;
+        if(cvdDir==='buy')a+=long?1:-1; else if(cvdDir==='sell')a+=long?-1:1;
+        return Math.max(-1,Math.min(1,a)); };
       const fStars=(o,long)=>Math.max(1,Math.min(3, baseStars(o)+align(long)));
       const nearestAsk=asks.length?asks.reduce((a,b)=>Math.abs(a.p-price)<Math.abs(b.p-price)?a:b):null;
       const nearestBid=bids.length?bids.reduce((a,b)=>Math.abs(a.p-price)<Math.abs(b.p-price)?a:b):null;
@@ -3179,10 +3246,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       _lastQuickPrice=price;
       zones=z; save(); if(topZ){if(typeof protoCheckState!=='undefined')protoCheckState[topZ.proto]=null; if(typeof selectProto==='function')selectProto(topZ.proto);} renderZones(); if(typeof renderLadder==='function')renderLadder(); recalc(); renderReadinessScore(); if(typeof autoEvalZones==='function')autoEvalZones({force:true});
       _setZonesFresh(Date.now());
-      renderDayTrend();
+      renderDayTrend(); renderDayCtx();
       const mix=[...new Set(z.map(x=>x.proto))].join('/');
       const trTxt=tdir==='up'?'тренд↑':tdir==='down'?'тренд↓':'рейндж';
-      if(st)st.textContent='✓ '+raw+': '+z.length+' зон ('+mix+') · '+trTxt+'×'+trend.strength+' · цена '+price+' · POC '+(poc??'н/д')+(funding!=null?' · фанд '+funding+'%':'')+' · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+      const cvTxt=cvdDir==='buy'?'CVD↑':cvdDir==='sell'?'CVD↓':'CVD≈';
+      if(st)st.textContent='✓ '+raw+': '+z.length+' зон ('+mix+') · '+trTxt+'×'+trend.strength+' · '+cvTxt+' · RVOL '+ctx.rvol.val+'× · цена '+price+' · POC '+(poc??'н/д')+(funding!=null?' · фанд '+funding+'%':'')+' · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
     }catch(e){ if(st)st.textContent='⚠ '+sym+': '+(e.message||'ошибка')+' (пара есть на Binance?)'; }
     finally{ _quickBusy=false; if(btn){btn.disabled=false;btn.textContent=oldT||'⚡ Обновить зоны (без скринов)';} }
   }
