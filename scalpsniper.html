@@ -236,6 +236,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .dc-note{margin-left:auto;font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
   .dc-note.dc-warn{color:var(--warn);font-weight:600}
   .dc-note.dc-slug{color:#7c8aa5;font-weight:600}
+  #zrjBar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+  .zrj-sum{font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
+  .zrj-sum b{color:var(--accent)}
+  .zrj-filters{display:flex;gap:4px}
+  .zrjf-btn{font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 9px;background:transparent;border:1px solid var(--line);border-radius:10px;color:var(--text-faint);cursor:pointer;transition:color .12s,border-color .12s,background .12s}
+  .zrjf-btn:hover{color:var(--accent);border-color:var(--accent-dim)}
+  .zrjf-btn.active{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+  .zr-journal{margin-bottom:14px}
+  .zrj{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--line);border-radius:7px;padding:7px 10px;margin-bottom:6px}
+  .zrj-v{font-size:10px;font-weight:700;font-family:'Rajdhani',sans-serif;white-space:nowrap}
+  .zrj-v.zrj-w{color:var(--green)}.zrj-v.zrj-f{color:var(--danger)}.zrj-v.zrj-n{color:var(--text-faint)}
+  .zrj-adh{font-size:9px;color:var(--text-dim);border:1px solid var(--line);border-radius:10px;padding:1px 7px;font-family:'JetBrains Mono',monospace}
   .zr-item{flex:1;display:flex;flex-direction:column;gap:1px;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 10px}
   .zr-lbl{font-size:8.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--text-faint);font-family:'JetBrains Mono',monospace}
   .zr-val{font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;line-height:1.1}
@@ -1074,7 +1086,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="section-title">Аналитика <span class="tag">из журнала</span></div>
     <div class="analytics-wrap" id="journalAnalytics"></div>
     <div class="grade-stats-grid" id="gradeStats"></div>
-    <div class="section-title">История зон <span class="tag">новые сверху</span></div>
+    <div class="section-title">Журнал отработки зон <span class="tag">все размеченные · новые сверху</span></div>
+    <div id="zrjBar"></div>
+    <div class="zr-journal" id="zrJournal"></div>
+    <div class="section-title">История сделок <span class="tag">новые сверху</span></div>
     <div class="j-history" id="jHistory"></div>
     <div class="section-title">Данные <span class="tag">бэкап · перенос на устройство</span></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -2230,6 +2245,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <div class="jsub">${pt.length} сделок · ${pw.length} побед</div>
       </div>`;
     }).join('');
+    renderZoneJournal();
     // history
     const hEl=document.getElementById('jHistory');
     if(!journal.length){hEl.innerHTML='<div class="j-empty">Нет записей. Закрой зону в фазе СЕССИЯ кнопкой ✓ Закрыть — она попадёт сюда.</div>';return;}
@@ -2256,6 +2272,41 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <span style="font-size:10px;color:var(--text-faint);white-space:nowrap">${dateStr}</span>
         <button class="je-del" onclick="delJournalEntry(${e.id})" title="Удалить запись">×</button>
       </div>`;
+    }).join('');
+  }
+  // ---- журнал отработки зон (из zoneReviews) ----
+  let _zrjFilter='all';
+  function setZrjFilter(f){_zrjFilter=f;renderZoneJournal();}
+  function delZoneReview(id){ zoneReviews=zoneReviews.filter(r=>r.id!==id); saveReviews(); renderZoneJournal(); if(typeof renderZoneRead==='function')renderZoneRead(); }
+  function renderZoneJournal(){
+    const bar=document.getElementById('zrjBar'), el=document.getElementById('zrJournal'); if(!el)return;
+    const s=zoneReadStats();
+    if(bar){
+      const mk=(f,lbl)=>'<button class="zrjf-btn'+(_zrjFilter===f?' active':'')+'" onclick="setZrjFilter(\''+f+'\')">'+lbl+'</button>';
+      bar.innerHTML='<div class="zrj-sum">точность <b>'+(s.acc==null?'—':s.acc+'%')+'</b> · дисциплина <b>'+(s.disc==null?'—':s.disc+'%')+'</b> · '+s.total+' зон</div>'+
+        '<div class="zrj-filters">'+mk('all','все')+mk('worked','✓')+mk('failed','✗')+mk('notreached','·')+'</div>';
+    }
+    let rows=zoneReviews.slice();
+    if(_zrjFilter!=='all')rows=rows.filter(r=>r.verdict===_zrjFilter);
+    if(!rows.length){el.innerHTML='<div class="j-empty">'+(zoneReviews.length?'Нет зон под этим фильтром.':'Пока нет оценённых зон. Отмечай в карточке зоны ✓/✗/· (или авто-оценка по свечам сделает это сама) — записи появятся здесь.')+'</div>';return;}
+    el.innerHTML=rows.map(r=>{
+      const k=KIND[r.zKind]||{cls:'',lbl:(r.zKind||'').toUpperCase()};
+      const v=r.verdict, vCls=v==='worked'?'zrj-w':v==='failed'?'zrj-f':'zrj-n';
+      const vLbl=v==='worked'?'✓ сработала':v==='failed'?'✗ не сработала':'· не дошла';
+      const adh=r.adhered==='plan'?'по плану':r.adhered==='deviated'?'отклонился':r.adhered==='missed'?'не вошёл':'';
+      const dt=new Date(r.ts);
+      const dateStr=dt.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'})+' '+dt.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+      const proto=r.protocol?(PROTO_LABELS[r.protocol]||r.protocol):'';
+      const stars=r.stars?'★'.repeat(Math.max(1,Math.min(3,r.stars))):'';
+      const meta=[r.ticker, proto, stars, 'зона '+r.zPx].filter(Boolean).join(' · ');
+      return '<div class="zrj" style="border-left-color:'+(v==='worked'?'var(--green)':v==='failed'?'var(--danger)':'var(--line)')+'">'+
+        '<span class="zrj-v '+vCls+'">'+vLbl+'</span>'+
+        '<span class="zone-kind '+k.cls+'" style="font-size:9px">'+k.lbl+'</span>'+
+        '<span class="je-meta">'+escapeHtml(meta)+'</span>'+
+        (adh?'<span class="zrj-adh">'+adh+'</span>':'')+
+        '<span style="font-size:10px;color:var(--text-faint);white-space:nowrap">'+dateStr+'</span>'+
+        '<button class="je-del" onclick="delZoneReview('+r.id+')" title="Удалить из журнала">×</button>'+
+      '</div>';
     }).join('');
   }
   // ---- screenshot zones ----
