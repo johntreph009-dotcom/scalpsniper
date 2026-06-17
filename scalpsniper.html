@@ -215,6 +215,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .zl-div-px{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--accent);letter-spacing:.5px;white-space:nowrap}
   .zl-flash{animation:zl-flash-a 1.1s ease}
   @keyframes zl-flash-a{0%{box-shadow:0 0 0 2px var(--accent),0 0 18px rgba(255,122,24,.55)}100%{box-shadow:0 0 0 0 transparent}}
+  /* тренд дня */
+  .day-trend{align-items:center;gap:8px;margin:0 0 8px;padding:7px 11px;border-radius:8px;background:var(--panel);border:1px solid var(--line);font-family:'Rajdhani',sans-serif}
+  .day-trend.dt-up{border-color:rgba(63,185,80,.5);box-shadow:inset 0 0 14px rgba(63,185,80,.08)}
+  .day-trend.dt-down{border-color:rgba(240,69,74,.5);box-shadow:inset 0 0 14px rgba(240,69,74,.08)}
+  .day-trend.dt-range{border-color:var(--line-soft)}
+  .dt-lbl{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-faint);font-family:'JetBrains Mono',monospace}
+  .dt-dir{font-weight:800;font-size:14px;letter-spacing:.5px}
+  .day-trend.dt-up .dt-dir{color:var(--green)}.day-trend.dt-down .dt-dir{color:var(--danger)}.day-trend.dt-range .dt-dir{color:var(--text-dim)}
+  .dt-str{font-size:11px;letter-spacing:2px}
+  .day-trend.dt-up .dt-str{color:var(--green)}.day-trend.dt-down .dt-str{color:var(--danger)}.day-trend.dt-range .dt-str{color:var(--text-faint)}
+  .dt-sub{margin-left:auto;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-dim)}
   .zr-item{flex:1;display:flex;flex-direction:column;gap:1px;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 10px}
   .zr-lbl{font-size:8.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--text-faint);font-family:'JetBrains Mono',monospace}
   .zr-val{font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;line-height:1.1}
@@ -1075,6 +1086,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <!-- ===== ZONES (shared, always visible) ===== -->
   <div class="section-title" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация зоны по времени · Клик по цене внутри карточки зоны копирует её в буфер</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
   <div class="zones-fresh" id="zonesFresh"><span id="zonesFreshTxt"></span><button class="zf-refresh" onclick="quickAnalyze()" title="Пересобрать зоны из стакана Binance (без скринов)">↻ Обновить</button></div>
+  <div id="dayTrend" class="day-trend" style="display:none"></div>
   <div class="zone-read" id="zoneRead" style="display:none"></div>
   <!-- input tools: collapsible (вставка + ручное добавление + депозит) -->
   <div class="zone-tools" id="zoneTools">
@@ -3052,6 +3064,44 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // ── Быстрый разбор: зоны из стакана Binance без скринов, относительно стратегии ──
   function _niceBucket(price){ const raw=price*0.0007; if(!isFinite(raw)||raw<=0)return 1; const mag=Math.pow(10,Math.floor(Math.log10(raw))); const n=raw/mag; const nice=n<1.5?1:n<3.5?2:n<7.5?5:10; return nice*mag; }
   let _quickBusy=false, _lastQuickPrice=null;
+  let _dayTrendCache={};
+  async function _dayTrend(sym,force){
+    sym=sym||_symFromTicker(_tkKey());
+    const c=_dayTrendCache[sym];
+    if(!force && c && Date.now()-c.at<90000) return c.val;
+    try{
+      const r=await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval=15m&limit=96',{cache:'no-store'});
+      if(!r.ok)throw 0; const kl=await r.json();
+      const cl=kl.map(k=>+k[4]),hi=kl.map(k=>+k[2]),lo=kl.map(k=>+k[3]),n=cl.length;
+      if(n<40)throw 0;
+      const last=cl[n-1];
+      const sma=(off,len)=>{const s=cl.slice(n-len-off,n-off);return s.reduce((a,b)=>a+b,0)/s.length;};
+      const slope=(sma(0,20)-sma(8,20))/sma(8,20);
+      let dayOpen=null; try{const rd=await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval=1d&limit=1',{cache:'no-store'}); const kd=await rd.json(); dayOpen=+kd[0][1];}catch(e){}
+      const vsOpen=dayOpen?((last-dayOpen)/dayOpen):0;
+      const recHi=Math.max(...hi.slice(-16)),prevHi=Math.max(...hi.slice(-32,-16));
+      const recLo=Math.min(...lo.slice(-16)),prevLo=Math.min(...lo.slice(-32,-16));
+      const up_s=(recHi>prevHi)&&(recLo>prevLo), dn_s=(recHi<prevHi)&&(recLo<prevLo);
+      let sc=0;
+      if(slope>0.0010)sc++; else if(slope<-0.0010)sc--;
+      if(vsOpen>0.003)sc++; else if(vsOpen<-0.003)sc--;
+      if(up_s)sc++; else if(dn_s)sc--;
+      const val={dir:sc>=2?'up':sc<=-2?'down':'range',strength:Math.min(3,Math.abs(sc)),slope:+(slope*100).toFixed(2),vsOpen:+(vsOpen*100).toFixed(2)};
+      _dayTrendCache[sym]={at:Date.now(),val};
+      return val;
+    }catch(e){ return (c&&c.val)||{dir:'range',strength:0,slope:0,vsOpen:0}; }
+  }
+  function renderDayTrend(){
+    const el=document.getElementById('dayTrend'); if(!el)return;
+    const c=_dayTrendCache[_symFromTicker(_tkKey())]; const v=c&&c.val;
+    if(!v){ el.style.display='none'; return; }
+    el.style.display='inline-flex';
+    const map={up:{a:'↑',t:'ВВЕРХ',c:'dt-up'},down:{a:'↓',t:'ВНИЗ',c:'dt-down'},range:{a:'↔',t:'РЕЙНДЖ',c:'dt-range'}};
+    const m=map[v.dir]||map.range;
+    el.className='day-trend '+m.c;
+    el.innerHTML='<span class="dt-lbl">ТРЕНД ДНЯ</span><span class="dt-dir">'+m.a+' '+m.t+'</span><span class="dt-str" title="сила тренда">'+('▮'.repeat(v.strength)||'·')+'</span><span class="dt-sub" title="от дневного открытия">'+(v.vsOpen>=0?'+':'')+v.vsOpen+'%</span>';
+  }
+  function _refreshDayTrend(){ if(typeof _dayTrend==='function')_dayTrend().then(()=>renderDayTrend()); }
   async function quickAnalyze(){
     if(_quickBusy)return;
     const raw=document.getElementById('ticker').value.trim()||'BTC/USDT';
@@ -3079,26 +3129,30 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(!asks.length&&!bids.length)throw new Error('нет крупных стен в ±2.5%');
       const fmtM=n=>n>=1e6?(n/1e6).toFixed(1)+'M':(n/1e3).toFixed(0)+'K';
       const all=[...asks,...bids]; const maxN=Math.max(...all.map(o=>o.n));
-      const stars=o=>{const nr=o.n/maxN, prox=1-Math.min(Math.abs((o.p-price)/price)/within,1), s=nr*0.6+prox*0.4; return s>0.66?3:s>0.4?2:1;};
-      // микс стратегий per-зона по импульсу: барьер по тренду → SQUEEZE(пробой); прочие плотности → VALENTINI(отбой)
+      const baseStars=o=>{const nr=o.n/maxN, prox=1-Math.min(Math.abs((o.p-price)/price)/within,1), s=nr*0.6+prox*0.4; return s>0.66?3:s>0.4?2:1;};
+      const trend=await _dayTrend(sym,true); const tdir=trend.dir;
+      const align=long=>tdir==='up'?(long?1:-1):tdir==='down'?(long?-1:1):0;
+      const fStars=(o,long)=>Math.max(1,Math.min(3, baseStars(o)+align(long)));
       const nearestAsk=asks.length?asks.reduce((a,b)=>Math.abs(a.p-price)<Math.abs(b.p-price)?a:b):null;
       const nearestBid=bids.length?bids.reduce((a,b)=>Math.abs(a.p-price)<Math.abs(b.p-price)?a:b):null;
       const z=[];
-      asks.forEach(o=>{ let kind,proto,note;
-        if(momUp===true&&o===nearestAsk){kind='break';proto='SQUEEZE';note='пробой ask-стены '+fmtM(o.n)+' (импульс↑)';}
-        else{kind='fade';proto='VALENTINI';note='отбой от ask-стены '+fmtM(o.n);}
-        z.push({px:Math.round(o.p),kind,note,stop:Math.round(o.p*1.003),proto,stars:stars(o),createdAt:Date.now()}); });
-      bids.forEach(o=>{ let kind,proto,note;
-        if(momUp===false&&o===nearestBid){kind='break';proto='SQUEEZE';note='пробой bid-стены '+fmtM(o.n)+' (импульс↓)';}
-        else{kind='fade';proto='VALENTINI';note='отбой от bid-стены '+fmtM(o.n);}
-        z.push({px:Math.round(o.p),kind,note,stop:Math.round(o.p*0.997),proto,stars:stars(o),createdAt:Date.now()}); });
+      asks.forEach(o=>{ let kind,proto,note,long;
+        if(tdir==='up'&&o===nearestAsk){kind='break';proto='SQUEEZE';long=true;note='пробой ask-стены '+fmtM(o.n)+' по тренду↑';}
+        else{kind='fade';proto='VALENTINI';long=false;note='отбой ask-стены '+fmtM(o.n)+(tdir==='up'?' (контр-тренд)':tdir==='down'?' по тренду↓':'');}
+        z.push({px:Math.round(o.p),kind,note,stop:Math.round(o.p*1.003),proto,stars:fStars(o,long),createdAt:Date.now()}); });
+      bids.forEach(o=>{ let kind,proto,note,long;
+        if(tdir==='down'&&o===nearestBid){kind='break';proto='SQUEEZE';long=false;note='пробой bid-стены '+fmtM(o.n)+' по тренду↓';}
+        else{kind='fade';proto='VALENTINI';long=true;note='отбой bid-стены '+fmtM(o.n)+(tdir==='down'?' (контр-тренд)':tdir==='up'?' по тренду↑':'');}
+        z.push({px:Math.round(o.p),kind,note,stop:Math.round(o.p*0.997),proto,stars:fStars(o,long),createdAt:Date.now()}); });
       z.sort((a,c)=>c.px-a.px);
       const topZ=z.slice().sort((a,c)=>(c.stars-a.stars)||(Math.abs(a.px-price)-Math.abs(c.px-price)))[0];
       _lastQuickPrice=price;
       zones=z; save(); if(topZ){if(typeof protoCheckState!=='undefined')protoCheckState[topZ.proto]=null; if(typeof selectProto==='function')selectProto(topZ.proto);} renderZones(); if(typeof renderLadder==='function')renderLadder(); recalc(); renderReadinessScore(); if(typeof autoEvalZones==='function')autoEvalZones({force:true});
       _setZonesFresh(Date.now());
+      renderDayTrend();
       const mix=[...new Set(z.map(x=>x.proto))].join('/');
-      if(st)st.textContent='✓ '+raw+': '+z.length+' зон ('+mix+') · цена '+price+(momUp===true?' · импульс↑':momUp===false?' · импульс↓':'')+' · POC '+(poc??'н/д')+(funding!=null?' · фанд '+funding+'%':'')+' · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+      const trTxt=tdir==='up'?'тренд↑':tdir==='down'?'тренд↓':'рейндж';
+      if(st)st.textContent='✓ '+raw+': '+z.length+' зон ('+mix+') · '+trTxt+'×'+trend.strength+' · цена '+price+' · POC '+(poc??'н/д')+(funding!=null?' · фанд '+funding+'%':'')+' · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
     }catch(e){ if(st)st.textContent='⚠ '+sym+': '+(e.message||'ошибка')+' (пара есть на Binance?)'; }
     finally{ _quickBusy=false; if(btn){btn.disabled=false;btn.textContent=oldT||'⚡ Обновить зоны (без скринов)';} }
   }
@@ -3229,6 +3283,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }
     _refreshPosPrices();
     if(typeof autoEvalZones==='function')autoEvalZones();
+    if(typeof _refreshDayTrend==='function')_refreshDayTrend();
   }
   function triggerPriceFetch(){
     _manualLive=false; const _rb=document.getElementById('liveResumeBtn'); if(_rb)_rb.style.display='none';
