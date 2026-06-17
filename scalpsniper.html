@@ -3277,7 +3277,29 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         rvol={val:+rv.toFixed(2),lvl:rv>=1.8?'high':rv>=1.1?'norm':rv>=0.55?'low':'dead'};
       }
     }catch(e){}
-    const val={cvd,rvol};
+    // OI-динамика (приток/отток открытого интереса)
+    let oi={chg:0,dir:'flat'};
+    try{
+      const oh=await (await fetch('https://fapi.binance.com/futures/data/openInterestHist?symbol='+sym+'&period=5m&limit=12',{cache:'no-store'})).json();
+      if(Array.isArray(oh)&&oh.length>2){
+        const f=+oh[0].sumOpenInterest,l=+oh[oh.length-1].sumOpenInterest;
+        const ch=f?((l-f)/f)*100:0;
+        oi={chg:+ch.toFixed(1),dir:ch>0.5?'up':ch<-0.5?'down':'flat'};
+      }
+    }catch(e){}
+    // Фандинг (перекос позиционирования)
+    let funding={val:0,state:'norm'};
+    try{
+      const pr=await (await fetch('https://fapi.binance.com/fapi/v1/premiumIndex?symbol='+sym,{cache:'no-store'})).json();
+      const fv=+(+pr.lastFundingRate*100).toFixed(4);
+      funding={val:fv,state:Math.abs(fv)>=0.05?'extreme':Math.abs(fv)>=0.02?'elev':'norm'};
+    }catch(e){}
+    // Контекст BTC (бэкграунд рынка для альтов)
+    let btc={dir:'range'};
+    try{ if(sym!=='BTCUSDT'&&typeof _dayTrend==='function'){const bt=await _dayTrend('BTCUSDT',false); btc={dir:bt.dir};} }catch(e){}
+    // Новости-прокси: всплеск объёма + резкий фандинг/OI = аномальная активность (возможно событие)
+    const anomaly=(rvol.lvl==='high')&&(funding.state!=='norm'||Math.abs(oi.chg)>=3);
+    const val={cvd,rvol,oi,funding,btc,anomaly};
     _dayCtxCache[sym]={at:Date.now(),val};
     return val;
   }
@@ -3299,9 +3321,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     else if(tv&&tv.dir==='down'&&cd==='sell'){note='поток подтверждает тренд↓';}
     else if(cd==='buy'){note='перевес покупателей';}
     else if(cd==='sell'){note='перевес продавцов';}
+    // OI / Funding / BTC
+    const oi=v.oi||{chg:0,dir:'flat'}; const oiCls=oi.dir==='up'?'dc-buy':oi.dir==='down'?'dc-sell':'dc-flat'; const oiArr=oi.dir==='up'?'↑':oi.dir==='down'?'↓':'→';
+    const fn=v.funding||{val:0,state:'norm'}; const fnCls=fn.state==='norm'?'dc-flat':(fn.val>0?'dc-sell':'dc-buy');
+    const fnState=fn.state==='extreme'?'крайний':fn.state==='elev'?'повыш':'';
+    const btcChip=(sym!=='BTCUSDT'&&v.btc)?('<span class="dc-chip" title="тренд BTC — бэкграунд рынка"><span class="dc-k">BTC</span><b class="'+(v.btc.dir==='up'?'dc-buy':v.btc.dir==='down'?'dc-sell':'dc-flat')+'">'+(v.btc.dir==='up'?'↑':v.btc.dir==='down'?'↓':'↔')+'</b></span>'):'';
+    // аномалия (новости-прокси) важнее дивергенции
+    if(v.anomaly){note='⚡ всплеск активности (объём + фандинг/OI) — проверь события';noteCls=' dc-warn';}
     el.innerHTML='<span class="dc-lbl">КОНТЕКСТ</span>'+
       '<span class="dc-chip"><span class="dc-k">CVD</span><b class="'+cvCls+'">'+cvTxt+'</b><span class="'+cvCls+'">'+(v.cvd.ratio>=0?'+':'')+v.cvd.ratio+'%</span></span>'+
       '<span class="dc-chip"><span class="dc-k">RVOL</span><b class="'+rvCls+'">'+v.rvol.val+'×</b><span class="'+rvCls+'">'+rvTxt+'</span></span>'+
+      '<span class="dc-chip" title="открытый интерес: ↑ приток позиций, ↓ закрытие"><span class="dc-k">OI</span><b class="'+oiCls+'">'+oiArr+'</b><span class="'+oiCls+'">'+(oi.chg>=0?'+':'')+oi.chg+'%</span></span>'+
+      '<span class="dc-chip" title="фандинг: + лонги платят (переполнен лонг), − шорты платят"><span class="dc-k">FND</span><b class="'+fnCls+'">'+(fn.val>=0?'+':'')+fn.val+'%</b>'+(fnState?'<span class="'+fnCls+'">'+fnState+'</span>':'')+'</span>'+
+      btcChip+
       (note?'<span class="dc-note'+noteCls+'">'+note+'</span>':'');
   }
   function _refreshDayTrend(){ if(typeof _dayTrend==='function')_dayTrend().then(()=>{renderDayTrend(); if(typeof _dayContext==='function')_dayContext().then(()=>renderDayCtx());}); }
