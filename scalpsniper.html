@@ -2907,8 +2907,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _drawChart(candles,currentPrice){
     const cv=document.getElementById('miniChart');if(!cv)return;
     const W=cv.parentElement.clientWidth||600,H=180,LBL=86;
-    cv.width=W;cv.height=H;
+    const dpr=Math.min(window.devicePixelRatio||1,2.5);
+    cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);
+    cv.style.width=W+'px';cv.style.height=H+'px';
     const ctx=cv.getContext('2d');
+    ctx.setTransform(dpr,0,0,dpr,0,0);
     const activeZ=zones.filter(z=>!z.closed&&!z.expired);
     // Y-scale strictly from candles + current price — зоны больше НЕ растягивают шкалу
     const base=candles.flatMap(c=>[c.h,c.l]);
@@ -2995,6 +2998,31 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       ctx.fillStyle='#fff';ctx.font='bold 9px JetBrains Mono,monospace';
       ctx.fillText(currentPrice.toLocaleString(),W-LBL+5,py+4);
     }
+    _chartGeo={W,H,LBL,minP,maxP,pad,cw,candles,currentPrice};
+  }
+  let _chartGeo=null;
+  function _crosshair(mx,my){
+    if(!_chartGeo||!_klines.length)return;
+    _drawChart(_klines,_chartGeo.currentPrice);
+    const g=_chartGeo, cv=document.getElementById('miniChart'); if(!cv)return; const ctx=cv.getContext('2d');
+    if(mx>g.W-g.LBL)mx=g.W-g.LBL; if(my<0)my=0; if(my>g.H)my=g.H;
+    const price=g.minP+(1-my/g.H)*(g.maxP-g.minP);
+    ctx.save();
+    ctx.strokeStyle='rgba(255,255,255,.32)';ctx.lineWidth=1;ctx.setLineDash([2,3]);
+    ctx.beginPath();ctx.moveTo(mx,0);ctx.lineTo(mx,g.H);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,my);ctx.lineTo(g.W-g.LBL,my);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='rgba(255,122,24,.95)';ctx.fillRect(g.W-g.LBL+2,my-8,g.LBL-4,15);
+    ctx.fillStyle='#16100a';ctx.font='bold 9px JetBrains Mono,monospace';
+    ctx.fillText(Math.round(price).toLocaleString(),g.W-g.LBL+5,my+4);
+    const idx=Math.floor((mx-g.pad)/g.cw);
+    if(idx>=0&&idx<g.candles.length){
+      const c=g.candles[idx];
+      const t='O'+Math.round(c.o)+' H'+Math.round(c.h)+' L'+Math.round(c.l)+' C'+Math.round(c.c);
+      ctx.font='9px JetBrains Mono,monospace'; const tw=ctx.measureText(t).width;
+      ctx.fillStyle='rgba(13,12,10,.88)';ctx.fillRect(4,4,tw+8,15);
+      ctx.fillStyle=c.c>=c.o?'#3fb950':'#ef4444';ctx.fillText(t,8,15);
+    }
+    ctx.restore();
   }
   function _chartRedraw(){
     const lp=parseFloat(document.getElementById('livePrice').value)||parseFloat(document.getElementById('price').value)||null;
@@ -3037,7 +3065,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!_chartClickBound){
       const cv=document.getElementById('miniChart');
       if(cv){
-        cv.style.cursor='pointer';
+        cv.style.cursor='crosshair';
+        cv.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();_crosshair(e.clientX-r.left,e.clientY-r.top);});
+        cv.addEventListener('mouseleave',()=>_chartRedraw());
         cv.addEventListener('click',e=>{
           const rect=cv.getBoundingClientRect();
           const cy=e.clientY-rect.top;
