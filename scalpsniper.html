@@ -96,6 +96,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .dl-swipe.up{color:#5DCAA5;border:1px solid #0F6E56;background:rgba(29,158,117,.08)}
   .dl-swipe.dn{color:#F09595;border:1px solid #A32D2D;background:rgba(226,75,74,.08)}
   .dl-foot{font-size:10px;color:var(--text-faint);text-align:center;border-top:1px solid var(--line);padding-top:10px;line-height:1.5}
+  .dl-regime-chip.trend{color:#5DCAA5;border-color:#0F6E56;background:rgba(29,158,117,.1)}
+  .dl-regime-chip.danger{color:#F09595;border-color:#A32D2D;background:rgba(226,75,74,.14)}
+  .dl-swipe{cursor:pointer}
+  .dl-trades{font-size:11px;color:var(--text-dim);text-align:center;font-family:'JetBrains Mono',monospace;margin-bottom:6px}
+  .dl-feedback{font-size:11px;text-align:center;font-family:'JetBrains Mono',monospace;min-height:14px;opacity:0;transition:opacity .15s;margin-bottom:10px}
+  .dl-feedback.show{opacity:1}
+  .dl-feedback.up{color:#5DCAA5}
+  .dl-feedback.dn{color:#F09595}
+  .dl-feedback.warn{color:#EF9F27}
   .phase-desc{font-size:11px;color:var(--text-dim);margin:0 0 16px;line-height:1.55}
   .shots{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px}
   @media(max-width:720px){.shots{grid-template-columns:1fr}}
@@ -1253,14 +1262,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <div class="dl-prob-seg dn" id="dlProbDn" style="width:30%">↓ 30%</div>
       <div class="dl-prob-seg fl" id="dlProbFl" style="width:20%">↔ 20%</div>
     </div>
-    <div class="dl-regime"><span class="dl-regime-chip" id="dlRegime">РЕЖИМ: TREND_ALIGNED</span><span class="dl-regime-note">гистерезис 3с · подключим в Модуле 3</span></div>
+    <div class="dl-regime"><span class="dl-regime-chip" id="dlRegime">РЕЖИМ: FLAT_SCALPING</span><span class="dl-regime-note" id="dlEngNote">гистерезис 3с</span></div>
     <div class="dl-canvas-lbl">Симулируемый стакан · Canvas · <span id="dlUps">0</span> упд/с</div>
     <div class="dl-canvas-wrap"><canvas id="dlBook"></canvas></div>
     <div class="dl-swipes">
-      <div class="dl-swipe up" id="dlLong">↑ свайп — демо-лонг</div>
-      <div class="dl-swipe dn" id="dlShort">↓ свайп — демо-шорт</div>
+      <div class="dl-swipe up" id="dlLong">↑ свайп / тап — демо-лонг</div>
+      <div class="dl-swipe dn" id="dlShort">↓ свайп / тап — демо-шорт</div>
     </div>
-    <div class="dl-foot">DEMO · виртуальные сделки · аналитика, не торговая рекомендация · реальные ордера не выставляются. Бар вероятностей и свайпы — шелл, логику подключаем в Модулях 3–4.</div>
+    <div class="dl-trades" id="dlTrades">демо-сделок: 0</div>
+    <div class="dl-feedback" id="dlFeedback"></div>
+    <div class="dl-foot">DEMO · виртуальные сделки · аналитика, не торговая рекомендация · реальные ордера не выставляются. Бар вероятностей и режим — гипотеза модели; контр-тренд помечается, но не блокируется — решаешь ты.</div>
   </div>
   <div class="disclaimer">
     <b>ScalpSniper.</b> Терминал структурирует твои наблюдения, хранит план по зонам и считает риск по уровням, которые вводишь <b>ты</b>. Разбор скриншотов происходит в чате — описание структуры, без готовых сделок. Скорость снайпера — в <b>заранее принятом решении</b>, а не в анализе в моменте: размечай зоны до сессии, в сессии — один точный выстрел. Решение о входе, стопе и цели всегда за тобой. Это аналитика, не торговая рекомендация.
@@ -3829,24 +3840,52 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // ===== DEMO LAB (Модуль 1): синтетический стакан в Web Worker + Canvas =====
   let _dlWorker=null,_dlRAF=null,_dlSnap=null,_dlUps=0,_dlFrames=0,_dlLastSec=0,_dlRunning=false;
   let _dlCtx=null,_dlW=0,_dlH=0;
+  let _dlModel=null,_dlRegime='FLAT_SCALPING',_dlCand=null,_dlCandT=0,_dlEngLast=0,_dlJournal=[];
+  const DLJ_KEY='msa_demo_journal_v1';
   function _dlWorkerCode(){ return `
     let mid=72.26, n=12, bucket=0.02;
     let asks=[], bids=[];
+    let midEma=mid, cumDelta=0, tape=0, tapePrev=0, imbPrev=0;
     function seed(){ asks=[]; bids=[];
       for(let i=1;i<=n;i++){ asks.push({p:mid+i*bucket,s:200+Math.random()*800}); bids.push({p:mid-i*bucket,s:200+Math.random()*800}); } }
     seed();
     function step(){
       mid += (Math.random()-0.5)*bucket*0.6;
+      midEma += (mid-midEma)*0.05;
       for(let i=0;i<n;i++){ asks[i].s=Math.max(40,asks[i].s+(Math.random()-0.5)*180); bids[i].s=Math.max(40,bids[i].s+(Math.random()-0.5)*180); asks[i].p=mid+(i+1)*bucket; bids[i].p=mid-(i+1)*bucket; }
       if(Math.random()<0.03){ const w=asks[(Math.random()*n)|0]; if(w)w.s+=1500; }
       if(Math.random()<0.03){ const w=bids[(Math.random()*n)|0]; if(w)w.s+=1500; }
+      const tr=(mid-midEma)/bucket;
+      let nt=(Math.random()*4)|0, buys=0, sells=0;
+      const buyP=0.5+Math.max(-0.35,Math.min(0.35, tr*0.15 + imbPrev*0.2));
+      for(let i=0;i<nt;i++){ if(Math.random()<buyP)buys++; else sells++; }
+      cumDelta = cumDelta*0.995 + (buys-sells);
+      tape = tape*0.9 + nt*0.1;
+    }
+    function model(){
+      let bidVol=0,askVol=0,maxAsk=0,maxBid=0;
+      for(let i=0;i<n;i++){ bidVol+=bids[i].s; askVol+=asks[i].s; if(asks[i].s>maxAsk)maxAsk=asks[i].s; if(bids[i].s>maxBid)maxBid=bids[i].s; }
+      const imb=(bidVol-askVol)/(bidVol+askVol||1);
+      const tr=(mid-midEma)/bucket, trN=Math.max(-1,Math.min(1,tr/3)), dN=Math.max(-1,Math.min(1,cumDelta/300));
+      let up=Math.max(0, imb*0.4 + dN*0.3 + trN*0.3);
+      let dn=Math.max(0, -imb*0.4 - dN*0.3 - trN*0.3);
+      let fl=0.25 + 0.5*(1-Math.min(1,Math.abs(imb)+Math.abs(trN)+Math.abs(dN)));
+      const slow=tape<tapePrev; let absorb=0;
+      if(slow && trN>0.1 && maxAsk>askVol/n*1.8){ dn+=0.25; absorb=1; }
+      if(slow && trN<-0.1 && maxBid>bidVol/n*1.8){ up+=0.25; absorb=1; }
+      const sum=up+dn+fl||1; const pUp=up/sum,pDown=dn/sum,pFlat=fl/sum;
+      const vol=Math.abs(mid-midEma)/bucket, edge=Math.max(pUp,pDown,pFlat)-Math.min(pUp,pDown,pFlat);
+      const chaos=(vol>2.2 && edge<0.18)?1:0;
+      const dir=(pFlat>pUp&&pFlat>pDown)?'flat':(pUp>pDown?'up':'down');
+      tapePrev=tape; imbPrev=imb;
+      return {pUp:pUp,pDown:pDown,pFlat:pFlat,delta:Math.round(cumDelta),tape:+tape.toFixed(2),absorb:absorb,chaos:chaos,dir:dir};
     }
     function snap(){ const buf=new Float32Array(2+n*4); buf[0]=mid; buf[1]=n; let k=2;
       for(let i=0;i<n;i++)buf[k++]=asks[i].p; for(let i=0;i<n;i++)buf[k++]=asks[i].s;
       for(let i=0;i<n;i++)buf[k++]=bids[i].p; for(let i=0;i<n;i++)buf[k++]=bids[i].s; return buf; }
     let ups=0,t0=Date.now(),lastSend=0; const TICK=10,SEND=36;
     setInterval(()=>{ step(); ups++; const now=Date.now();
-      if(now-lastSend>=SEND){ lastSend=now; const b=snap(); self.postMessage({t:'snap',buf:b.buffer,ups:ups,since:now-t0},[b.buffer]); ups=0; t0=now; }
+      if(now-lastSend>=SEND){ lastSend=now; const b=snap(); self.postMessage({t:'snap',buf:b.buffer,m:model(),ups:ups,since:now-t0},[b.buffer]); ups=0; t0=now; }
     },TICK);
   `; }
   function _dlSetupCanvas(){
@@ -3879,18 +3918,73 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(_dlRunning)return; _dlRunning=true;
     try{ const blob=new Blob([_dlWorkerCode()],{type:'application/javascript'});
       _dlWorker=new Worker(URL.createObjectURL(blob));
-      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); if(d.since>0)_dlUps=Math.round(d.ups*1000/d.since); } };
+      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.since>0)_dlUps=Math.round(d.ups*1000/d.since); } };
     }catch(err){ const r=document.getElementById('dlRate'); if(r)r.textContent='worker N/A'; }
-    _dlSetupCanvas(); _dlLastSec=performance.now(); _dlFrames=0;
+    _dlSetupCanvas(); _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlSetRegime(_dlRegime,true);
+    _dlLastSec=performance.now(); _dlFrames=0; _dlEngLast=0;
     const loop=ts=>{ if(!_dlRunning)return; _dlDraw(); _dlFrames++;
+      if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); }
       if(ts-_dlLastSec>=1000){ const fps=Math.round(_dlFrames*1000/(ts-_dlLastSec)); _dlFrames=0; _dlLastSec=ts;
         const r=document.getElementById('dlRate'); if(r)r.textContent=fps+' FPS';
         const u=document.getElementById('dlUps'); if(u)u.textContent=_dlUps; }
       _dlRAF=requestAnimationFrame(loop); };
     _dlRAF=requestAnimationFrame(loop);
   }
-  function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; }
+  function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; }
   window.addEventListener('resize',()=>{ if(_dlRunning)_dlSetupCanvas(); });
+
+  // ── Модуль 3: гистерезис + стейт-машина режимов ──
+  function _dlEngine(now){
+    const m=_dlModel; if(!m)return;
+    _dlUpdateBar(m);
+    const dom=Math.max(m.pUp,m.pDown);
+    let cand;
+    if(m.chaos) cand='SAFE_SHUTDOWN';
+    else if(dom>=0.61 && m.dir!=='flat') cand='TREND_ALIGNED';
+    else if(dom<0.59 || m.dir==='flat') cand='FLAT_SCALPING';
+    else cand=_dlRegime; // мёртвая зона 59–61% — держим состояние
+    if(cand!==_dlRegime){ if(cand!==_dlCand){ _dlCand=cand; _dlCandT=now; } else if(now-_dlCandT>=3000){ _dlSetRegime(cand); } }
+    else _dlCand=null;
+  }
+  function _dlUpdateBar(m){
+    const up=Math.round(m.pUp*100), dn=Math.round(m.pDown*100); let fl=100-up-dn; if(fl<0)fl=0;
+    const U=document.getElementById('dlProbUp'),D=document.getElementById('dlProbDn'),F=document.getElementById('dlProbFl');
+    if(U){U.style.width=up+'%';U.textContent='↑ '+up+'%';}
+    if(D){D.style.width=dn+'%';D.textContent='↓ '+dn+'%';}
+    if(F){F.style.width=fl+'%';F.textContent='↔ '+fl+'%';}
+    const note=document.getElementById('dlEngNote'); if(note)note.textContent='Δ '+m.delta+' · лента '+m.tape+(m.absorb?' · absorption':'');
+  }
+  function _dlSetRegime(r,silent){
+    _dlRegime=r; _dlCand=null;
+    const chip=document.getElementById('dlRegime'); if(chip){ chip.textContent='РЕЖИМ: '+r; chip.className='dl-regime-chip'+(r==='SAFE_SHUTDOWN'?' danger':r==='TREND_ALIGNED'?' trend':''); }
+    if(!silent){ try{ if(navigator.vibrate)navigator.vibrate(r==='SAFE_SHUTDOWN'?[60,40,60]:30); }catch(e){} }
+  }
+  // ── Модуль 4: демо-журнал + свайпы ──
+  function _dlLoadJournal(){ try{_dlJournal=JSON.parse(localStorage.getItem(DLJ_KEY)||'[]');}catch(e){_dlJournal=[];} }
+  function _dlSaveJournal(){ try{localStorage.setItem(DLJ_KEY,JSON.stringify(_dlJournal.slice(-200)));}catch(e){} }
+  function _dlTrade(side){
+    const px=_dlSnap?+_dlSnap[0].toFixed(2):null, m=_dlModel;
+    let warn='';
+    if(_dlRegime==='SAFE_SHUTDOWN') warn='⚠ SAFE_SHUTDOWN — рынок хаотичен';
+    else if(_dlRegime==='TREND_ALIGNED' && m){ const trendUp=m.pUp>m.pDown; if((side==='long')!==trendUp) warn='⚠ против тренда модели'; }
+    _dlJournal.push({side:side,px:px,ts:Date.now(),regime:_dlRegime}); _dlSaveJournal();
+    try{ if(navigator.vibrate)navigator.vibrate(side==='long'?20:[15,25,15]); }catch(e){}
+    _dlRenderTrades(side,px,warn);
+  }
+  function _dlRenderTrades(side,px,warn){
+    const L=_dlJournal.filter(t=>t.side==='long').length, S=_dlJournal.length-L;
+    const t=document.getElementById('dlTrades'); if(t)t.textContent='демо-сделок: '+_dlJournal.length+' ('+L+' лонг / '+S+' шорт)';
+    if(side){ const f=document.getElementById('dlFeedback'); if(f){ f.textContent=(side==='long'?'▲ демо-лонг':'▼ демо-шорт')+(px!=null?' @ '+px:'')+(warn?' · '+warn:''); f.className='dl-feedback show '+(warn?'warn':(side==='long'?'up':'dn')); } }
+  }
+  function _dlBindSwipes(){
+    const el=document.querySelector('.dl-canvas-wrap');
+    if(el&&!el._sw){ el._sw=1; let y0=null;
+      el.addEventListener('touchstart',e=>{ y0=e.touches[0].clientY; },{passive:true});
+      el.addEventListener('touchend',e=>{ if(y0==null)return; const dy=e.changedTouches[0].clientY-y0; y0=null; if(Math.abs(dy)>40)_dlTrade(dy<0?'long':'short'); },{passive:true});
+    }
+    const lo=document.getElementById('dlLong'); if(lo&&!lo._b){ lo._b=1; lo.addEventListener('click',()=>_dlTrade('long')); }
+    const sh=document.getElementById('dlShort'); if(sh&&!sh._b){ sh._b=1; sh.addEventListener('click',()=>_dlTrade('short')); }
+  }
 
   function toggleCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; const open=w.classList.toggle('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded',open?'true':'false'); try{localStorage.setItem('msa_calc_open_v1',open?'1':'0');}catch(e){} }
   function _restoreCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; let o='0'; try{o=localStorage.getItem('msa_calc_open_v1')||'0';}catch(e){} if(o==='1'){w.classList.add('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded','true');} }
