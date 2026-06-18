@@ -71,6 +71,31 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .phase button:last-child{border-right:none}
   .phase button.on{background:linear-gradient(180deg,#241407,#16100a);color:var(--accent)}
   .phase button:hover:not(.on){color:var(--text)}
+  .phase button.ph-demo{color:#6f8aa8}
+  .phase button.ph-demo.on{background:rgba(55,138,221,.12);color:#85B7EB;box-shadow:inset 0 1px 0 rgba(55,138,221,.18)}
+  @media(max-width:560px){.phase button{font-size:11px;padding:13px 3px;letter-spacing:0}}
+  /* ── DEMO LAB ── */
+  .demo-phase{margin-top:4px}
+  .dl-head{display:flex;align-items:center;gap:9px;margin-bottom:14px;flex-wrap:wrap}
+  .dl-badge{font-size:10px;font-weight:700;letter-spacing:.5px;color:#85B7EB;border:1px solid #185FA5;background:rgba(55,138,221,.12);padding:2px 8px;border-radius:20px}
+  .dl-title{font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text)}
+  .dl-rate{margin-left:auto;font-size:10px;color:var(--text-faint);font-family:'JetBrains Mono',monospace}
+  .dl-prob-lbl,.dl-canvas-lbl{font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px}
+  .dl-prob{display:flex;height:20px;border-radius:5px;overflow:hidden;margin-bottom:8px}
+  .dl-prob-seg{display:flex;align-items:center;justify-content:center;font-size:10px;font-family:'JetBrains Mono',monospace;transition:width .3s}
+  .dl-prob-seg.up{background:#1D9E75;color:#04342C}
+  .dl-prob-seg.dn{background:#E24B4A;color:#501313}
+  .dl-prob-seg.fl{background:#5F5E5A;color:#1a1a18}
+  .dl-regime{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+  .dl-regime-chip{font-size:10px;color:#85B7EB;border:1px solid #185FA5;background:rgba(55,138,221,.1);padding:2px 8px;border-radius:4px;font-family:'JetBrains Mono',monospace}
+  .dl-regime-note{font-size:10px;color:var(--text-faint)}
+  .dl-canvas-wrap{background:#0d0f12;border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:14px}
+  #dlBook{display:block;width:100%;height:300px}
+  .dl-swipes{display:flex;gap:8px;margin-bottom:12px}
+  .dl-swipe{flex:1;text-align:center;font-size:12px;padding:14px 4px;border-radius:8px;font-family:'JetBrains Mono',monospace;user-select:none}
+  .dl-swipe.up{color:#5DCAA5;border:1px solid #0F6E56;background:rgba(29,158,117,.08)}
+  .dl-swipe.dn{color:#F09595;border:1px solid #A32D2D;background:rgba(226,75,74,.08)}
+  .dl-foot{font-size:10px;color:var(--text-faint);text-align:center;border-top:1px solid var(--line);padding-top:10px;line-height:1.5}
   .phase-desc{font-size:11px;color:var(--text-dim);margin:0 0 16px;line-height:1.55}
   .shots{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px}
   @media(max-width:720px){.shots{grid-template-columns:1fr}}
@@ -941,12 +966,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <button class="on" data-ph="prep" onclick="setPhase('prep')">① ПОДГОТОВКА</button>
       <button data-ph="live" onclick="setPhase('live')">② СЕССИЯ</button>
       <button data-ph="journal" onclick="setPhase('journal')">③ ЖУРНАЛ</button>
+      <button class="ph-demo" data-ph="demo" onclick="setPhase('demo')">ДЕМО</button>
     </div>
     <div class="hdr-zone-pill" id="hdrZonePill">● <span id="hdrZoneNum"></span> · <span id="hdrZoneKind"></span></div>
   </div>
   <p class="phase-desc" id="phaseDesc">До сессии — читаешь рынок, размечаешь зоны. В сессии — только исполнение.</p>
 
-<div class="terminal-grid">
+<div class="terminal-grid" id="terminalGrid">
   <div class="t-main">
   <!-- ===== PREP PHASE ===== -->
   <div id="prepPhase">
@@ -1214,6 +1240,28 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <p style="font-size:11px;color:var(--text-dim);margin-top:10px;line-height:1.55">Размер позиции = (депозит × риск%) / |цена зоны − стоп|. Считается только если у зоны задан стоп. «ед.» — количество единиц базового актива; объём и риск в деньгах видны при наведении на цифру.</p>
   </div><!-- /t-side -->
 </div><!-- /terminal-grid -->
+  <!-- ===== DEMO LAB PHASE (изолированный тренажёр) ===== -->
+  <div id="demoPhase" class="hide demo-phase">
+    <div class="dl-head">
+      <span class="dl-badge">DEMO</span>
+      <span class="dl-title">Demo Lab · тренажёр</span>
+      <span class="dl-rate" id="dlRate">—</span>
+    </div>
+    <div class="dl-prob-lbl">Распределение — гипотеза модели · демо</div>
+    <div class="dl-prob" id="dlProb">
+      <div class="dl-prob-seg up" id="dlProbUp" style="width:50%">↑ 50%</div>
+      <div class="dl-prob-seg dn" id="dlProbDn" style="width:30%">↓ 30%</div>
+      <div class="dl-prob-seg fl" id="dlProbFl" style="width:20%">↔ 20%</div>
+    </div>
+    <div class="dl-regime"><span class="dl-regime-chip" id="dlRegime">РЕЖИМ: TREND_ALIGNED</span><span class="dl-regime-note">гистерезис 3с · подключим в Модуле 3</span></div>
+    <div class="dl-canvas-lbl">Симулируемый стакан · Canvas · <span id="dlUps">0</span> упд/с</div>
+    <div class="dl-canvas-wrap"><canvas id="dlBook"></canvas></div>
+    <div class="dl-swipes">
+      <div class="dl-swipe up" id="dlLong">↑ свайп — демо-лонг</div>
+      <div class="dl-swipe dn" id="dlShort">↓ свайп — демо-шорт</div>
+    </div>
+    <div class="dl-foot">DEMO · виртуальные сделки · аналитика, не торговая рекомендация · реальные ордера не выставляются. Бар вероятностей и свайпы — шелл, логику подключаем в Модулях 3–4.</div>
+  </div>
   <div class="disclaimer">
     <b>ScalpSniper.</b> Терминал структурирует твои наблюдения, хранит план по зонам и считает риск по уровням, которые вводишь <b>ты</b>. Разбор скриншотов происходит в чате — описание структуры, без готовых сделок. Скорость снайпера — в <b>заранее принятом решении</b>, а не в анализе в моменте: размечай зоны до сессии, в сессии — один точный выстрел. Решение о входе, стопе и цели всегда за тобой. Это аналитика, не торговая рекомендация.
   </div>
@@ -1523,7 +1571,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     document.getElementById('prepPhase').classList.toggle('hide',p!=='prep');
     document.getElementById('livePhase').classList.toggle('hide',p!=='live');
     document.getElementById('journalPhase').classList.toggle('hide',p!=='journal');
-    document.getElementById('modeBadge').textContent = p==='prep'?'PREP':p==='live'?'LIVE':'LOG';
+    // ДЕМО — изолированная фаза во всю ширину: прячем боевой грид, показываем тренажёр
+    const _grid=document.getElementById('terminalGrid'); if(_grid)_grid.classList.toggle('hide',p==='demo');
+    const _demo=document.getElementById('demoPhase'); if(_demo)_demo.classList.toggle('hide',p!=='demo');
+    document.getElementById('modeBadge').textContent = p==='prep'?'PREP':p==='live'?'LIVE':p==='demo'?'DEMO':'LOG';
     // в Сессии/Журнале сворачиваем инструменты ввода — список зон выходит на первый план; в Подготовке раскрыты
     const zt=document.getElementById('zoneTools'); if(zt)zt.classList.toggle('open',p==='prep');
     if(p==='prep')renderReadinessScore();
@@ -1532,6 +1583,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       : p==='live'
       ? 'Фаза сессии — реагируешь, не анализируешь. Вводишь текущую цену, панель подсвечивает активную зону и твой готовый план. Думать поздно, исполняй размеченное.'
       : 'Журнал — разбор после сессии. Закрытые зоны, факт vs план, винрейт по типам и протоколам. Ищи паттерн, не оправдание.';
+    if(p==='demo')document.getElementById('phaseDesc').textContent='ДЕМО-тренажёр — изолированная симуляция на синтетике. Обкатка гипотез и сбор аналитики. Решения и реальные сделки — вне этого режима.';
+    if(p==='demo'){ if(typeof _demoStart==='function')_demoStart(); } else { if(typeof _demoStop==='function')_demoStop(); }
     if(p==='live'){
       const lpEl=document.getElementById('livePrice');
       const prepPx=document.getElementById('price').value;
@@ -3772,6 +3825,72 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     window.addEventListener('scroll',_onScroll,{passive:true});
     _onScroll();
   })();
+
+  // ===== DEMO LAB (Модуль 1): синтетический стакан в Web Worker + Canvas =====
+  let _dlWorker=null,_dlRAF=null,_dlSnap=null,_dlUps=0,_dlFrames=0,_dlLastSec=0,_dlRunning=false;
+  let _dlCtx=null,_dlW=0,_dlH=0;
+  function _dlWorkerCode(){ return `
+    let mid=72.26, n=12, bucket=0.02;
+    let asks=[], bids=[];
+    function seed(){ asks=[]; bids=[];
+      for(let i=1;i<=n;i++){ asks.push({p:mid+i*bucket,s:200+Math.random()*800}); bids.push({p:mid-i*bucket,s:200+Math.random()*800}); } }
+    seed();
+    function step(){
+      mid += (Math.random()-0.5)*bucket*0.6;
+      for(let i=0;i<n;i++){ asks[i].s=Math.max(40,asks[i].s+(Math.random()-0.5)*180); bids[i].s=Math.max(40,bids[i].s+(Math.random()-0.5)*180); asks[i].p=mid+(i+1)*bucket; bids[i].p=mid-(i+1)*bucket; }
+      if(Math.random()<0.03){ const w=asks[(Math.random()*n)|0]; if(w)w.s+=1500; }
+      if(Math.random()<0.03){ const w=bids[(Math.random()*n)|0]; if(w)w.s+=1500; }
+    }
+    function snap(){ const buf=new Float32Array(2+n*4); buf[0]=mid; buf[1]=n; let k=2;
+      for(let i=0;i<n;i++)buf[k++]=asks[i].p; for(let i=0;i<n;i++)buf[k++]=asks[i].s;
+      for(let i=0;i<n;i++)buf[k++]=bids[i].p; for(let i=0;i<n;i++)buf[k++]=bids[i].s; return buf; }
+    let ups=0,t0=Date.now(),lastSend=0; const TICK=10,SEND=36;
+    setInterval(()=>{ step(); ups++; const now=Date.now();
+      if(now-lastSend>=SEND){ lastSend=now; const b=snap(); self.postMessage({t:'snap',buf:b.buffer,ups:ups,since:now-t0},[b.buffer]); ups=0; t0=now; }
+    },TICK);
+  `; }
+  function _dlSetupCanvas(){
+    const cv=document.getElementById('dlBook'); if(!cv)return;
+    const dpr=window.devicePixelRatio||1; const rect=cv.getBoundingClientRect();
+    const w=rect.width||cv.clientWidth||320, h=300;
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    _dlCtx=cv.getContext('2d'); _dlCtx.setTransform(dpr,0,0,dpr,0,0); _dlW=w; _dlH=h;
+  }
+  function _dlDraw(){
+    const ctx=_dlCtx; if(!ctx)return; const W=_dlW,H=_dlH; ctx.clearRect(0,0,W,H);
+    const s=_dlSnap; if(!s)return;
+    const mid=s[0], n=s[1]|0; let k=2;
+    const aP=[],aS=[],bP=[],bS=[];
+    for(let i=0;i<n;i++)aP.push(s[k++]); for(let i=0;i<n;i++)aS.push(s[k++]);
+    for(let i=0;i<n;i++)bP.push(s[k++]); for(let i=0;i<n;i++)bS.push(s[k++]);
+    let mx=1; for(let i=0;i<n;i++){ if(aS[i]>mx)mx=aS[i]; if(bS[i]>mx)mx=bS[i]; }
+    const rowH=Math.min(11,(H-30)/(2*n)), cx=W*0.5, midY=H*0.5, bwMax=W*0.46;
+    ctx.font='10px JetBrains Mono, monospace'; ctx.textBaseline='middle';
+    for(let i=0;i<n;i++){ const y=midY-14-(i+1)*rowH, bw=(aS[i]/mx)*bwMax;
+      ctx.fillStyle='rgba(226,75,74,.85)'; ctx.fillRect(cx,y,bw,rowH-2);
+      ctx.fillStyle='#8a8f98'; ctx.textAlign='left'; ctx.fillText(aP[i].toFixed(2),4,y+rowH/2); }
+    for(let i=0;i<n;i++){ const y=midY+14+i*rowH, bw=(bS[i]/mx)*bwMax;
+      ctx.fillStyle='rgba(29,158,117,.85)'; ctx.fillRect(cx-bw,y,bw,rowH-2);
+      ctx.fillStyle='#8a8f98'; ctx.textAlign='left'; ctx.fillText(bP[i].toFixed(2),4,y+rowH/2); }
+    ctx.strokeStyle='rgba(255,122,24,.5)'; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(0,midY); ctx.lineTo(W,midY); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle='#ff7a18'; ctx.textAlign='center'; ctx.fillText(mid.toFixed(2)+' · mid',cx,midY);
+  }
+  function _demoStart(){
+    if(_dlRunning)return; _dlRunning=true;
+    try{ const blob=new Blob([_dlWorkerCode()],{type:'application/javascript'});
+      _dlWorker=new Worker(URL.createObjectURL(blob));
+      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); if(d.since>0)_dlUps=Math.round(d.ups*1000/d.since); } };
+    }catch(err){ const r=document.getElementById('dlRate'); if(r)r.textContent='worker N/A'; }
+    _dlSetupCanvas(); _dlLastSec=performance.now(); _dlFrames=0;
+    const loop=ts=>{ if(!_dlRunning)return; _dlDraw(); _dlFrames++;
+      if(ts-_dlLastSec>=1000){ const fps=Math.round(_dlFrames*1000/(ts-_dlLastSec)); _dlFrames=0; _dlLastSec=ts;
+        const r=document.getElementById('dlRate'); if(r)r.textContent=fps+' FPS';
+        const u=document.getElementById('dlUps'); if(u)u.textContent=_dlUps; }
+      _dlRAF=requestAnimationFrame(loop); };
+    _dlRAF=requestAnimationFrame(loop);
+  }
+  function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; }
+  window.addEventListener('resize',()=>{ if(_dlRunning)_dlSetupCanvas(); });
 
   function toggleCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; const open=w.classList.toggle('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded',open?'true':'false'); try{localStorage.setItem('msa_calc_open_v1',open?'1':'0');}catch(e){} }
   function _restoreCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; let o='0'; try{o=localStorage.getItem('msa_calc_open_v1')||'0';}catch(e){} if(o==='1'){w.classList.add('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded','true');} }
