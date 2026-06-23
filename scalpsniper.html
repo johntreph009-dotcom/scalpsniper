@@ -1254,6 +1254,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="dl-head">
       <span class="dl-badge">DEMO</span>
       <span class="dl-title">Demo Lab · тренажёр</span>
+      <span class="ticker-input-wrap demo-tkwrap" id="demoTkWrap"><input id="demoTicker" class="sess-tk" autocomplete="off" placeholder="BTC/USDT" onfocus="_openDemoDD()" oninput="_filterDemoDD()" onchange="_pickDemoInput()" title="Сменить инструмент стакана"><button type="button" class="ticker-dd-toggle" id="demoDDToggle" onclick="_toggleDemoDD(event)" aria-label="Список тикеров">▾</button><div class="ticker-dd" id="demoTickerDD"></div></span>
       <span class="dl-rate" id="dlRate">—</span>
     </div>
     <div class="dl-prob-lbl">Распределение — гипотеза модели · демо</div>
@@ -3733,10 +3734,34 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _filterSessDD(){ _renderSessDD(true); _openSessDD(); }
   function _pickSess(s){ const el=document.getElementById('sessTicker'); el.value=s+'/USDT'; setSessionTicker(s+'/USDT'); _closeSessDD(); }
   document.addEventListener('click',e=>{ if(!e.target.closest('#sessTkWrap'))_closeSessDD(); });
+  // ── дропдаун тикера в Demo Lab (тот же топ-список, что в Подготовке/Сессии) ──
+  function _renderDemoDD(useFilter){
+    const dd=document.getElementById('demoTickerDD'); if(!dd)return;
+    const base=(_tickerSyms&&_tickerSyms.length)?_tickerSyms:(_DEFAULT_TICKERS||[]);
+    let syms=base;
+    if(useFilter){ const q=(document.getElementById('demoTicker').value||'').replace(/[\/\-_ ]/g,'').replace(/USDT$/i,'').toUpperCase(); syms=q?base.filter(s=>s.includes(q)):base; }
+    dd.innerHTML=_tdInner(syms,'_pickDemo'); _markActiveChip();
+  }
+  function _openDemoDD(){ const w=document.getElementById('demoTkWrap'); if(w){_renderDemoDD(false);w.classList.add('open');} }
+  function _closeDemoDD(){ const w=document.getElementById('demoTkWrap'); if(w)w.classList.remove('open'); }
+  function _toggleDemoDD(e){ e.preventDefault();e.stopPropagation(); const w=document.getElementById('demoTkWrap'); if(!w)return; if(w.classList.contains('open'))_closeDemoDD(); else {_openDemoDD();document.getElementById('demoTicker').focus();} }
+  function _filterDemoDD(){ _renderDemoDD(true); _openDemoDD(); }
+  function _pickDemo(s){ _demoSetSym(s+'/USDT'); _closeDemoDD(); }
+  function _pickDemoInput(){ const v=(document.getElementById('demoTicker').value||'').trim(); if(v)_demoSetSym(/\//.test(v)?v.toUpperCase():v.toUpperCase()+'/USDT'); }
+  // смена инструмента стакана: синхронизируем с общим тикером и перезапускаем поток
+  function _demoSetSym(tk){
+    const el=document.getElementById('ticker'); if(el)el.value=tk;
+    if(typeof saveSettings==='function')saveSettings();
+    const dt=document.getElementById('demoTicker'); if(dt)dt.value=tk;
+    const ss=document.getElementById('dlSym'); if(ss)ss.textContent=(typeof _symFromTicker==='function')?_symFromTicker(tk):tk;
+    if(typeof _syncSessTicker==='function')_syncSessTicker();
+    if(_dlRunning){ _demoStop(); _demoStart(); }
+  }
+  document.addEventListener('click',e=>{ if(!e.target.closest('#demoTkWrap'))_closeDemoDD(); });
   function _markActiveChip(){
     const norm=v=>(v||'').replace(/[\/\-_ ]/g,'').replace(/USDT$/i,'').toUpperCase();
-    const a=norm(document.getElementById('ticker')?.value), b=norm(document.getElementById('sessTicker')?.value);
-    document.querySelectorAll('.ticker-dd-item').forEach(c=>c.classList.toggle('active',c.dataset.sym===a||c.dataset.sym===b));
+    const a=norm(document.getElementById('ticker')?.value), b=norm(document.getElementById('sessTicker')?.value), d=norm(document.getElementById('demoTicker')?.value);
+    document.querySelectorAll('.ticker-dd-item').forEach(c=>c.classList.toggle('active',c.dataset.sym===a||c.dataset.sym===b||c.dataset.sym===d));
   }
   let _tkMeta={}, _tkSort='rng';
   function _tdMetaHtml(m){ return m?`<span class="tdd-meta"><span class="tdd-rng" title="дневной диапазон high-low">${m.rng.toFixed(1)}%</span><span class="tdd-chg ${m.chg>=0?'up':'down'}" title="изменение за 24ч">${m.chg>=0?'+':''}${m.chg.toFixed(1)}%</span><span class="tdd-vol" title="оборот за 24ч">$${(m.qv/1e6).toFixed(0)}M</span></span>`:''; }
@@ -3947,6 +3972,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const _sym=(typeof _symFromTicker==='function')?_symFromTicker(_raw):'BTCUSDT';
       _dlWorker.postMessage({cmd:'init',symbol:_sym});
       const _se=document.getElementById('dlSym'); if(_se)_se.textContent=_sym;
+      const _dt=document.getElementById('demoTicker'); if(_dt&&document.activeElement!==_dt)_dt.value=_raw;
     }catch(err){ const r=document.getElementById('dlRate'); if(r)r.textContent='worker N/A'; }
     _dlSetupCanvas(); _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlSetRegime(_dlRegime,true);
     _dlLastSec=performance.now(); _dlFrames=0; _dlEngLast=0;
