@@ -3847,7 +3847,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _dlComputeDec(aP,bP,n,mid){
     let tick=Infinity;
     for(let i=1;i<n;i++){ const d1=Math.abs(aP[i]-aP[i-1]); if(d1>1e-12&&d1<tick)tick=d1; const d2=Math.abs(bP[i]-bP[i-1]); if(d2>1e-12&&d2<tick)tick=d2; }
-    if(isFinite(tick)&&tick>0){ tick=+tick.toPrecision(6); return Math.max(0,Math.min(8,Math.ceil(-Math.log10(tick)-1e-6))); }
+    if(isFinite(tick)&&tick>0){ tick=+tick.toPrecision(2); return Math.max(0,Math.min(8,Math.ceil(-Math.log10(tick)-1e-6))); }
     const a=Math.abs(mid); return a>=100?2:a>=1?4:a>=0.01?6:8;
   }
   function _dlWorkerCode(){ return `
