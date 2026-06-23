@@ -1263,7 +1263,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <div class="dl-prob-seg fl" id="dlProbFl" style="width:20%">↔ 20%</div>
     </div>
     <div class="dl-regime"><span class="dl-regime-chip" id="dlRegime">РЕЖИМ: FLAT_SCALPING</span><span class="dl-regime-note" id="dlEngNote">гистерезис 3с</span></div>
-    <div class="dl-canvas-lbl">Симулируемый стакан · Canvas · <span id="dlUps">0</span> упд/с</div>
+    <div class="dl-canvas-lbl">Стакан <span id="dlSym">—</span> · <span id="dlSrc">подключение…</span> · <span id="dlUps">0</span> упд/с</div>
     <div class="dl-canvas-wrap"><canvas id="dlBook"></canvas></div>
     <div class="dl-swipes">
       <div class="dl-swipe up" id="dlLong">↑ свайп / тап — демо-лонг</div>
@@ -1271,7 +1271,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     </div>
     <div class="dl-trades" id="dlTrades">демо-сделок: 0</div>
     <div class="dl-feedback" id="dlFeedback"></div>
-    <div class="dl-foot">DEMO · виртуальные сделки · аналитика, не торговая рекомендация · реальные ордера не выставляются. Бар вероятностей и режим — гипотеза модели; контр-тренд помечается, но не блокируется — решаешь ты.</div>
+    <div class="dl-foot">DEMO · реальный стакан и лента Binance, сделки виртуальные · аналитика, не торговая рекомендация · реальные ордера не выставляются. Бар и режим — гипотеза модели; контр-тренд помечается, но не блокируется — решаешь ты.</div>
   </div>
   <div class="disclaimer">
     <b>ScalpSniper.</b> Терминал структурирует твои наблюдения, хранит план по зонам и считает риск по уровням, которые вводишь <b>ты</b>. Разбор скриншотов происходит в чате — описание структуры, без готовых сделок. Скорость снайпера — в <b>заранее принятом решении</b>, а не в анализе в моменте: размечай зоны до сессии, в сессии — один точный выстрел. Решение о входе, стопе и цели всегда за тобой. Это аналитика, не торговая рекомендация.
@@ -1594,7 +1594,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       : p==='live'
       ? 'Фаза сессии — реагируешь, не анализируешь. Вводишь текущую цену, панель подсвечивает активную зону и твой готовый план. Думать поздно, исполняй размеченное.'
       : 'Журнал — разбор после сессии. Закрытые зоны, факт vs план, винрейт по типам и протоколам. Ищи паттерн, не оправдание.';
-    if(p==='demo')document.getElementById('phaseDesc').textContent='ДЕМО-тренажёр — изолированная симуляция на синтетике. Обкатка гипотез и сбор аналитики. Решения и реальные сделки — вне этого режима.';
+    if(p==='demo')document.getElementById('phaseDesc').textContent='ДЕМО — реальный стакан и поток сделок Binance по выбранному тикеру. Модель считает гипотезу, демо-сделки виртуальные. Решения и реальный вход — за тобой.';
     if(p==='demo'){ if(typeof _demoStart==='function')_demoStart(); } else { if(typeof _demoStop==='function')_demoStop(); }
     if(p==='live'){
       const lpEl=document.getElementById('livePrice');
@@ -3841,52 +3841,68 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   let _dlWorker=null,_dlRAF=null,_dlSnap=null,_dlUps=0,_dlFrames=0,_dlLastSec=0,_dlRunning=false;
   let _dlCtx=null,_dlW=0,_dlH=0;
   let _dlModel=null,_dlRegime='FLAT_SCALPING',_dlCand=null,_dlCandT=0,_dlEngLast=0,_dlJournal=[];
+  let _dlMsgCount=0,_dlSrc='—';
   const DLJ_KEY='msa_demo_journal_v1';
   function _dlWorkerCode(){ return `
-    let mid=72.26, n=12, bucket=0.02;
-    let asks=[], bids=[];
-    let midEma=mid, cumDelta=0, tape=0, tapePrev=0, imbPrev=0;
-    function seed(){ asks=[]; bids=[];
-      for(let i=1;i<=n;i++){ asks.push({p:mid+i*bucket,s:200+Math.random()*800}); bids.push({p:mid-i*bucket,s:200+Math.random()*800}); } }
-    seed();
-    function step(){
-      mid += (Math.random()-0.5)*bucket*0.6;
-      midEma += (mid-midEma)*0.05;
-      for(let i=0;i<n;i++){ asks[i].s=Math.max(40,asks[i].s+(Math.random()-0.5)*180); bids[i].s=Math.max(40,bids[i].s+(Math.random()-0.5)*180); asks[i].p=mid+(i+1)*bucket; bids[i].p=mid-(i+1)*bucket; }
-      if(Math.random()<0.03){ const w=asks[(Math.random()*n)|0]; if(w)w.s+=1500; }
-      if(Math.random()<0.03){ const w=bids[(Math.random()*n)|0]; if(w)w.s+=1500; }
-      const tr=(mid-midEma)/bucket;
-      let nt=(Math.random()*4)|0, buys=0, sells=0;
-      const buyP=0.5+Math.max(-0.35,Math.min(0.35, tr*0.15 + imbPrev*0.2));
-      for(let i=0;i<nt;i++){ if(Math.random()<buyP)buys++; else sells++; }
-      cumDelta = cumDelta*0.995 + (buys-sells);
-      tape = tape*0.9 + nt*0.1;
+    let symbol='BTCUSDT', N=12;
+    let asks=[], bids=[], mid=0, midEma=0, cumDelta=0, tapeEma=0, tapeEmaPrev=0, tradeCount=0, gotDepth=false;
+    let depthWS=null, tradeWS=null, pollT=null;
+    self.onmessage=function(e){ if(e.data&&e.data.cmd==='init'){ symbol=e.data.symbol||'BTCUSDT'; startStreams(); } };
+    function startStreams(){
+      const s=symbol.toLowerCase();
+      try{
+        depthWS=new WebSocket('wss://stream.binance.com:9443/ws/'+s+'@depth20@100ms');
+        depthWS.onmessage=function(ev){ try{ applyDepth(JSON.parse(ev.data)); }catch(e){} };
+        depthWS.onerror=function(){ startPoll(); };
+        depthWS.onclose=function(){ startPoll(); };
+        tradeWS=new WebSocket('wss://stream.binance.com:9443/ws/'+s+'@aggTrade');
+        tradeWS.onmessage=function(ev){ try{ const t=JSON.parse(ev.data); tradeCount++; cumDelta=cumDelta*0.999+(t.m? -(+t.q):(+t.q)); }catch(e){} };
+      }catch(err){ startPoll(); }
+      setTimeout(function(){ if(!gotDepth) startPoll(); }, 3500);
+      setInterval(tick, 100);
+    }
+    function applyDepth(d){
+      const A=d.asks||d.a, B=d.bids||d.b; if(!A||!B)return;
+      const a=[], b=[];
+      for(let i=0;i<A.length&&a.length<N;i++){ const sz=+A[i][1]; if(sz>0)a.push({p:+A[i][0],s:sz}); }
+      for(let i=0;i<B.length&&b.length<N;i++){ const sz=+B[i][1]; if(sz>0)b.push({p:+B[i][0],s:sz}); }
+      if(a.length&&b.length){ asks=a; bids=b; mid=(asks[0].p+bids[0].p)/2; if(!midEma)midEma=mid; gotDepth=true; }
+    }
+    function startPoll(){
+      if(pollT)return;
+      pollT=setInterval(function(){
+        fetch('https://api.binance.com/api/v3/depth?symbol='+symbol+'&limit=20',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){ applyDepth({asks:d.asks,bids:d.bids}); }).catch(function(){});
+      }, 800);
     }
     function model(){
+      const n=Math.min(asks.length,bids.length); if(!n) return {pUp:0.34,pDown:0.33,pFlat:0.33,delta:0,tape:0,absorb:0,chaos:0,dir:'flat'};
       let bidVol=0,askVol=0,maxAsk=0,maxBid=0;
       for(let i=0;i<n;i++){ bidVol+=bids[i].s; askVol+=asks[i].s; if(asks[i].s>maxAsk)maxAsk=asks[i].s; if(bids[i].s>maxBid)maxBid=bids[i].s; }
-      const imb=(bidVol-askVol)/(bidVol+askVol||1);
-      const tr=(mid-midEma)/bucket, trN=Math.max(-1,Math.min(1,tr/3)), dN=Math.max(-1,Math.min(1,cumDelta/300));
+      const tot=bidVol+askVol||1;
+      const imb=(bidVol-askVol)/tot;
+      const trN=midEma?Math.max(-1,Math.min(1,(mid-midEma)/midEma/0.0008)):0;
+      const dN=Math.max(-1,Math.min(1, cumDelta/(tot*0.1||1)));
       let up=Math.max(0, imb*0.4 + dN*0.3 + trN*0.3);
       let dn=Math.max(0, -imb*0.4 - dN*0.3 - trN*0.3);
       let fl=0.25 + 0.5*(1-Math.min(1,Math.abs(imb)+Math.abs(trN)+Math.abs(dN)));
-      const slow=tape<tapePrev; let absorb=0;
+      const slow=tapeEma<tapeEmaPrev; let absorb=0;
       if(slow && trN>0.1 && maxAsk>askVol/n*1.8){ dn+=0.25; absorb=1; }
       if(slow && trN<-0.1 && maxBid>bidVol/n*1.8){ up+=0.25; absorb=1; }
       const sum=up+dn+fl||1; const pUp=up/sum,pDown=dn/sum,pFlat=fl/sum;
-      const vol=Math.abs(mid-midEma)/bucket, edge=Math.max(pUp,pDown,pFlat)-Math.min(pUp,pDown,pFlat);
-      const chaos=(vol>2.2 && edge<0.18)?1:0;
+      const volBps=midEma?Math.abs(mid-midEma)/midEma*10000:0, edge=Math.max(pUp,pDown,pFlat)-Math.min(pUp,pDown,pFlat);
+      const chaos=(volBps>8 && edge<0.18)?1:0;
       const dir=(pFlat>pUp&&pFlat>pDown)?'flat':(pUp>pDown?'up':'down');
-      tapePrev=tape; imbPrev=imb;
-      return {pUp:pUp,pDown:pDown,pFlat:pFlat,delta:Math.round(cumDelta),tape:+tape.toFixed(2),absorb:absorb,chaos:chaos,dir:dir};
+      return {pUp:pUp,pDown:pDown,pFlat:pFlat,delta:Math.round(cumDelta),tape:+tapeEma.toFixed(1),absorb:absorb,chaos:chaos,dir:dir};
     }
-    function snap(){ const buf=new Float32Array(2+n*4); buf[0]=mid; buf[1]=n; let k=2;
+    function snap(){ const n=Math.min(asks.length,bids.length,N); const buf=new Float32Array(2+n*4); buf[0]=mid; buf[1]=n; let k=2;
       for(let i=0;i<n;i++)buf[k++]=asks[i].p; for(let i=0;i<n;i++)buf[k++]=asks[i].s;
       for(let i=0;i<n;i++)buf[k++]=bids[i].p; for(let i=0;i<n;i++)buf[k++]=bids[i].s; return buf; }
-    let ups=0,t0=Date.now(),lastSend=0; const TICK=10,SEND=36;
-    setInterval(()=>{ step(); ups++; const now=Date.now();
-      if(now-lastSend>=SEND){ lastSend=now; const b=snap(); self.postMessage({t:'snap',buf:b.buffer,m:model(),ups:ups,since:now-t0},[b.buffer]); ups=0; t0=now; }
-    },TICK);
+    function tick(){
+      if(midEma&&mid)midEma+=(mid-midEma)*0.05;
+      tapeEmaPrev=tapeEma; tapeEma=tapeEma*0.8+tradeCount*0.2; tradeCount=0;
+      if(!asks.length||!bids.length)return;
+      const b=snap(); self.postMessage({t:'snap',buf:b.buffer,m:model(),src:(pollT?'poll':'ws')},[b.buffer]);
+    }
   `; }
   function _dlSetupCanvas(){
     const cv=document.getElementById('dlBook'); if(!cv)return;
@@ -3918,7 +3934,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(_dlRunning)return; _dlRunning=true;
     try{ const blob=new Blob([_dlWorkerCode()],{type:'application/javascript'});
       _dlWorker=new Worker(URL.createObjectURL(blob));
-      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.since>0)_dlUps=Math.round(d.ups*1000/d.since); } };
+      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; } };
+      const _raw=(document.getElementById('ticker')&&document.getElementById('ticker').value)||'BTC/USDT';
+      const _sym=(typeof _symFromTicker==='function')?_symFromTicker(_raw):'BTCUSDT';
+      _dlWorker.postMessage({cmd:'init',symbol:_sym});
+      const _se=document.getElementById('dlSym'); if(_se)_se.textContent=_sym;
     }catch(err){ const r=document.getElementById('dlRate'); if(r)r.textContent='worker N/A'; }
     _dlSetupCanvas(); _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlSetRegime(_dlRegime,true);
     _dlLastSec=performance.now(); _dlFrames=0; _dlEngLast=0;
@@ -3926,11 +3946,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); }
       if(ts-_dlLastSec>=1000){ const fps=Math.round(_dlFrames*1000/(ts-_dlLastSec)); _dlFrames=0; _dlLastSec=ts;
         const r=document.getElementById('dlRate'); if(r)r.textContent=fps+' FPS';
-        const u=document.getElementById('dlUps'); if(u)u.textContent=_dlUps; }
+        const u=document.getElementById('dlUps'); if(u)u.textContent=_dlMsgCount; _dlMsgCount=0;
+        const sc=document.getElementById('dlSrc'); if(sc)sc.textContent=(_dlSrc==='ws'?'live':_dlSrc==='poll'?'REST':'подключение…'); }
       _dlRAF=requestAnimationFrame(loop); };
     _dlRAF=requestAnimationFrame(loop);
   }
-  function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; }
+  function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; _dlSrc='—'; _dlMsgCount=0; }
   window.addEventListener('resize',()=>{ if(_dlRunning)_dlSetupCanvas(); });
 
   // ── Модуль 3: гистерезис + стейт-машина режимов ──
