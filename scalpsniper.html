@@ -3841,8 +3841,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   let _dlWorker=null,_dlRAF=null,_dlSnap=null,_dlUps=0,_dlFrames=0,_dlLastSec=0,_dlRunning=false;
   let _dlCtx=null,_dlW=0,_dlH=0;
   let _dlModel=null,_dlRegime='FLAT_SCALPING',_dlCand=null,_dlCandT=0,_dlEngLast=0,_dlJournal=[];
-  let _dlMsgCount=0,_dlSrc='—';
+  let _dlMsgCount=0,_dlSrc='—',_dlDec=2;
   const DLJ_KEY='msa_demo_journal_v1';
+  // знаки после запятой по реальному шагу цены инструмента (из стакана) — корректно для любой монеты
+  function _dlComputeDec(aP,bP,n,mid){
+    let tick=Infinity;
+    for(let i=1;i<n;i++){ const d1=Math.abs(aP[i]-aP[i-1]); if(d1>1e-12&&d1<tick)tick=d1; const d2=Math.abs(bP[i]-bP[i-1]); if(d2>1e-12&&d2<tick)tick=d2; }
+    if(isFinite(tick)&&tick>0) return Math.max(0,Math.min(8,Math.ceil(-Math.log10(tick)-1e-9)));
+    const a=Math.abs(mid); return a>=100?2:a>=1?4:a>=0.01?6:8;
+  }
   function _dlWorkerCode(){ return `
     let symbol='BTCUSDT', N=12;
     let asks=[], bids=[], mid=0, midEma=0, cumDelta=0, tapeEma=0, tapeEmaPrev=0, tradeCount=0, gotDepth=false;
@@ -3919,16 +3926,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     for(let i=0;i<n;i++)aP.push(s[k++]); for(let i=0;i<n;i++)aS.push(s[k++]);
     for(let i=0;i<n;i++)bP.push(s[k++]); for(let i=0;i<n;i++)bS.push(s[k++]);
     let mx=1; for(let i=0;i<n;i++){ if(aS[i]>mx)mx=aS[i]; if(bS[i]>mx)mx=bS[i]; }
+    _dlDec=_dlComputeDec(aP,bP,n,mid);
     const rowH=Math.min(11,(H-30)/(2*n)), cx=W*0.5, midY=H*0.5, bwMax=W*0.46;
     ctx.font='10px JetBrains Mono, monospace'; ctx.textBaseline='middle';
     for(let i=0;i<n;i++){ const y=midY-14-(i+1)*rowH, bw=(aS[i]/mx)*bwMax;
       ctx.fillStyle='rgba(226,75,74,.85)'; ctx.fillRect(cx,y,bw,rowH-2);
-      ctx.fillStyle='#8a8f98'; ctx.textAlign='left'; ctx.fillText(aP[i].toFixed(2),4,y+rowH/2); }
+      ctx.fillStyle='#8a8f98'; ctx.textAlign='left'; ctx.fillText(aP[i].toFixed(_dlDec),4,y+rowH/2); }
     for(let i=0;i<n;i++){ const y=midY+14+i*rowH, bw=(bS[i]/mx)*bwMax;
       ctx.fillStyle='rgba(29,158,117,.85)'; ctx.fillRect(cx-bw,y,bw,rowH-2);
-      ctx.fillStyle='#8a8f98'; ctx.textAlign='left'; ctx.fillText(bP[i].toFixed(2),4,y+rowH/2); }
+      ctx.fillStyle='#8a8f98'; ctx.textAlign='left'; ctx.fillText(bP[i].toFixed(_dlDec),4,y+rowH/2); }
     ctx.strokeStyle='rgba(255,122,24,.5)'; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(0,midY); ctx.lineTo(W,midY); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle='#ff7a18'; ctx.textAlign='center'; ctx.fillText(mid.toFixed(2)+' · mid',cx,midY);
+    ctx.fillStyle='#ff7a18'; ctx.textAlign='center'; ctx.fillText(mid.toFixed(_dlDec)+' · mid',cx,midY);
   }
   function _demoStart(){
     if(_dlRunning)return; _dlRunning=true;
@@ -3984,7 +3992,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _dlLoadJournal(){ try{_dlJournal=JSON.parse(localStorage.getItem(DLJ_KEY)||'[]');}catch(e){_dlJournal=[];} }
   function _dlSaveJournal(){ try{localStorage.setItem(DLJ_KEY,JSON.stringify(_dlJournal.slice(-200)));}catch(e){} }
   function _dlTrade(side){
-    const px=_dlSnap?+_dlSnap[0].toFixed(2):null, m=_dlModel;
+    const px=_dlSnap?+_dlSnap[0].toFixed(_dlDec):null, m=_dlModel;
     let warn='';
     if(_dlRegime==='SAFE_SHUTDOWN') warn='⚠ SAFE_SHUTDOWN — рынок хаотичен';
     else if(_dlRegime==='TREND_ALIGNED' && m){ const trendUp=m.pUp>m.pDown; if((side==='long')!==trendUp) warn='⚠ против тренда модели'; }
