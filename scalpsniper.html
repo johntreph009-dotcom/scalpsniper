@@ -987,7 +987,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     </div>
     <div class="hdr-zone-pill" id="hdrZonePill">● <span id="hdrZoneNum"></span> · <span id="hdrZoneKind"></span></div>
   </div>
-  <p class="phase-desc" id="phaseDesc">До сессии — читаешь рынок, размечаешь зоны. В сессии — только исполнение.</p>
+  <p class="phase-desc" id="phaseDesc">До сессии — читаешь рынок, размечаешь зоны: ⚡ быстрые зоны из стакана, разбор по скринам или ручной ввод. В сессии — только исполнение.</p>
 
 <div class="terminal-grid" id="terminalGrid">
   <div class="t-main">
@@ -1070,7 +1070,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     </div>
     <div id="quickStatus" class="quick-status"></div>
     <div class="output hide" id="outBox">
-      <div class="output-head"><div class="ot">Запрос на разбор · AI подберёт зоны-кандидаты</div><button class="copy-btn" onclick="copyOut()">Копировать</button></div>
+      <div class="output-head"><div class="ot" id="otHead">Запрос на разбор · AI подберёт зоны-кандидаты</div><button class="copy-btn" onclick="copyOut()">Копировать</button></div>
       <pre id="outPre"></pre>
     </div>
   </div>
@@ -1605,10 +1605,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const zt=document.getElementById('zoneTools'); if(zt)zt.classList.toggle('open',p==='prep');
     if(p==='prep')renderReadinessScore();
     document.getElementById('phaseDesc').textContent = p==='prep'
-      ? 'До сессии — читаешь рынок, размечаешь зоны. В сессии — только исполнение.'
+      ? 'До сессии — читаешь рынок, размечаешь зоны: ⚡ быстрые зоны из стакана, разбор по скринам или ручной ввод. В сессии — только исполнение.'
       : p==='live'
       ? 'Фаза сессии — реагируешь, не анализируешь. Вводишь текущую цену, панель подсвечивает активную зону и твой готовый план. Думать поздно, исполняй размеченное.'
-      : 'Журнал — разбор после сессии. Закрытые зоны, факт vs план, винрейт по типам и протоколам. Ищи паттерн, не оправдание.';
+      : 'Журнал — разбор после сессии. Сделки и отработка зон, факт vs план, винрейт по типам и протоколам, бэкап и синхронизация. Ищи паттерн, не оправдание.';
     if(p==='demo')document.getElementById('phaseDesc').textContent='ДЕМО — реальный стакан и поток сделок Binance по выбранному тикеру. Модель считает гипотезу, демо-сделки виртуальные. Решения и реальный вход — за тобой.';
     if(p==='demo'){ if(typeof _demoStart==='function')_demoStart(); } else { if(typeof _demoStop==='function')_demoStop(); }
     if(p==='live'){
@@ -2055,14 +2055,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       'цена | тип | план | стоп',
       'где тип = fade / break / watch / stand, стоп опционален. Это наблюдения-кандидаты — финальное решение и уровни я подтверждаю сам.');
     document.getElementById('outPre').textContent=L.join('\n');
-    document.getElementById('outBox').classList.remove('hide');
-    document.getElementById('outBox').scrollIntoView({behavior:'smooth',block:'nearest'});
     // if API key + images → auto-fill zone candidates
     const _ak=localStorage.getItem(AKEY)||'';
-    if(_ak){
-      const _imgs=['dom','tape','liq','chart'].map(f=>{const el=document.getElementById('img_'+f);return(el&&el.src&&el.src.startsWith('data:'))?{field:f,src:el.src}:null;}).filter(Boolean);
-      if(_imgs.length>0)analyzeAllShots(_imgs,_ak);
-    }
+    const _imgs=_ak?['dom','tape','liq','chart'].map(f=>{const el=document.getElementById('img_'+f);return(el&&el.src&&el.src.startsWith('data:'))?{field:f,src:el.src}:null;}).filter(Boolean):[];
+    const _oh=document.getElementById('otHead');
+    if(_oh)_oh.textContent=(_ak&&_imgs.length>0)
+      ?'AI уже разбирает скрины — зоны подставятся сами · ниже копия запроса'
+      :'Скопируй запрос в чат Claude · зоны вернутся pipe-блоком → «Ввод зон»';
+    document.getElementById('outBox').classList.remove('hide');
+    document.getElementById('outBox').scrollIntoView({behavior:'smooth',block:'nearest'});
+    if(_imgs.length>0)analyzeAllShots(_imgs,_ak);
   }
   function copyOut(){navigator.clipboard.writeText(document.getElementById('outPre').textContent).then(()=>{const b=event.target,o=b.textContent;b.textContent='Скопировано';setTimeout(()=>b.textContent=o,1400)});}
   function resetPrep(){
