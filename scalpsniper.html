@@ -109,6 +109,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .dl-swipe{cursor:pointer}
   .dl-trades{font-size:11px;color:var(--text-dim);text-align:center;font-family:'JetBrains Mono',monospace;margin-bottom:6px}
   .dl-feedback{font-size:11px;text-align:center;font-family:'JetBrains Mono',monospace;min-height:14px;opacity:0;transition:opacity .15s;margin-bottom:10px}
+  .dl-outcomes{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:6px;min-height:18px}
+  .dl-oc{font-size:10px;font-family:'JetBrains Mono',monospace;padding:2px 7px;border-radius:9px;border:1px solid var(--line);color:var(--text-dim)}
+  .dl-oc.win{color:#5DCAA5;border-color:rgba(29,158,117,.4)} .dl-oc.loss{color:#F09595;border-color:rgba(226,75,74,.4)} .dl-oc.flat{color:#8a8f98}
+  .dl-readscore{font-size:10.5px;color:var(--text-dim);text-align:center;font-family:'JetBrains Mono',monospace;line-height:1.7;margin-bottom:10px}
+  .dl-readscore b{color:#e8ecf0;font-weight:600}
+  .dl-readscore .rs-note{color:var(--text-faint);font-size:9.5px}
   .dl-feedback.show{opacity:1}
   .dl-feedback.up{color:#5DCAA5}
   .dl-feedback.dn{color:#F09595}
@@ -1286,6 +1292,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     </div>
     <div class="dl-trades" id="dlTrades">демо-сделок: 0</div>
     <div class="dl-feedback" id="dlFeedback"></div>
+    <div class="dl-outcomes" id="dlOutcomes"></div>
+    <div class="dl-readscore" id="dlReadScore"></div>
     <div class="dl-foot">DEMO · реальный стакан и лента Binance, сделки виртуальные · аналитика, не торговая рекомендация · реальные ордера не выставляются. Бар и режим — гипотеза модели; контр-тренд помечается, но не блокируется — решаешь ты.</div>
   </div>
   <div class="disclaimer">
@@ -4046,7 +4054,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const _se=document.getElementById('dlSym'); if(_se)_se.textContent=_sym;
       const _dt=document.getElementById('demoTicker'); if(_dt&&document.activeElement!==_dt)_dt.value=_raw;
     }catch(err){ const r=document.getElementById('dlRate'); if(r)r.textContent='worker N/A'; }
-    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlSetRegime(_dlRegime,true);
+    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dlSetRegime(_dlRegime,true);
     _dlLastSec=performance.now(); _dlFrames=0; _dlEngLast=0;
     const loop=ts=>{ if(!_dlRunning)return; _dlDraw(); _dlDrawPrice(); _dlFrames++;
       if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); }
@@ -4062,6 +4070,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
   // ── Модуль 3: гистерезис + стейт-машина режимов ──
   function _dlEngine(now){
+    _dlResolveOutcomes();
     const m=_dlModel; if(!m)return;
     _dlUpdateBar(m);
     const dom=Math.max(m.pUp,m.pDown);
@@ -4094,14 +4103,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     let warn='';
     if(_dlRegime==='SAFE_SHUTDOWN') warn='⚠ SAFE_SHUTDOWN — рынок хаотичен';
     else if(_dlRegime==='TREND_ALIGNED' && m){ const trendUp=m.pUp>m.pDown; if((side==='long')!==trendUp) warn='⚠ против тренда модели'; }
-    _dlJournal.push({side:side,px:px,ts:Date.now(),regime:_dlRegime}); _dlSaveJournal();
+    // спред на входе (bps) — честный порог win/loss: скальп удался, только если движение покрыло спред
+    let sp=null; const s=_dlSnap;
+    if(s){ const n=s[1]|0; if(n>0){ const bA=s[2], bB=s[2+2*n]; if(bA>0&&bB>0) sp=+(((bA-bB)/((bA+bB)/2))*10000).toFixed(2); } }
+    _dlJournal.push({side:side,px:px,ts:Date.now(),regime:_dlRegime,mdir:m?m.dir:null,sp:sp}); _dlSaveJournal();
     try{ if(navigator.vibrate)navigator.vibrate(side==='long'?20:[15,25,15]); }catch(e){}
     _dlRenderTrades(side,px,warn);
   }
   function _dlRenderTrades(side,px,warn){
     const L=_dlJournal.filter(t=>t.side==='long').length, S=_dlJournal.length-L;
     const t=document.getElementById('dlTrades'); if(t)t.textContent='демо-сделок: '+_dlJournal.length+' ('+L+' лонг / '+S+' шорт)';
-    if(side){ const f=document.getElementById('dlFeedback'); if(f){ f.textContent=(side==='long'?'▲ демо-лонг':'▼ демо-шорт')+(px!=null?' @ '+px:'')+(warn?' · '+warn:''); f.className='dl-feedback show '+(warn?'warn':(side==='long'?'up':'dn')); } }
+    if(side){ _dlFbT=Date.now(); const f=document.getElementById('dlFeedback'); if(f){ f.textContent=(side==='long'?'▲ демо-лонг':'▼ демо-шорт')+(px!=null?' @ '+px:'')+(warn?' · '+warn:''); f.className='dl-feedback show '+(warn?'warn':(side==='long'?'up':'dn')); } }
   }
   function _dlBindSwipes(){
     const el=document.querySelector('.dl-canvas-wrap');
@@ -4111,6 +4123,48 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }
     const lo=document.getElementById('dlLong'); if(lo&&!lo._b){ lo._b=1; lo.addEventListener('click',()=>_dlTrade('long')); }
     const sh=document.getElementById('dlShort'); if(sh&&!sh._b){ sh._b=1; sh.addEventListener('click',()=>_dlTrade('short')); }
+  }
+  // ── исходы демо-свайпов: замер mid @15с/@30с, порог = спред на входе ──
+  let _dlFbT=0;
+  function _dlBps(t,px){ return +(((px-t.px)/t.px*10000)*(t.side==='long'?1:-1)).toFixed(1); }
+  function _dlVerdict(t){ if(t.o30==null)return null; const thr=Math.max(1,t.sp||1); return t.o30>=thr?'win':t.o30<=-thr?'loss':'flat'; }
+  function _dlResolveOutcomes(){
+    const px=_dlSnap?_dlSnap[0]:0; if(!px||!_dlJournal.length)return;
+    const now=Date.now(); let changed=false, flash=null;
+    for(let i=Math.max(0,_dlJournal.length-40);i<_dlJournal.length;i++){
+      const t=_dlJournal[i]; if(t.done||t.px==null)continue;
+      const age=now-t.ts;
+      if(t.o15==null && age>=15000 && age<60000){ t.o15=_dlBps(t,px); changed=true; }
+      if(age>=30000){
+        if(age<90000 && t.o30==null){ t.o30=_dlBps(t,px); flash=t; }
+        t.done=1; changed=true; // >90с без замера — вкладка была скрыта, честно оставляем без исхода
+      }
+    }
+    if(changed){ _dlSaveJournal(); _dlRenderOutcomes();
+      if(flash && now-_dlFbT>6000){ const f=document.getElementById('dlFeedback'); if(f){ const v=_dlVerdict(flash);
+        f.textContent=(v==='win'?'✓':v==='loss'?'✗':'≈')+' исход @30с: '+(flash.o30>=0?'+':'')+flash.o30+' bps ('+(flash.side==='long'?'лонг':'шорт')+' @ '+flash.px+')';
+        f.className='dl-feedback show '+(v==='win'?'up':v==='loss'?'warn':''); } }
+    }
+  }
+  function _dlRenderOutcomes(){
+    const done=_dlJournal.filter(t=>t.o30!=null);
+    const oc=document.getElementById('dlOutcomes');
+    if(oc){ oc.innerHTML=done.slice(-6).map(t=>{ const v=_dlVerdict(t);
+      return '<span class="dl-oc '+v+'">'+(v==='win'?'✓':v==='loss'?'✗':'≈')+' '+(t.o30>=0?'+':'')+t.o30+'</span>'; }).join(''); }
+    const el=document.getElementById('dlReadScore'); if(!el)return;
+    if(done.length<3){ el.innerHTML=done.length?'<span class="rs-note">исходы копятся — скор чтения появится после 3 замеров</span>':''; return; }
+    const wins=done.filter(t=>_dlVerdict(t)==='win').length;
+    const avg=a=>a.length?+(a.reduce((s,x)=>s+x,0)/a.length).toFixed(1):null;
+    const a30=avg(done.map(t=>t.o30)), a15=avg(done.filter(t=>t.o15!=null).map(t=>t.o15));
+    const wr=a=>{ const d=a.filter(t=>_dlVerdict(t)!=='flat'); if(!d.length)return null; return Math.round(a.filter(t=>_dlVerdict(t)==='win').length/d.length*100); };
+    const withM=done.filter(t=>t.mdir&&t.mdir!=='flat'&&((t.mdir==='up')===(t.side==='long'))&&t.regime!=='SAFE_SHUTDOWN');
+    const agM=done.filter(t=>t.mdir&&t.mdir!=='flat'&&((t.mdir==='up')!==(t.side==='long'))&&t.regime!=='SAFE_SHUTDOWN');
+    const sd=done.filter(t=>t.regime==='SAFE_SHUTDOWN');
+    const seg=(lbl,a)=>{ const w=wr(a); return w==null?null:lbl+' '+w+'% ('+a.length+')'; };
+    const parts=[seg('с моделью',withM),seg('против',agM),seg('в SHUTDOWN',sd)].filter(Boolean);
+    el.innerHTML='ЧТЕНИЕ @30с: <b>'+done.length+'</b> замеров · <b>'+wins+'</b> win · ср <b>'+(a30>=0?'+':'')+a30+'</b> bps'+(a15!=null?' <span class="rs-note">(@15с: '+(a15>=0?'+':'')+a15+')</span>':'')
+      +(parts.length?'<br>'+parts.join(' · '):'')
+      +'<br><span class="rs-note">исход = движение mid против спреда входа · виртуально, гипотеза, не результат сделки</span>';
   }
 
   function toggleCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; const open=w.classList.toggle('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded',open?'true':'false'); try{localStorage.setItem('msa_calc_open_v1',open?'1':'0');}catch(e){} }
