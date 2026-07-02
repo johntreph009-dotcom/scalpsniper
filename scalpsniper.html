@@ -96,6 +96,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .dl-swipe.up{color:#5DCAA5;border:1px solid #0F6E56;background:rgba(29,158,117,.08)}
   .dl-swipe.dn{color:#F09595;border:1px solid #A32D2D;background:rgba(226,75,74,.08)}
   .dl-foot{font-size:10px;color:var(--text-faint);text-align:center;border-top:1px solid var(--line);padding-top:10px;line-height:1.5}
+  .dl-price{display:flex;align-items:baseline;gap:10px;margin:2px 0 6px}
+  .dl-price-now{font-family:'Archivo',sans-serif;font-size:22px;font-weight:800;color:#e8ecf0;line-height:1}
+  .dl-price-chg{font-size:12px;font-family:'JetBrains Mono',monospace}
+  .dl-price-chg.up{color:#5DCAA5} .dl-price-chg.dn{color:#F09595}
+  .dl-price-lbl{margin-left:auto;font-size:9px;letter-spacing:.4px;text-transform:uppercase;color:var(--text-faint)}
+  .dl-pchart-wrap{background:#0d0f12;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-bottom:14px}
+  #dlPriceChart{display:block;width:100%;height:96px}
+  #sessPriceChart{display:block;width:100%;height:92px}
   .dl-regime-chip.trend{color:#5DCAA5;border-color:#0F6E56;background:rgba(29,158,117,.1)}
   .dl-regime-chip.danger{color:#F09595;border-color:#A32D2D;background:rgba(226,75,74,.14)}
   .dl-swipe{cursor:pointer}
@@ -1080,6 +1088,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <span id="streakBadge" class="streak-badge" style="display:none"></span>
     </div>
     <div class="session-ctx" id="sessionCtx"><div class="sc-bias" id="scBias"></div><div class="sc-guards" id="scGuards"></div></div>
+    <div class="sess-pchart">
+      <div class="dl-price"><span class="dl-price-now" id="sessPxNow">—</span><span class="dl-price-chg" id="sessPxChg"></span><span class="dl-price-lbl">цена · live</span></div>
+      <div class="dl-pchart-wrap"><canvas id="sessPriceChart"></canvas></div>
+    </div>
     <div class="mini-chart-wrap" id="miniChartWrap">
       <div class="mini-chart-hdr">
         <span class="mc-tf" id="mcTfLabel">—</span>
@@ -1264,6 +1276,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <div class="dl-prob-seg fl" id="dlProbFl" style="width:20%">↔ 20%</div>
     </div>
     <div class="dl-regime"><span class="dl-regime-chip" id="dlRegime">РЕЖИМ: FLAT_SCALPING</span><span class="dl-regime-note" id="dlEngNote">гистерезис 3с</span></div>
+    <div class="dl-price"><span class="dl-price-now" id="dlPriceNow">—</span><span class="dl-price-chg" id="dlPriceChg"></span><span class="dl-price-lbl">цена · live</span></div>
+    <div class="dl-pchart-wrap"><canvas id="dlPriceChart"></canvas></div>
     <div class="dl-canvas-lbl">Стакан <span id="dlSym">—</span> · <span id="dlSrc">подключение…</span> · <span id="dlUps">0</span> упд/с</div>
     <div class="dl-canvas-wrap"><canvas id="dlBook"></canvas></div>
     <div class="dl-swipes">
@@ -3082,6 +3096,33 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       return (await r.json()).map(k=>({o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5],tb:+k[9]}));
     }catch{return null;}
   }
+  // ── приятный live-график цены в Сессии (плавная area-кривая) ──
+  function _sessSetupPriceCanvas(){
+    const cv=document.getElementById('sessPriceChart'); if(!cv)return;
+    const dpr=window.devicePixelRatio||1; const w=cv.getBoundingClientRect().width||cv.clientWidth||320, h=92;
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    _sessPCtx=cv.getContext('2d'); _sessPCtx.setTransform(dpr,0,0,dpr,0,0); _sessPW=w; _sessPH=h;
+  }
+  function _sessDrawPrice(){
+    const ctx=_sessPCtx; if(!ctx)return; const W=_sessPW,H=_sessPH; ctx.clearRect(0,0,W,H);
+    const hh=_sessHist, now=document.getElementById('sessPxNow'), chg=document.getElementById('sessPxChg');
+    const fmt=(typeof _rpx==='function')?(v=>_rpx(v)):(v=>v);
+    if(hh.length<2){ if(now&&hh.length)now.textContent=fmt(hh[0]); return; }
+    let lo=Math.min.apply(null,hh), hi=Math.max.apply(null,hh); if(hi-lo<1e-9){hi+=1;lo-=1;} const pd=(hi-lo)*0.15; lo-=pd; hi+=pd;
+    const n=hh.length, dx=W/(n-1), toY=v=>H-2-((v-lo)/(hi-lo))*(H-4);
+    const up=hh[n-1]>=hh[0], col=up?'#1D9E75':'#E24B4A';
+    const path=new Path2D(); path.moveTo(0,toY(hh[0]));
+    for(let i=1;i<n-1;i++){ const x=i*dx,y=toY(hh[i]),xn=(i+1)*dx,yn=toY(hh[i+1]); path.quadraticCurveTo(x,y,(x+xn)/2,(y+yn)/2); }
+    path.lineTo((n-1)*dx,toY(hh[n-1]));
+    const area=new Path2D(path); area.lineTo(W,H); area.lineTo(0,H); area.closePath();
+    const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,up?'rgba(29,158,117,0.30)':'rgba(226,75,74,0.30)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g; ctx.fill(area);
+    ctx.strokeStyle=col; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke(path);
+    ctx.fillStyle=col; ctx.beginPath(); ctx.arc((n-1)*dx,toY(hh[n-1]),3.2,0,7); ctx.fill();
+    const cur=hh[n-1], first=hh[0], pct=first?((cur-first)/first*100):0;
+    if(now)now.textContent=fmt(cur);
+    if(chg){ chg.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%'; chg.className='dl-price-chg '+(pct>=0?'up':'dn'); }
+  }
   function _drawChart(candles,currentPrice){
     const cv=document.getElementById('miniChart');if(!cv)return;
     const W=cv.parentElement.clientWidth||600;
@@ -3320,16 +3361,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const sym=_symFromTicker(raw);
     if(st)st.textContent='загрузка…';
     const data=await _fetchKlines(sym,tf);
-    if(data){_klines=data;_klSym=sym;_klTf=tf;if(st)st.textContent='live';}
+    if(data){_klines=data;_klSym=sym;_klTf=tf;if(st)st.textContent='live';_sessHist=data.map(c=>c.c);if(typeof _sessDrawPrice==='function')_sessDrawPrice();}
     else{if(st)st.textContent='нет данных';}
     _chartRedraw();
   }
   function startMiniChart(){
     if(_chartTimer)clearInterval(_chartTimer);
     if(typeof _markLayers==='function')_markLayers();
+    _sessSetupPriceCanvas();
     _chartRefresh();
     _chartTimer=setInterval(_chartRefresh,15000);
-    const ro=new ResizeObserver(()=>_chartRedraw());
+    const ro=new ResizeObserver(()=>{_sessSetupPriceCanvas();_sessDrawPrice();_chartRedraw();});
     const wrap=document.getElementById('miniChartWrap');
     if(wrap)ro.observe(wrap);
     if(!_chartClickBound){
@@ -3660,7 +3702,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const sessEl=document.getElementById('livePrice');
     if(document.activeElement!==sessEl){sessEl.value=px;updateLive();}
     _setLiveInd('● LIVE','var(--green)');
-    if(phase==='live')_chartRedraw();
+    if(phase==='live'){ const _p=parseFloat(px); if(isFinite(_p)){ if(!_sessHist.length||_sessHist[_sessHist.length-1]!==_p){ _sessHist.push(_p); if(_sessHist.length>140)_sessHist.shift(); } if(typeof _sessDrawPrice==='function')_sessDrawPrice(); } _chartRedraw(); }
   }
   async function fetchLivePx(){
     const raw=document.getElementById('ticker').value.trim();
@@ -3867,6 +3909,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   let _dlCtx=null,_dlW=0,_dlH=0;
   let _dlModel=null,_dlRegime='FLAT_SCALPING',_dlCand=null,_dlCandT=0,_dlEngLast=0,_dlJournal=[];
   let _dlMsgCount=0,_dlSrc='—',_dlDec=2;
+  let _dlHist=[],_dlPCtx=null,_dlPW=0,_dlPH=0;
+  let _sessHist=[],_sessPCtx=null,_sessPW=0,_sessPH=0;
   const DLJ_KEY='msa_demo_journal_v1';
   // знаки после запятой по реальному шагу цены инструмента (из стакана) — корректно для любой монеты
   function _dlComputeDec(aP,bP,n,mid){
@@ -3943,6 +3987,32 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
     _dlCtx=cv.getContext('2d'); _dlCtx.setTransform(dpr,0,0,dpr,0,0); _dlW=w; _dlH=h;
   }
+  // ── приятный live-график цены (плавная area-кривая, как референс) ──
+  function _dlSetupPriceCanvas(){
+    const cv=document.getElementById('dlPriceChart'); if(!cv)return;
+    const dpr=window.devicePixelRatio||1; const w=cv.getBoundingClientRect().width||cv.clientWidth||320, h=96;
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    _dlPCtx=cv.getContext('2d'); _dlPCtx.setTransform(dpr,0,0,dpr,0,0); _dlPW=w; _dlPH=h;
+  }
+  function _dlDrawPrice(){
+    const ctx=_dlPCtx; if(!ctx)return; const W=_dlPW,H=_dlPH; ctx.clearRect(0,0,W,H);
+    const hh=_dlHist, now=document.getElementById('dlPriceNow'), chg=document.getElementById('dlPriceChg');
+    if(hh.length<2){ if(now&&hh.length)now.textContent=hh[0].toFixed(_dlDec); return; }
+    let lo=Math.min.apply(null,hh), hi=Math.max.apply(null,hh); if(hi-lo<1e-9){hi+=1;lo-=1;} const pd=(hi-lo)*0.15; lo-=pd; hi+=pd;
+    const n=hh.length, dx=W/(n-1), toY=v=>H-2-((v-lo)/(hi-lo))*(H-4);
+    const up=hh[n-1]>=hh[0], col=up?'#1D9E75':'#E24B4A';
+    const path=new Path2D(); path.moveTo(0,toY(hh[0]));
+    for(let i=1;i<n-1;i++){ const x=i*dx,y=toY(hh[i]),xn=(i+1)*dx,yn=toY(hh[i+1]); path.quadraticCurveTo(x,y,(x+xn)/2,(y+yn)/2); }
+    path.lineTo((n-1)*dx,toY(hh[n-1]));
+    const area=new Path2D(path); area.lineTo(W,H); area.lineTo(0,H); area.closePath();
+    const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,up?'rgba(29,158,117,0.30)':'rgba(226,75,74,0.30)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g; ctx.fill(area);
+    ctx.strokeStyle=col; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke(path);
+    ctx.fillStyle=col; ctx.beginPath(); ctx.arc((n-1)*dx,toY(hh[n-1]),3.2,0,7); ctx.fill();
+    const cur=hh[n-1], first=hh[0], pct=first?((cur-first)/first*100):0;
+    if(now)now.textContent=cur.toFixed(_dlDec);
+    if(chg){ chg.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%'; chg.className='dl-price-chg '+(pct>=0?'up':'dn'); }
+  }
   function _dlDraw(){
     const ctx=_dlCtx; if(!ctx)return; const W=_dlW,H=_dlH; ctx.clearRect(0,0,W,H);
     const s=_dlSnap; if(!s)return;
@@ -3967,16 +4037,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(_dlRunning)return; _dlRunning=true;
     try{ const blob=new Blob([_dlWorkerCode()],{type:'application/javascript'});
       _dlWorker=new Worker(URL.createObjectURL(blob));
-      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; } };
+      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); if(_dlHist.length>180)_dlHist.shift();} } };
       const _raw=(document.getElementById('ticker')&&document.getElementById('ticker').value)||'BTC/USDT';
       const _sym=(typeof _symFromTicker==='function')?_symFromTicker(_raw):'BTCUSDT';
       _dlWorker.postMessage({cmd:'init',symbol:_sym});
       const _se=document.getElementById('dlSym'); if(_se)_se.textContent=_sym;
       const _dt=document.getElementById('demoTicker'); if(_dt&&document.activeElement!==_dt)_dt.value=_raw;
     }catch(err){ const r=document.getElementById('dlRate'); if(r)r.textContent='worker N/A'; }
-    _dlSetupCanvas(); _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlSetRegime(_dlRegime,true);
+    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlSetRegime(_dlRegime,true);
     _dlLastSec=performance.now(); _dlFrames=0; _dlEngLast=0;
-    const loop=ts=>{ if(!_dlRunning)return; _dlDraw(); _dlFrames++;
+    const loop=ts=>{ if(!_dlRunning)return; _dlDraw(); _dlDrawPrice(); _dlFrames++;
       if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); }
       if(ts-_dlLastSec>=1000){ const fps=Math.round(_dlFrames*1000/(ts-_dlLastSec)); _dlFrames=0; _dlLastSec=ts;
         const r=document.getElementById('dlRate'); if(r)r.textContent=fps+' FPS';
@@ -3985,8 +4055,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       _dlRAF=requestAnimationFrame(loop); };
     _dlRAF=requestAnimationFrame(loop);
   }
-  function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; _dlSrc='—'; _dlMsgCount=0; }
-  window.addEventListener('resize',()=>{ if(_dlRunning)_dlSetupCanvas(); });
+  function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; _dlSrc='—'; _dlMsgCount=0; _dlHist=[]; }
+  window.addEventListener('resize',()=>{ if(_dlRunning){_dlSetupCanvas();_dlSetupPriceCanvas();} });
 
   // ── Модуль 3: гистерезис + стейт-машина режимов ──
   function _dlEngine(now){
