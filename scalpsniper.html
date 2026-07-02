@@ -115,6 +115,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .dl-readscore{font-size:10.5px;color:var(--text-dim);text-align:center;font-family:'JetBrains Mono',monospace;line-height:1.7;margin-bottom:10px}
   .dl-readscore b{color:#e8ecf0;font-weight:600}
   .dl-readscore .rs-note{color:var(--text-faint);font-size:9.5px}
+  .dld-bar{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:8px;flex-wrap:wrap}
+  .dld-btn{font-family:'JetBrains Mono',monospace;font-size:11px;background:none;border:1px solid var(--line);color:var(--text-dim);padding:4px 12px;border-radius:9px;cursor:pointer}
+  .dld-btn.on{border-color:rgba(255,122,24,.55);color:#ff7a18}
+  .dld-card{font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--text-dim)}
+  .dld-card.good{color:#5DCAA5} .dld-card.bad{color:#F09595} .dld-card b{color:#e8ecf0}
   .dl-feedback.show{opacity:1}
   .dl-feedback.up{color:#5DCAA5}
   .dl-feedback.dn{color:#F09595}
@@ -1286,6 +1291,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="dl-pchart-wrap"><canvas id="dlPriceChart"></canvas></div>
     <div class="dl-canvas-lbl">Стакан <span id="dlSym">—</span> · <span id="dlSrc">подключение…</span> · <span id="dlUps">0</span> упд/с</div>
     <div class="dl-canvas-wrap"><canvas id="dlBook"></canvas></div>
+    <div class="dld-bar"><button type="button" class="dld-btn" id="dldBtn" onclick="_dldToggle()">▶ дрилл 5:00</button><span class="dld-card" id="dldCard"></span></div>
     <div class="dl-swipes">
       <div class="dl-swipe up" id="dlLong">↑ свайп / тап — демо-лонг</div>
       <div class="dl-swipe dn" id="dlShort">↓ свайп / тап — демо-шорт</div>
@@ -1294,6 +1300,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="dl-feedback" id="dlFeedback"></div>
     <div class="dl-outcomes" id="dlOutcomes"></div>
     <div class="dl-readscore" id="dlReadScore"></div>
+    <div class="dl-readscore" id="dldHist"></div>
     <div class="dl-foot">DEMO · реальный стакан и лента Binance, сделки виртуальные · аналитика, не торговая рекомендация · реальные ордера не выставляются. Бар и режим — гипотеза модели; контр-тренд помечается, но не блокируется — решаешь ты.</div>
   </div>
   <div class="disclaimer">
@@ -4054,7 +4061,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const _se=document.getElementById('dlSym'); if(_se)_se.textContent=_sym;
       const _dt=document.getElementById('demoTicker'); if(_dt&&document.activeElement!==_dt)_dt.value=_raw;
     }catch(err){ const r=document.getElementById('dlRate'); if(r)r.textContent='worker N/A'; }
-    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dlSetRegime(_dlRegime,true);
+    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dldRenderHist(); _dldRenderBtn(); _dlSetRegime(_dlRegime,true);
     _dlLastSec=performance.now(); _dlFrames=0; _dlEngLast=0;
     const loop=ts=>{ if(!_dlRunning)return; _dlDraw(); _dlDrawPrice(); _dlFrames++;
       if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); }
@@ -4065,12 +4072,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       _dlRAF=requestAnimationFrame(loop); };
     _dlRAF=requestAnimationFrame(loop);
   }
-  function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; _dlSrc='—'; _dlMsgCount=0; _dlHist=[]; }
+  function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; _dlSrc='—'; _dlMsgCount=0; _dlHist=[];
+    if(_dlDrill){ _dlDrill=null; _dldRenderBtn(); const c=document.getElementById('dldCard'); if(c){c.textContent='дрилл прерван (выход из демо)';c.className='dld-card';} } }
   window.addEventListener('resize',()=>{ if(_dlRunning){_dlSetupCanvas();_dlSetupPriceCanvas();} });
 
   // ── Модуль 3: гистерезис + стейт-машина режимов ──
   function _dlEngine(now){
-    _dlResolveOutcomes();
+    _dlResolveOutcomes(); _dldTick();
     const m=_dlModel; if(!m)return;
     _dlUpdateBar(m);
     const dom=Math.max(m.pUp,m.pDown);
@@ -4106,7 +4114,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // спред на входе (bps) — честный порог win/loss: скальп удался, только если движение покрыло спред
     let sp=null; const s=_dlSnap;
     if(s){ const n=s[1]|0; if(n>0){ const bA=s[2], bB=s[2+2*n]; if(bA>0&&bB>0) sp=+(((bA-bB)/((bA+bB)/2))*10000).toFixed(2); } }
-    _dlJournal.push({side:side,px:px,ts:Date.now(),regime:_dlRegime,mdir:m?m.dir:null,sp:sp}); _dlSaveJournal();
+    const _e={side:side,px:px,ts:Date.now(),regime:_dlRegime,mdir:m?m.dir:null,sp:sp};
+    if(_dlDrill&&!_dlDrill.fin)_e.drill=_dlDrill.id;
+    _dlJournal.push(_e); _dlSaveJournal();
     try{ if(navigator.vibrate)navigator.vibrate(side==='long'?20:[15,25,15]); }catch(e){}
     _dlRenderTrades(side,px,warn);
   }
@@ -4165,6 +4175,52 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     el.innerHTML='ЧТЕНИЕ @30с: <b>'+done.length+'</b> замеров · <b>'+wins+'</b> win · ср <b>'+(a30>=0?'+':'')+a30+'</b> bps'+(a15!=null?' <span class="rs-note">(@15с: '+(a15>=0?'+':'')+a15+')</span>':'')
       +(parts.length?'<br>'+parts.join(' · '):'')
       +'<br><span class="rs-note">исход = движение mid против спреда входа · виртуально, гипотеза, не результат сделки</span>';
+  }
+  // ── Дрилл: 5-минутная сессия с итоговой карточкой фактов ──
+  const DLD_KEY='msa_demo_drills_v1';
+  let _dlDrill=null; // {id,end,fin}
+  function _dldToggle(){
+    if(_dlDrill){ if(!_dlDrill.fin)_dlDrill.end=Date.now(); return; } // ⏹ — досрочный стоп, замеры дожидаемся
+    _dlDrill={id:Date.now(),end:Date.now()+300000,fin:false};
+    const c=document.getElementById('dldCard'); if(c){c.textContent='';c.className='dld-card';}
+    _dldRenderBtn();
+  }
+  function _dldRenderBtn(){
+    const b=document.getElementById('dldBtn'); if(!b)return;
+    if(!_dlDrill){ b.textContent='▶ дрилл 5:00'; b.classList.remove('on'); return; }
+    if(_dlDrill.fin){ b.textContent='⏳ замеры…'; b.classList.add('on'); return; }
+    const left=Math.max(0,_dlDrill.end-Date.now()), m=Math.floor(left/60000), s=Math.floor(left%60000/1000);
+    b.textContent='⏹ '+m+':'+String(s).padStart(2,'0'); b.classList.add('on');
+  }
+  function _dldTick(){
+    if(!_dlDrill)return;
+    _dldRenderBtn();
+    if(!_dlDrill.fin && Date.now()>=_dlDrill.end)_dlDrill.fin=true;
+    if(_dlDrill.fin){
+      const rec=_dlJournal.filter(t=>t.drill===_dlDrill.id);
+      if(!rec.length || rec.every(t=>t.done))_dldFinish(rec);
+    }
+  }
+  function _dldFinish(rec){
+    _dlDrill=null; _dldRenderBtn();
+    const c=document.getElementById('dldCard');
+    const res=rec.filter(t=>t.o30!=null);
+    if(!res.length){ if(c){c.textContent=rec.length?'дрилл: исходы не замерены':'дрилл: 0 свайпов — не засчитан';c.className='dld-card';} return; }
+    const w=res.filter(t=>_dlVerdict(t)==='win').length, l=res.filter(t=>_dlVerdict(t)==='loss').length, f=res.length-w-l;
+    const avg=+(res.reduce((s,t)=>s+t.o30,0)/res.length).toFixed(1);
+    const sd=rec.filter(t=>t.regime==='SAFE_SHUTDOWN').length;
+    const ag=rec.filter(t=>t.mdir&&t.mdir!=='flat'&&((t.mdir==='up')!==(t.side==='long'))&&t.regime!=='SAFE_SHUTDOWN').length;
+    let hist=[]; try{hist=JSON.parse(localStorage.getItem(DLD_KEY)||'[]');}catch(e){}
+    hist.push({ts:Date.now(),n:rec.length,res:res.length,w:w,l:l,f:f,avg:avg,sd:sd,ag:ag});
+    try{localStorage.setItem(DLD_KEY,JSON.stringify(hist.slice(-20)));}catch(e){}
+    if(c){ c.innerHTML='<b>'+rec.length+'</b> свайпов · '+w+'✓ '+l+'✗ '+f+'≈ · ср <b>'+(avg>=0?'+':'')+avg+'</b> bps'+(sd?' · ⚠ SHUTDOWN: '+sd:'')+(ag?' · против модели: '+ag:'');
+      c.className='dld-card '+(avg>0?'good':avg<0?'bad':''); }
+    _dldRenderHist();
+  }
+  function _dldRenderHist(){
+    const el=document.getElementById('dldHist'); if(!el)return;
+    let hist=[]; try{hist=JSON.parse(localStorage.getItem(DLD_KEY)||'[]');}catch(e){}
+    el.textContent=hist.length?('дриллы: '+hist.slice(-3).reverse().map(d=>(d.avg>=0?'+':'')+d.avg+' bps ('+d.n+')').join(' · ')):'';
   }
 
   function toggleCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; const open=w.classList.toggle('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded',open?'true':'false'); try{localStorage.setItem('msa_calc_open_v1',open?'1':'0');}catch(e){} }
