@@ -265,6 +265,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .pf-rpnl{margin-left:auto;font-family:'Archivo',sans-serif;font-weight:800;font-size:12px;white-space:nowrap}
   .pf-row.pf-up .pf-rpnl{color:var(--green)}.pf-row.pf-down .pf-rpnl{color:var(--danger)}.pf-row.pf-na .pf-rpnl{color:var(--text-faint)}
   .pf-rpct{font-size:9px;font-weight:600;opacity:.8;font-family:'JetBrains Mono',monospace}
+  .pf-dist{display:block;font-size:8.5px;font-weight:500;color:var(--text-dim);font-family:'JetBrains Mono',monospace;letter-spacing:.2px}
   .pf-close{background:none;border:1px solid var(--line);color:var(--text-faint);cursor:pointer;font-size:11px;width:20px;height:20px;border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1}
   .pf-close:hover{border-color:var(--green);color:var(--green)}
   .pf-flash-up{animation:pf-fl-up .5s ease}.pf-flash-down{animation:pf-fl-down .5s ease}
@@ -2294,9 +2295,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const cls=pnl==null?'pf-na':(pnl>=0?'pf-up':'pf-down');
       const pnlTxt=pnl!=null?`${pnl>=0?'+':''}${pnl.toFixed(2)}`:'н/д';
       const pctTxt=pct!=null?` (${pct>=0?'+':''}${pct.toFixed(2)}%)`:'';
+      let distTxt='';
+      if(px){ if(p.target){ const dtp=((p.target-px)/px*100)*dir; distTxt+='→TP '+(dtp>=0?'':'')+dtp.toFixed(2)+'%'; }
+        if(p.stop){ const dsl=((px-p.stop)/px*100)*dir; distTxt+=(distTxt?' · ':'')+'→SL '+dsl.toFixed(2)+'%'; } }
+      const distHtml=distTxt?`<span class="pf-dist">${distTxt}</span>`:'';
       return `<div class="pf-row ${cls}" onclick="_pfGoToPosition('${p.id}')" title="К позиции в Сессии">`+
         `<span class="pf-side ${p.side}">${p.side==='long'?'▲':'▼'} ${tk.replace('/USDT','')}</span>`+
-        `<span class="pf-rpnl">${pnlTxt}<span class="pf-rpct">${pctTxt}</span></span>`+
+        `<span class="pf-rpnl">${pnlTxt}<span class="pf-rpct">${pctTxt}</span>${distHtml}</span>`+
         `<button class="pf-close" onclick="event.stopPropagation();closePosition('${p.id}')" title="Закрыть">✓</button></div>`;
     }).join('');
     const tcls=!haveAny?'pf-na':(total>=0?'pf-up':'pf-down');
