@@ -1120,12 +1120,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <div class="lc-dist" id="lcDist" style="display:none"></div>
       <div class="lc-actions">
         <button class="calc-fill-btn" id="lcPosBtn" onclick="_lcOpenPos()" style="display:none">▲ В позицию</button>
+        <button class="calc-fill-btn" id="lcCloseBtn" onclick="_lcCloseZone()" style="display:none">✓ Закрыть зону</button>
         <button class="calc-fill-btn" id="calcFillBtn" onclick="fillCalcFromZone()" style="display:none">→ Подставить в калькулятор</button>
       </div>
     </div>
     <div class="sess-pchart">
-      <div class="dl-price"><span class="dl-price-now" id="sessPxNow">—</span><span class="dl-price-chg" id="sessPxChg"></span><span class="dl-price-lbl">цена · live</span></div>
-      <div class="dl-pchart-wrap"><canvas id="sessPriceChart"></canvas></div>
+      <div class="dl-price" onclick="_sessPcToggle()" style="cursor:pointer" title="Свернуть/развернуть график цены"><span class="dl-price-now" id="sessPxNow">—</span><span class="dl-price-chg" id="sessPxChg"></span><span class="dl-price-lbl">цена · live <span id="sessPcChev">▾</span></span></div>
+      <div class="dl-pchart-wrap" id="sessPcWrap"><canvas id="sessPriceChart"></canvas></div>
     </div>
     <div class="mini-chart-wrap" id="miniChartWrap">
       <div class="mini-chart-hdr">
@@ -2024,6 +2025,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       document.getElementById('lcNote').textContent=z.note||'план не записан';
       const cfb=document.getElementById('calcFillBtn');if(cfb)cfb.style.display=z.stop?'block':'none';
       const pb=document.getElementById('lcPosBtn'); if(pb)pb.style.display='block';
+      const cb=document.getElementById('lcCloseBtn'); if(cb)cb.style.display='block';
       const ld=document.getElementById('lcDist');
       if(ld){ const bits=[]; const dz=(z.px-lp)/lp*100;
         bits.push('до зоны '+(dz>=0?'+':'')+dz.toFixed(2)+'%');
@@ -2043,6 +2045,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       document.getElementById('lcNote').textContent='Цена не в размеченной зоне. По плану — ждать, не входить.';
       const cfb2=document.getElementById('calcFillBtn');if(cfb2)cfb2.style.display='none';
       const pb2=document.getElementById('lcPosBtn'); if(pb2)pb2.style.display='none';
+      const cb2=document.getElementById('lcCloseBtn'); if(cb2)cb2.style.display='none';
       // пред-алерт подхода: тихий бип + статус при цене в 0.3% от ближайшей зоны (сброс при откате за 0.45%)
       let ni=-1,ndp=Infinity;
       zones.forEach((z2,i2)=>{ if(z2.closed||z2.expired)return; const dp=Math.abs(z2.px-lp)/lp*100; if(dp<ndp){ndp=dp;ni=i2;} });
@@ -3313,6 +3316,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }catch(e){}
   }
   function _lcOpenPos(){ const a=activeZoneIdx(); if(a>=0&&typeof openPosFromZone==='function')openPosFromZone(a); }
+  function _lcCloseZone(){ const a=activeZoneIdx(); if(a>=0&&typeof openClose==='function')openClose(a); }
+  function _sessPcToggle(){
+    const w=document.getElementById('sessPcWrap'); if(!w)return;
+    const show=w.style.display==='none';
+    w.style.display=show?'':'none';
+    const ch=document.getElementById('sessPcChev'); if(ch)ch.textContent=show?'▾':'▸';
+    try{localStorage.setItem('msa_sesspc_v1',show?'1':'0');}catch(e){}
+    if(show){ if(typeof _sessSetupPriceCanvas==='function')_sessSetupPriceCanvas(); if(typeof _sessDrawPrice==='function')_sessDrawPrice(); }
+  }
+  function _sessPcRestore(){
+    let o='1'; try{o=localStorage.getItem('msa_sesspc_v1')||'1';}catch(e){}
+    if(o==='0'){ const w=document.getElementById('sessPcWrap'); if(w)w.style.display='none'; const ch=document.getElementById('sessPcChev'); if(ch)ch.textContent='▸'; }
+  }
   function _zoneBeep(){
     try{
       const ac=new(window.AudioContext||window.webkitAudioContext)();
@@ -4452,7 +4468,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
   function toggleCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; const open=w.classList.toggle('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded',open?'true':'false'); try{localStorage.setItem('msa_calc_open_v1',open?'1':'0');}catch(e){} }
   function _restoreCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; let o='0'; try{o=localStorage.getItem('msa_calc_open_v1')||'0';}catch(e){} if(o==='1'){w.classList.add('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded','true');} }
-  load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers(); renderPosition(); _restoreCalc();
+  load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers(); renderPosition(); _restoreCalc(); _sessPcRestore();
   try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
   renderZones();recalc();
   if(typeof autoEvalZones==='function')setTimeout(()=>autoEvalZones({force:true}),1500);
