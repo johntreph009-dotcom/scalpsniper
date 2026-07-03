@@ -2949,6 +2949,22 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const cWR=Math.round(gC.filter(e=>e.outcome==='win').length/gC.length*100);
       if(aWR-cWR>=8)ins.push({g:false,ico:'💸',l:'Цена ошибки',v:`Grade A: <b>${aWR}%</b> vs Grade C: ${cWR}% — нарушения правил стоят <b>${aWR-cWR}%</b> WR`});
     }
+    // цена отклонений в $ (оценка против среднего планового результата)
+    const pnlT=trades.filter(e=>e.pnl!=null);
+    const pOK=pnlT.filter(e=>e.plan===true), pNO=pnlT.filter(e=>e.plan===false);
+    if(pOK.length>=2&&pNO.length>=2){
+      const avgOK=pOK.reduce((s,e)=>s+e.pnl,0)/pOK.length;
+      const sumNO=pNO.reduce((s,e)=>s+e.pnl,0);
+      const cost=avgOK*pNO.length-sumNO;
+      if(cost>0)ins.push({g:false,ico:'💰',l:'Цена отклонений в $',v:`${pNO.length} сд. мимо плана дали <b>${sumNO>=0?'+':''}${sumNO.toFixed(2)} USDT</b>; средний плановый результат дал бы ≈${(avgOK*pNO.length).toFixed(2)} — отклонения стоят ≈<b>${cost.toFixed(2)} USDT</b> (оценка)`});
+    }
+    const gAp=pnlT.filter(e=>e.grade==='A'), gCp=pnlT.filter(e=>e.grade==='C');
+    if(gAp.length>=2&&gCp.length>=2){
+      const avgA=gAp.reduce((s,e)=>s+e.pnl,0)/gAp.length;
+      const sumC=gCp.reduce((s,e)=>s+e.pnl,0);
+      const costC=avgA*gCp.length-sumC;
+      if(costC>0)ins.push({g:false,ico:'💰',l:'Цена C-грейдов в $',v:`${gCp.length} сд. с нарушением правила: <b>${sumC>=0?'+':''}${sumC.toFixed(2)} USDT</b> — против A-исполнения потеря ≈<b>${costC.toFixed(2)} USDT</b> (оценка)`});
+    }
     // stars effectiveness
     const s3=trades.filter(e=>(e.stars||2)===3),s1=trades.filter(e=>(e.stars||2)===1);
     if(s3.length>=2&&s1.length>=2){
