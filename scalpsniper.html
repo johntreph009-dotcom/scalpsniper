@@ -2743,7 +2743,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     let tkHtml=tkRows.length
       ? tkRows.slice(0,5).map(x=>{
           const wr=Math.round(x.w/x.t*100);
-          const kd=KIND[x.kind];
+          const kd=KIND[x.kind]||{cls:'',lbl:'БИРЖА'};
           return `<div class="tk-row"><span><span class="zone-kind ${kd.cls}" style="font-size:9px">${kd.lbl}</span> ${x.ticker}</span><span class="tk-wr" style="color:${wr>=55?'var(--green)':wr>=40?'var(--warn)':'var(--danger)'}">${wr}% <span style="font-size:10px;color:var(--text-faint)">(${x.t})</span></span></div>`;
         }).join('')
       : '<div style="font-size:11px;color:var(--text-faint)">нет данных (нужно 2+ сделки)</div>';
@@ -2903,11 +2903,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(best!==worst)ins.push({g:false,ico:'🚫',l:'Избегай',v:`<b>${worst}:00</b> — ${Math.round(bH[worst].w/bH[worst].t*100)}% WR — ниже нормы`});
     }
     // best protocol
-    const bP={};trades.forEach(e=>{if(!bP[e.protocol])bP[e.protocol]={w:0,t:0};bP[e.protocol].t++;if(e.outcome==='win')bP[e.protocol].w++;});
+    const bP={};trades.forEach(e=>{if(!e.protocol)return;if(!bP[e.protocol])bP[e.protocol]={w:0,t:0};bP[e.protocol].t++;if(e.outcome==='win')bP[e.protocol].w++;});
     const bpr=Object.keys(bP).filter(p=>bP[p].t>=2).sort((a,b)=>bP[b].w/bP[b].t-bP[a].w/bP[a].t)[0];
     if(bpr){const p=bP[bpr];ins.push({g:true,ico:'🎯',l:'Твой протокол',v:`<b>${bpr.replace('_',' ')}</b> — ${Math.round(p.w/p.t*100)}% из ${p.t} сд.`});}
     // discipline ROI
-    const planT=trades.filter(e=>e.plan),nPlanT=trades.filter(e=>!e.plan);
+    const planT=trades.filter(e=>e.plan===true),nPlanT=trades.filter(e=>e.plan===false);
     if(planT.length>=2&&nPlanT.length>=2){
       const pWR=Math.round(planT.filter(e=>e.outcome==='win').length/planT.length*100);
       const nWR=Math.round(nPlanT.filter(e=>e.outcome==='win').length/nPlanT.length*100);
