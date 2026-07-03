@@ -1182,7 +1182,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="section-title">Журнал отработки зон <span class="tag">все размеченные · новые сверху</span></div>
     <div id="zrjBar"></div>
     <div class="zr-journal" id="zrJournal"></div>
-    <div class="section-title">История сделок <span class="tag">новые сверху</span></div>
+    <div class="section-title">История сделок <span class="tag">новые сверху</span>
+      <button class="paste-px" style="margin-left:auto" onclick="document.getElementById('mxCsvFile').click()" title="Импорт закрытых сделок из CSV-выгрузки биржи (MEXC, Binance и др.)">⭱ Импорт сделок (CSV)</button>
+      <input type="file" id="mxCsvFile" accept=".csv,text/csv" style="display:none" onchange="_mxHandleFile(this)">
+    </div>
+    <div id="mxImpStatus" style="display:none;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin:-6px 0 8px"></div>
     <div class="j-history" id="jHistory"></div>
     <div class="section-title">Данные <span class="tag">бэкап · перенос на устройство</span></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -2338,8 +2342,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const trades=journal.filter(e=>e.outcome!=='skip');
     const wins=trades.filter(e=>e.outcome==='win');
     const totalPnl=trades.reduce((s,e)=>s+(e.pnl||0),0);
-    const discFollowed=journal.filter(e=>e.plan).length;
-    const discPct=journal.length?Math.round(discFollowed/journal.length*100):null;
+    const discRated=journal.filter(e=>e.plan!=null); // импорт с биржи план не знает — не разбавляет дисциплину
+    const discFollowed=discRated.filter(e=>e.plan).length;
+    const discPct=discRated.length?Math.round(discFollowed/discRated.length*100):null;
     // main stats
     const pnlEl=document.getElementById('jTotalPnl');
     pnlEl.textContent=journal.length?(totalPnl>0?'+':'')+totalPnl.toFixed(2)+' USDT':'—';
@@ -2351,7 +2356,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     document.getElementById('jWinCount').textContent=trades.length?`${wins.length} побед · ${trades.length-wins.length} потерь`:'—';
     const dEl=document.getElementById('jDisc');
     dEl.textContent=fmtPct(discPct); dEl.className='jsv '+wrClass(discPct);
-    document.getElementById('jDiscSub').textContent=journal.length?`${discFollowed} из ${journal.length} закрытых`:'т записей';
+    document.getElementById('jDiscSub').textContent=discRated.length?`${discFollowed} из ${discRated.length} закрытых`:'нет записей';
     // kind stats
     const kinds=['fade','break','watch','stand'];
     document.getElementById('jKindStats').innerHTML=kinds.map(k=>{
@@ -2382,16 +2387,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!journal.length){hEl.innerHTML='<div class="j-empty">Нет записей. Закрой зону в фазе СЕССИЯ кнопкой ✓ Закрыть — она попадёт сюда.</div>';return;}
     renderAnalytics();renderCoach();
     hEl.innerHTML=journal.map(e=>{
-      const k=KIND[e.zKind];
+      const k=KIND[e.zKind]||{cls:'',lbl:e.src?'БИРЖА':'—'};
       const oCls=e.outcome==='win'?'out-win':e.outcome==='loss'?'out-loss':'out-skip';
       const oLbl=e.outcome==='win'?'WIN':e.outcome==='loss'?'LOSS':'ПРОПУСТИЛ';
       const pnlHtml=e.pnl!=null?`<span class="je-pnl ${e.pnl>0?'pos':e.pnl<0?'neg':'zero'}">${fmtPnl(e.pnl)}</span>`:'';
       let slipHtml='';if(e.entryPx&&e.zPx&&e.zPx>0){const sl=Math.abs(e.entryPx-e.zPx)/e.zPx*100;const sc=sl<0.05?'slip-ok':sl<0.2?'slip-mid':'slip-bad';slipHtml=`<span class="je-slip ${sc}" title="Отклонение от зоны">${sl.toFixed(3)}%</span>`;};
-      const discHtml=`<span class="je-disc ${e.plan?'disc-ok':'disc-no'}">${e.plan?'ПЛАН ✓':'ОТКЛ.'}</span>`;
+      const discHtml=e.plan==null?'':`<span class="je-disc ${e.plan?'disc-ok':'disc-no'}">${e.plan?'ПЛАН ✓':'ОТКЛ.'}</span>`;
       const gradeHtml=e.grade?`<span class="gbadge gb${e.grade}">${e.grade}</span>`:'';
       const dt=new Date(e.ts);
       const dateStr=dt.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'})+' '+dt.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
-      const meta=[e.ticker+' '+e.tf, PROTO_LABELS[e.protocol]||e.protocol, `зона ${e.zPx}`, e.entryPx?`вход ${e.entryPx}`:'', e.notional?`объём ${e.notional} USDT`:'', e.note?`"${e.note}"`:''].filter(Boolean).join(' · ');
+      const meta=[(e.ticker+' '+(e.tf||'')).trim(), e.side?((e.side==='long'?'лонг':'шорт')+(e.lev?' ×'+e.lev:'')):'', PROTO_LABELS[e.protocol]||e.protocol, e.zPx!=null?`зона ${e.zPx}`:'', e.entryPx?`вход ${e.entryPx}`:'', e.notional?`объём ${e.notional} USDT`:'', e.durMin!=null?e.durMin+' мин':'', e.note?`"${e.note}"`:''].filter(Boolean).join(' · ');
       return `<div class="je" style="border-left-color:${e.outcome==='win'?'var(--green)':e.outcome==='loss'?'var(--danger)':'var(--line)'}">
         <span class="je-out ${oCls}">${oLbl}</span>
         <span class="zone-kind ${k.cls}" style="font-size:9px">${k.lbl}</span>
@@ -2404,6 +2409,62 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <button class="je-del" onclick="delJournalEntry(${e.id})" title="Удалить запись">×</button>
       </div>`;
     }).join('');
+  }
+  // ---- импорт закрытых сделок из CSV MEXC Futures ----
+  function _mxParseCsv(text){
+    const lines=text.split(/\r?\n/).filter(l=>l.trim());
+    if(lines.length<2)return{err:'файл пуст или без данных'};
+    const hdr=lines[0].split(',').map(h=>h.trim().toLowerCase());
+    const col=n=>hdr.indexOf(n);
+    const need=['sym','side','close_t','avg_open'];
+    const miss=need.filter(n=>col(n)<0);
+    const pnlCol=col('net')>=0?col('net'):col('pnl');
+    if(miss.length||pnlCol<0)return{err:'нет колонок: '+miss.concat(pnlCol<0?['net/pnl']:[]).join(', ')+'. Ожидаю формат: sym,side,open_t,close_t,lev,notional,avg_open,pnl,fee,net,…'};
+    const rows=[],bad=[];
+    for(let i=1;i<lines.length;i++){
+      const c=lines[i].split(',').map(s=>s.trim());
+      const sym=(c[col('sym')]||'').toUpperCase(), side=(c[col('side')]||'').toLowerCase();
+      const closeT=c[col('close_t')], avgO=parseFloat(c[col('avg_open')]), net=parseFloat(c[pnlCol]);
+      const d=closeT?new Date(closeT.replace(' ','T')):null;
+      if(!sym||!isFinite(avgO)||!isFinite(net)||!d||isNaN(+d)){bad.push(i+1);continue;}
+      rows.push({
+        sym:sym, side:side==='short'?'short':'long', ts:d.toISOString(),
+        entry:avgO, pnl:net,
+        notional:col('notional')>=0?(parseFloat(c[col('notional')])||null):null,
+        lev:col('lev')>=0?(parseFloat(c[col('lev')])||null):null,
+        durMin:col('dur_min')>=0?(parseFloat(c[col('dur_min')])||null):null
+      });
+    }
+    return{rows:rows,bad:bad};
+  }
+  function _mxHandleFile(inp){
+    const f=inp.files&&inp.files[0]; inp.value=''; if(!f)return;
+    const rd=new FileReader();
+    rd.onload=()=>{
+      const st=document.getElementById('mxImpStatus');
+      const r=_mxParseCsv(String(rd.result||''));
+      if(r.err){ if(st){st.style.display='block';st.textContent='⚠ импорт: '+r.err;} return; }
+      const seen=new Set(journal.filter(e=>e.src).map(e=>e.ticker+'|'+e.ts+'|'+e.pnl));
+      let added=0,dup=0;
+      r.rows.forEach((t,i)=>{
+        const ticker=t.sym.replace(/(USDT|USDC|USD)$/,'/$1');
+        const key=ticker+'|'+t.ts+'|'+t.pnl;
+        if(seen.has(key)){dup++;return;}
+        seen.add(key); added++;
+        journal.push({
+          id:Date.now()+i, ts:t.ts, ticker:ticker, tf:'',
+          protocol:null, zPx:null, zKind:'mexc', zNote:'', zStop:null,
+          outcome:t.pnl>=0?'win':'loss',
+          entryPx:t.entry, notional:t.notional, pnl:t.pnl,
+          plan:null, note:'', grade:null, stars:null, triggered:false,
+          src:'csv', side:t.side, lev:t.lev, durMin:t.durMin
+        });
+      });
+      journal.sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+      saveJournal(); renderJournal();
+      if(st){st.style.display='block';st.textContent='⭱ импорт сделок: +'+added+(dup?' · дубликатов пропущено: '+dup:'')+(r.bad.length?' · строк с ошибками: '+r.bad.length+' (№'+r.bad.slice(0,5).join(',')+(r.bad.length>5?'…':'')+')':'');}
+    };
+    rd.readAsText(f);
   }
   // ---- журнал отработки зон (из zoneReviews) ----
   let _zrjFilter='all';
