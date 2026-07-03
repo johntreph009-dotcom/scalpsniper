@@ -1164,6 +1164,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <div class="jstat"><div class="jsl">Суммарный P&L</div><div class="jsv dim" id="jTotalPnl">—</div><div class="jsub" id="jPnlSub">нет сделок</div></div>
         <div class="jstat"><div class="jsl">Сделок / пропущено</div><div class="jsv dim" id="jTradeCount">—</div><div class="jsub" id="jWinCount">—</div></div>
         <div class="jstat"><div class="jsl">Дисциплина план→факт</div><div class="jsv dim" id="jDisc">—</div><div class="jsub" id="jDiscSub">следовал плану зоны</div></div>
+        <div class="jstat"><div class="jsl">Discipline Score</div><div class="jsv dim" id="jDScore">—</div><div class="jsub" id="jDScoreSub">0–100 · не про доходность</div></div>
       </div>
     </div>
     <div class="j-sect">
@@ -2338,6 +2339,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function pnlClass(v){return v>0?'green':v<0?'danger':'dim';}
   function fmtPnl(v){if(v===null||v===undefined)return '—';return (v>0?'+':'')+v.toFixed(2)+' USDT';}
   function fmtPct(p){return p===null?'—':p+'%';}
+  // Discipline Score 0–100: только дисциплина, НЕ доходность. Компоненты с динамическими весами (считаются только при 3+ наблюдениях)
+  function _discScore(){
+    const parts=[];
+    const rated=journal.filter(e=>e.plan!=null);
+    if(rated.length>=3)parts.push({w:40,l:'план',v:Math.round(rated.filter(e=>e.plan).length/rated.length*100)});
+    const graded=journal.filter(e=>e.grade);
+    if(graded.length>=3){ const gv={A:100,B:60,C:20}; parts.push({w:25,l:'грейды',v:Math.round(graded.reduce((s,e)=>s+(gv[e.grade]||0),0)/graded.length)}); }
+    const adh=(typeof zoneReviews!=='undefined'?zoneReviews:[]).filter(r=>r.adhered);
+    if(adh.length>=3){ const av={plan:100,deviated:30,missed:50}; parts.push({w:20,l:'зоны',v:Math.round(adh.reduce((s,r)=>s+(av[r.adhered]||0),0)/adh.length)}); }
+    const trades=journal.filter(e=>e.outcome&&e.outcome!=='skip');
+    if(trades.length>=3)parts.push({w:15,l:'рефлексия',v:Math.round(trades.filter(e=>e.grade).length/trades.length*100)});
+    if(!parts.length)return null;
+    const W=parts.reduce((s,p)=>s+p.w,0);
+    return {score:Math.round(parts.reduce((s,p)=>s+p.w*p.v,0)/W), parts:parts};
+  }
   function renderJournal(){
     const trades=journal.filter(e=>e.outcome!=='skip');
     const wins=trades.filter(e=>e.outcome==='win');
@@ -2357,6 +2373,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const dEl=document.getElementById('jDisc');
     dEl.textContent=fmtPct(discPct); dEl.className='jsv '+wrClass(discPct);
     document.getElementById('jDiscSub').textContent=discRated.length?`${discFollowed} из ${discRated.length} закрытых`:'нет записей';
+    const dsEl=document.getElementById('jDScore');
+    if(dsEl){ const ds=_discScore();
+      if(ds){ dsEl.textContent=ds.score; dsEl.className='jsv '+wrClass(ds.score);
+        document.getElementById('jDScoreSub').textContent=ds.parts.map(p=>p.l+' '+p.v).join(' · ')+' · не про доходность'; }
+      else{ dsEl.textContent='—'; dsEl.className='jsv dim'; document.getElementById('jDScoreSub').textContent='соберётся из журнала и отработки зон (нужно 3+ записи)'; } }
     // kind stats
     const kinds=['fade','break','watch','stand'];
     document.getElementById('jKindStats').innerHTML=kinds.map(k=>{
