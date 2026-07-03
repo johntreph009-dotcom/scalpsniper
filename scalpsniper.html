@@ -120,6 +120,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .dld-btn.on{border-color:rgba(255,122,24,.55);color:#ff7a18}
   .dld-card{font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--text-dim)}
   .dld-card.good{color:#5DCAA5} .dld-card.bad{color:#F09595} .dld-card b{color:#e8ecf0}
+  .rpl-wrap{margin-bottom:18px}
+  .rpl-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .rpl-sel{background:#141311;border:1px solid var(--line);color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-size:11px;border-radius:8px;padding:4px 6px}
+  .rpl-info{font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--text-dim)}
+  .rpl-note{font-size:9.5px;color:var(--text-faint);margin-top:6px;line-height:1.5}
+  #rplCanvas{display:block;width:100%;border:1px solid var(--line);border-radius:8px}
+  #rplSlider{accent-color:#ff7a18;margin-top:6px}
   .dl-feedback.show{opacity:1}
   .dl-feedback.up{color:#5DCAA5}
   .dl-feedback.dn{color:#F09595}
@@ -1180,6 +1187,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="section-title">Аналитика <span class="tag">из журнала</span></div>
     <div class="analytics-wrap" id="journalAnalytics"></div>
     <div class="grade-stats-grid" id="gradeStats"></div>
+    <div class="section-title">Replay сессии <span class="tag">зоны + сделки на свечах</span></div>
+    <div class="rpl-wrap">
+      <div class="rpl-bar">
+        <button class="paste-px" id="rplLoadBtn" onclick="_rplLoad()" title="Свечи 1m Binance по тикеру из Подготовки, последние ~8 часов">⟳ Загрузить 8ч</button>
+        <button class="paste-px" id="rplPlayBtn" onclick="_rplToggle()">▶</button>
+        <select id="rplSpeed" class="rpl-sel" onchange="_rplSetSpeed()" title="Скорость воспроизведения"><option value="100">×20</option><option value="250" selected>×8</option><option value="600">×3</option></select>
+        <span id="rplInfo" class="rpl-info">не загружено</span>
+      </div>
+      <canvas id="rplCanvas" style="display:none"></canvas>
+      <input type="range" id="rplSlider" min="1" max="1" value="1" style="display:none;width:100%" oninput="_rplSeek(this.value)">
+      <div class="rpl-note">Повтор по свечам Binance 1m: пунктир — уровни зон (активные + из журнала), точки — сделки журнала по времени записи (зелёная win / красная loss). Визуальный разбор «план vs факт», не симуляция исполнения.</div>
+    </div>
     <div class="section-title">Журнал отработки зон <span class="tag">все размеченные · новые сверху</span></div>
     <div id="zrjBar"></div>
     <div class="zr-journal" id="zrJournal"></div>
@@ -2486,6 +2505,76 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(st){st.style.display='block';st.textContent='⭱ импорт сделок: +'+added+(dup?' · дубликатов пропущено: '+dup:'')+(r.bad.length?' · строк с ошибками: '+r.bad.length+' (№'+r.bad.slice(0,5).join(',')+(r.bad.length>5?'…':'')+')':'');}
     };
     rd.readAsText(f);
+  }
+  // ---- Replay сессии: свечи 1m + уровни зон + сделки журнала ----
+  let _rplK=[],_rplIdx=1,_rplTimer=null,_rplZones=[],_rplTrades=[],_rplSym='';
+  async function _rplLoad(){
+    if(_rplTimer)_rplToggle();
+    const raw=(document.getElementById('ticker')&&document.getElementById('ticker').value.trim())||'BTC/USDT';
+    const sym=(typeof _symFromTicker==='function')?_symFromTicker(raw):'BTCUSDT';
+    const info=document.getElementById('rplInfo'); if(info)info.textContent='загрузка…';
+    try{
+      const r=await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval=1m&limit=480',{cache:'no-store'});
+      if(!r.ok)throw 0;
+      const kl=(await r.json()).map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4]}));
+      if(kl.length<10)throw 0;
+      _rplK=kl; _rplSym=raw.toUpperCase(); _rplIdx=Math.min(60,kl.length-1);
+      const t0=kl[0].t;
+      const seen={};
+      const zAct=(zones||[]).filter(z=>!z.expired&&isFinite(+z.px)).map(z=>({px:+z.px,kind:z.kind}));
+      const zJr=journal.filter(e=>e.ticker&&e.ticker.toUpperCase()===_rplSym&&e.zPx!=null&&new Date(e.ts).getTime()>=t0).map(e=>({px:+e.zPx,kind:e.zKind}));
+      _rplZones=zAct.concat(zJr).filter(z=>{ if(!isFinite(z.px)||seen[z.px])return false; seen[z.px]=1; return true; });
+      _rplTrades=journal.filter(e=>e.ticker&&e.ticker.toUpperCase()===_rplSym&&e.entryPx!=null&&new Date(e.ts).getTime()>=t0).map(e=>({t:new Date(e.ts).getTime(),px:+e.entryPx,out:e.outcome}));
+      document.getElementById('rplCanvas').style.display='block';
+      const sl=document.getElementById('rplSlider'); sl.style.display='block'; sl.max=kl.length-1; sl.value=_rplIdx;
+      _rplDraw();
+    }catch(e){ if(info)info.textContent='не удалось загрузить свечи ('+sym+')'; }
+  }
+  function _rplSeek(v){ _rplIdx=Math.max(1,Math.min(_rplK.length-1,+v)); _rplDraw(); }
+  function _rplToggle(){
+    const b=document.getElementById('rplPlayBtn');
+    if(_rplTimer){ clearInterval(_rplTimer); _rplTimer=null; if(b)b.textContent='▶'; return; }
+    if(!_rplK.length)return;
+    if(_rplIdx>=_rplK.length-1)_rplIdx=Math.min(60,_rplK.length-1);
+    const iv=+(document.getElementById('rplSpeed')||{}).value||250;
+    _rplTimer=setInterval(()=>{ if(_rplIdx>=_rplK.length-1){_rplToggle();return;} _rplIdx++; const sl=document.getElementById('rplSlider'); if(sl)sl.value=_rplIdx; _rplDraw(); },iv);
+    if(b)b.textContent='⏸';
+  }
+  function _rplSetSpeed(){ if(_rplTimer){ _rplToggle(); _rplToggle(); } }
+  function _rplDraw(){
+    const cv=document.getElementById('rplCanvas'); if(!cv||!_rplK.length)return;
+    const W=cv.parentElement.clientWidth||600, H=260, LBL=70;
+    const dpr=Math.min(window.devicePixelRatio||1,3);
+    cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr); cv.style.height=H+'px';
+    const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    const view=_rplK.slice(0,_rplIdx+1), win=view.slice(-180);
+    const base=[]; win.forEach(c=>{base.push(c.h,c.l);});
+    const lo=Math.min.apply(null,base),hi=Math.max.apply(null,base),span=(hi-lo)||1;
+    const minP=lo-span*.08,maxP=hi+span*.08;
+    const toY=p=>H-((p-minP)/(maxP-minP))*H;
+    const plotW=W-LBL, n=win.length, dx=plotW/n, cw=Math.max(1,dx*0.7);
+    ctx.fillStyle='#0e0d0b'; ctx.fillRect(0,0,W,H);
+    ctx.font='9px JetBrains Mono,monospace'; ctx.textAlign='left';
+    _rplZones.forEach(z=>{ if(z.px<minP||z.px>maxP)return; const y=toY(z.px), col=(_MC_KIND[z.kind]||_MC_KIND.watch);
+      ctx.strokeStyle='rgba('+col.rgb+',.55)'; ctx.setLineDash([5,4]); ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(plotW,y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle='rgba('+col.rgb+',.95)'; ctx.fillText(String(z.px),plotW+4,y+3); });
+    win.forEach((c,i)=>{ const x=i*dx+dx/2, up=c.c>=c.o;
+      ctx.strokeStyle=up?'rgba(29,158,117,.9)':'rgba(226,75,74,.9)';
+      ctx.beginPath(); ctx.moveTo(x,toY(c.h)); ctx.lineTo(x,toY(c.l)); ctx.stroke();
+      ctx.fillStyle=up?'rgba(29,158,117,.85)':'rgba(226,75,74,.85)';
+      const y1=toY(Math.max(c.o,c.c)),y2=toY(Math.min(c.o,c.c));
+      ctx.fillRect(x-cw/2,y1,cw,Math.max(1,y2-y1)); });
+    const curT=view[view.length-1].t;
+    _rplTrades.forEach(tr=>{ if(tr.t>curT+60000)return;
+      let bi=-1; for(let i=0;i<win.length;i++){ if(win[i].t>=tr.t-60000){bi=i;break;} }
+      if(bi<0)return; const x=bi*dx+dx/2, y=toY(Math.max(minP,Math.min(maxP,tr.px)));
+      ctx.fillStyle=tr.out==='win'?'#5DCAA5':tr.out==='loss'?'#F09595':'#8a8f98';
+      ctx.beginPath(); ctx.arc(x,y,4,0,7); ctx.fill();
+      ctx.strokeStyle='#0e0d0b'; ctx.lineWidth=1; ctx.stroke(); });
+    const cur=view[view.length-1].c, cy=toY(cur);
+    ctx.fillStyle='#ff7a18'; ctx.fillText(String(typeof _rpx==='function'?_rpx(cur):cur),plotW+4,Math.max(10,Math.min(H-4,cy+3)));
+    const info=document.getElementById('rplInfo');
+    if(info){ const d=new Date(curT); info.textContent=_rplSym+' · '+(_rplIdx+1)+'/'+_rplK.length+' · '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})+' · зон '+_rplZones.length+' · сделок '+_rplTrades.length; }
   }
   // ---- журнал отработки зон (из zoneReviews) ----
   let _zrjFilter='all';
