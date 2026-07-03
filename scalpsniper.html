@@ -120,6 +120,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .dld-btn.on{border-color:rgba(255,122,24,.55);color:#ff7a18}
   .dld-card{font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--text-dim)}
   .dld-card.good{color:#5DCAA5} .dld-card.bad{color:#F09595} .dld-card b{color:#e8ecf0}
+  .lc-dist{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-top:6px;letter-spacing:.2px}
+  .lc-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .lc-actions .calc-fill-btn{flex:1;min-width:140px;margin-top:0}
   .rpl-wrap{margin-bottom:18px}
   .rpl-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
   .rpl-sel{background:#141311;border:1px solid var(--line);color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-size:11px;border-radius:8px;padding:4px 6px}
@@ -1106,6 +1109,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <span id="streakBadge" class="streak-badge" style="display:none"></span>
     </div>
     <div class="session-ctx" id="sessionCtx"><div class="sc-bias" id="scBias"></div><div class="sc-guards" id="scGuards"></div></div>
+    <div id="liveCard" class="live-card hide">
+      <div class="lc-top"><span class="lc-num" id="lcNum">1</span><span class="lc-kind" id="lcKind">FADE</span></div>
+      <div class="lc-grid">
+        <div class="lc-cell"><div class="lc-l">Цена зоны</div><div class="lc-v" id="lcPx">—</div></div>
+        <div class="lc-cell"><div class="lc-l">Стоп</div><div class="lc-v" id="lcStop">—</div></div>
+        <div class="lc-cell"><div class="lc-l">Объём</div><div class="lc-v" id="lcSize">—</div></div>
+      </div>
+      <div class="lc-note" id="lcNote">—</div>
+      <div class="lc-dist" id="lcDist" style="display:none"></div>
+      <div class="lc-actions">
+        <button class="calc-fill-btn" id="lcPosBtn" onclick="_lcOpenPos()" style="display:none">▲ В позицию</button>
+        <button class="calc-fill-btn" id="calcFillBtn" onclick="fillCalcFromZone()" style="display:none">→ Подставить в калькулятор</button>
+      </div>
+    </div>
     <div class="sess-pchart">
       <div class="dl-price"><span class="dl-price-now" id="sessPxNow">—</span><span class="dl-price-chg" id="sessPxChg"></span><span class="dl-price-lbl">цена · live</span></div>
       <div class="dl-pchart-wrap"><canvas id="sessPriceChart"></canvas></div>
@@ -1131,16 +1148,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <canvas id="miniChart" height="180"></canvas>
     </div>
     <div class="zone-ladder" id="zoneLadder"></div>
-    <div id="liveCard" class="live-card hide">
-      <div class="lc-top"><span class="lc-num" id="lcNum">1</span><span class="lc-kind" id="lcKind">FADE</span></div>
-      <div class="lc-grid">
-        <div class="lc-cell"><div class="lc-l">Цена зоны</div><div class="lc-v" id="lcPx">—</div></div>
-        <div class="lc-cell"><div class="lc-l">Стоп</div><div class="lc-v" id="lcStop">—</div></div>
-        <div class="lc-cell"><div class="lc-l">Объём</div><div class="lc-v" id="lcSize">—</div></div>
-      </div>
-      <div class="lc-note" id="lcNote">—</div>
-      <button class="calc-fill-btn" id="calcFillBtn" onclick="fillCalcFromZone()" style="display:none">→ Подставить в калькулятор</button>
-    </div>
     <div class="pos-block" id="posBlock"></div>
   </div>
   <!-- ===== RISK CALC (shared, сворачиваемый) ===== -->
@@ -2016,6 +2023,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       document.getElementById('lcSize').style.color=ps?'var(--accent)':'var(--text-faint)';
       document.getElementById('lcNote').textContent=z.note||'план не записан';
       const cfb=document.getElementById('calcFillBtn');if(cfb)cfb.style.display=z.stop?'block':'none';
+      const pb=document.getElementById('lcPosBtn'); if(pb)pb.style.display='block';
+      const ld=document.getElementById('lcDist');
+      if(ld){ const bits=[]; const dz=(z.px-lp)/lp*100;
+        bits.push('до зоны '+(dz>=0?'+':'')+dz.toFixed(2)+'%');
+        if(z.stop){ const dsp=(z.stop-lp)/lp*100; bits.push('до стопа '+(dsp>=0?'+':'')+dsp.toFixed(2)+'%');
+          const ps2=posSize(z); if(ps2)bits.push('риск сейчас ~'+(Math.abs(lp-z.stop)*ps2.units).toFixed(2)+' USDT'); }
+        ld.textContent=bits.join(' · '); ld.style.display='block'; }
       if(z.proto && z.proto!==selProto && typeof selectProto==='function'){ selectProto(z.proto); }
       _updateHdrZone(z);
     } else {
@@ -2028,6 +2042,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       document.getElementById('lcSize').textContent='—';document.getElementById('lcSize').style.color='var(--text-faint)';
       document.getElementById('lcNote').textContent='Цена не в размеченной зоне. По плану — ждать, не входить.';
       const cfb2=document.getElementById('calcFillBtn');if(cfb2)cfb2.style.display='none';
+      const pb2=document.getElementById('lcPosBtn'); if(pb2)pb2.style.display='none';
+      // пред-алерт подхода: тихий бип + статус при цене в 0.3% от ближайшей зоны (сброс при откате за 0.45%)
+      let ni=-1,ndp=Infinity;
+      zones.forEach((z2,i2)=>{ if(z2.closed||z2.expired)return; const dp=Math.abs(z2.px-lp)/lp*100; if(dp<ndp){ndp=dp;ni=i2;} });
+      const ld2=document.getElementById('lcDist');
+      if(ni>=0&&ndp<=0.3){
+        st.textContent='ПОДХОД · зона '+(ni+1)+' ('+zones[ni].px+') · '+ndp.toFixed(2)+'%'; st.style.color='var(--warn)';
+        if(ld2){ ld2.textContent='ближайшая зона '+zones[ni].px+' · '+ndp.toFixed(2)+'% · приготовься'; ld2.style.display='block'; }
+        if(ni!==_lastApproachZone && phase==='live'){ _approachBeep(); _lastApproachZone=ni; }
+      } else {
+        if(ld2)ld2.style.display='none';
+        if(ndp>0.45)_lastApproachZone=-1;
+      }
       _updateHdrZone(null);
     }
     renderZones();
@@ -3272,7 +3299,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _saveChartLayers(){try{localStorage.setItem('msa_chart_layers_v1',JSON.stringify(_chartLayers));}catch(e){}}
   function _markLayers(){document.querySelectorAll('.mc-lyr').forEach(b=>b.classList.toggle('active',!!_chartLayers[b.dataset.lyr]));}
   function toggleLayer(k){_chartLayers[k]=!_chartLayers[k];_saveChartLayers();_markLayers();if(typeof _chartRedraw==='function')_chartRedraw();}
-  let _lastAlertZone=-2;
+  let _lastAlertZone=-2,_lastApproachZone=-1;
+  function _approachBeep(){
+    try{
+      const ac=new(window.AudioContext||window.webkitAudioContext)();
+      const osc=ac.createOscillator(),g=ac.createGain();
+      osc.frequency.value=520;osc.type='sine';
+      g.gain.setValueAtTime(0.05,ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.15);
+      osc.connect(g);g.connect(ac.destination);
+      osc.start();osc.stop(ac.currentTime+0.15);
+      setTimeout(()=>ac.close(),300);
+    }catch(e){}
+  }
+  function _lcOpenPos(){ const a=activeZoneIdx(); if(a>=0&&typeof openPosFromZone==='function')openPosFromZone(a); }
   function _zoneBeep(){
     try{
       const ac=new(window.AudioContext||window.webkitAudioContext)();
