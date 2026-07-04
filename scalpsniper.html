@@ -121,6 +121,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .dld-card{font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--text-dim)}
   .dld-card.good{color:#5DCAA5} .dld-card.bad{color:#F09595} .dld-card b{color:#e8ecf0}
   .lc-dist{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-top:6px;letter-spacing:.2px}
+  .lc-copy{cursor:pointer} .lc-copy:hover{text-decoration:underline dotted;text-underline-offset:3px}
   .sess-walls{font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin:2px 0 8px;min-height:14px;letter-spacing:.2px}
   .sess-walls .sw-up{color:#F09595} .sess-walls .sw-dn{color:#5DCAA5}
   .pos-bu{border-color:rgba(255,176,32,.5);color:#ffb020}
@@ -1117,8 +1118,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div id="liveCard" class="live-card hide">
       <div class="lc-top"><span class="lc-num" id="lcNum">1</span><span class="lc-kind" id="lcKind">FADE</span></div>
       <div class="lc-grid">
-        <div class="lc-cell"><div class="lc-l">Цена зоны</div><div class="lc-v" id="lcPx">—</div></div>
-        <div class="lc-cell"><div class="lc-l">Стоп</div><div class="lc-v" id="lcStop">—</div></div>
+        <div class="lc-cell"><div class="lc-l">Цена зоны</div><div class="lc-v lc-copy" id="lcPx" onclick="copyToClip(this.textContent,this)" title="Тап — скопировать цену для ордера">—</div></div>
+        <div class="lc-cell"><div class="lc-l">Стоп</div><div class="lc-v lc-copy" id="lcStop" onclick="if(this.textContent!=='—')copyToClip(this.textContent,this)" title="Тап — скопировать стоп для ордера">—</div></div>
         <div class="lc-cell"><div class="lc-l">Объём</div><div class="lc-v" id="lcSize">—</div></div>
       </div>
       <div class="lc-note" id="lcNote">—</div>
@@ -2025,7 +2026,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       document.getElementById('lcStop').textContent=z.stop?z.stop:'—';
       document.getElementById('lcStop').style.color=z.stop?'var(--danger)':'var(--text-faint)';
       const ps=posSize(z);
-      document.getElementById('lcSize').textContent=ps?ps.units.toFixed(4)+' ед.':'—';
+      let _szTxt='—';
+      if(ps){ const u=ps.units; const uTxt=u>=100?String(Math.round(u)):u>=1?String(+u.toFixed(2)):String(+u.toFixed(4));
+        const nTxt=ps.notional>=1000?(ps.notional/1000).toFixed(1)+'K':String(Math.round(ps.notional));
+        _szTxt=uTxt+' ед · ~'+nTxt+' USDT'; }
+      document.getElementById('lcSize').textContent=_szTxt;
       document.getElementById('lcSize').style.color=ps?'var(--accent)':'var(--text-faint)';
       document.getElementById('lcNote').textContent=z.note||'план не записан';
       const cfb=document.getElementById('calcFillBtn');if(cfb)cfb.style.display=z.stop?'block':'none';
@@ -2980,27 +2985,27 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!el)return;
     const active=zones.filter(z=>!z.closed&&!z.expired);
     const items=[];
-    if(active.length===0){items.push({c:'rb-danger',t:'⚠ Нет активных зон'});}
-    else{items.push({c:'rb-ok',t:'✓ Зон: '+active.length});}
+    if(active.length===0){items.push({c:'rb-danger',t:'⚠ Нет активных зон',h:'Разметь зоны в Подготовке — без них сессия слепа'});}
+    else{items.push({c:'rb-ok',t:'✓ Зон: '+active.length,h:'Активные зоны на сессию'});}
     const noStop=active.filter(z=>!z.stop).length;
-    if(noStop>0)items.push({c:'rb-warn',t:'⚡ Без стопа: '+noStop});
+    if(noStop>0)items.push({c:'rb-warn',t:'⚡ Без стопа: '+noStop,h:'У '+noStop+' зон нет стопа — сайзинг и риск по ним не считаются. Добавь стоп в карточке зоны'});
     const bias=document.getElementById('bias')?.value?.trim();
-    if(!bias){items.push({c:'rb-warn',t:'⚡ Байас не задан'});}
-    else{items.push({c:'rb-ok',t:'✓ Байас'});}
+    if(!bias){items.push({c:'rb-warn',t:'⚡ Байас не задан',h:'Задай байас дня в Подготовке (правила сессии) — фильтр против контртрендовых входов'});}
+    else{items.push({c:'rb-ok',t:'✓ Байас',h:'Байас дня задан'});}
     const maxL=document.getElementById('maxLoss')?.value;
     const maxT=document.getElementById('maxTrades')?.value;
-    if(!maxL&&!maxT){items.push({c:'rb-warn',t:'⚡ Лимиты не заданы'});}
-    else{items.push({c:'rb-ok',t:'✓ Лимиты'});}
+    if(!maxL&&!maxT){items.push({c:'rb-warn',t:'⚡ Лимиты не заданы',h:'Задай лимит убытка и сделок в Подготовке — это твой стоп-день и защита от тильта'});}
+    else{items.push({c:'rb-ok',t:'✓ Лимиты',h:'Лимиты сессии заданы'});}
     const checks=PROTO_CHECKS[selProto];
     const state=protoCheckState[selProto]||[];
     const done=state.filter(Boolean).length;
     const total=checks?checks.length:0;
     if(total>0){
-      if(done<total){items.push({c:done>=Math.ceil(total/2)?'rb-warn':'rb-danger',t:`⚡ Протокол ${done}/${total}`});}
-      else{items.push({c:'rb-ok',t:'✓ Протокол OK'});}
+      if(done<total){items.push({c:done>=Math.ceil(total/2)?'rb-warn':'rb-danger',t:`⚡ Протокол ${done}/${total}`,h:'Отмечено '+done+' из '+total+' условий входа протокола — чеклист в Подготовке под выбором стратегии'});}
+      else{items.push({c:'rb-ok',t:'✓ Протокол OK',h:'Все условия входа протокола отмечены'});}
     }
     el.style.display='flex';
-    el.innerHTML=items.map(it=>`<span class="rb-item ${it.c}">${it.t}</span>`).join('');
+    el.innerHTML=items.map(it=>`<span class="rb-item ${it.c}" title="${it.h||''}">${it.t}</span>`).join('');
   }
 
 
