@@ -121,6 +121,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .dld-card{font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--text-dim)}
   .dld-card.good{color:#5DCAA5} .dld-card.bad{color:#F09595} .dld-card b{color:#e8ecf0}
   .lc-dist{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-top:6px;letter-spacing:.2px}
+  .sess-walls{font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin:2px 0 8px;min-height:14px;letter-spacing:.2px}
+  .sess-walls .sw-up{color:#F09595} .sess-walls .sw-dn{color:#5DCAA5}
+  .pos-bu{border-color:rgba(255,176,32,.5);color:#ffb020}
   .lc-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
   .lc-actions .calc-fill-btn{flex:1;min-width:140px;margin-top:0}
   .rpl-wrap{margin-bottom:18px}
@@ -1109,6 +1112,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <span class="live-status" id="liveStatus" style="color:var(--text-dim)">введи цену</span>
       <span id="streakBadge" class="streak-badge" style="display:none"></span>
     </div>
+    <div class="sess-walls" id="sessWalls" title="Ближайшие крупные стены стакана (Binance спот, >1.8× среднего уровня) и дистанция до них"></div>
     <div class="session-ctx" id="sessionCtx"><div class="sc-bias" id="scBias"></div><div class="sc-guards" id="scGuards"></div></div>
     <div id="liveCard" class="live-card hide">
       <div class="lc-top"><span class="lc-num" id="lcNum">1</span><span class="lc-kind" id="lcKind">FADE</span></div>
@@ -2261,7 +2265,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         ? `<div class="pos-pnl ${pnl>=0?'pos-pnl-up':'pos-pnl-down'}" data-id="${p.id}">${pnl>=0?'+':''}${pnl.toFixed(2)} USDT <span class="pos-pnl-pct">(${pnlPct>=0?'+':''}${pnlPct.toFixed(2)}%)</span></div>`
         : `<div class="pos-levels">${cur?'жду цену':'цена '+tk+' загружается…'} · PnL н/д</div>`;
       html+=`<div class="pos-card ${cls}" style="margin-bottom:8px${cur?'':';opacity:.92'}">
-        <div class="pos-top"><span class="pos-side ${p.side}">${p.side==='long'?'▲ LONG':'▼ SHORT'}</span>${tkBadge}<span class="pos-entry">вход ${p.entry}</span><span class="pos-units">${p.units.toFixed(4)} ед · ${Math.round(notional)} USDT</span><button class="pos-close" onclick="closePosition('${p.id}')">Закрыть</button></div>
+        <div class="pos-top"><span class="pos-side ${p.side}">${p.side==='long'?'▲ LONG':'▼ SHORT'}</span>${tkBadge}<span class="pos-entry">вход ${p.entry}</span><span class="pos-units">${p.units.toFixed(4)} ед · ${Math.round(notional)} USDT</span>${p.stop===p.entry?'':`<button class="pos-close pos-bu" onclick="_posToBU('${p.id}')" title="Стоп в безубыток (= входу). Ордер на бирже НЕ ставится — это план и алерты терминала">→БУ</button>`}<button class="pos-close" onclick="closePosition('${p.id}')">Закрыть</button></div>
         ${pnlBlock}
         <div class="pos-levels">${p.stop?'SL '+p.stop:'SL —'} · ${p.target?'TP '+p.target:'TP —'}${cur?'':' · '+tk}</div>
       </div>`;
@@ -2273,6 +2277,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       _prevPnlById[p.id]=pnl; });
     renderPosFloat();
   }
+  function _posToBU(id){
+    const p=positions.find(x=>String(x.id)===String(id)); if(!p)return;
+    p.stop=p.entry; savePos(); renderPosition();
+    if(typeof _chartRedraw==='function')_chartRedraw();
+  }
   // ── плавающее окно позиции (видно на всех вкладках, liquid glass + светящаяся окантовка) ──
   const PFKEY='msa_posfloat_v1';
   let _pfPrevTotal=null;
@@ -2282,7 +2291,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _pfGoToPosition(id){ if(typeof setPhase==='function')setPhase('live'); setTimeout(()=>{const pb=document.getElementById('posBlock'); if(pb)pb.scrollIntoView({behavior:'smooth',block:'center'});},80); }
   function renderPosFloat(){
     const el=document.getElementById('posFloat'); if(!el)return;
-    if(!positions||!positions.length){ el.classList.add('hide'); return; }
+    if(!positions||!positions.length){ el.classList.add('hide'); if(document.title.includes('USDT ·'))document.title='ScalpSniper — Precision Trading Terminal'; return; }
     el.classList.remove('hide');
     const s=_pfState();
     if(s.left!=null&&s.top!=null){ el.style.left=s.left+'px'; el.style.top=s.top+'px'; el.style.right='auto'; el.style.bottom='auto'; }
@@ -2310,6 +2319,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     tEl.className='pf-total '+tcls;
     tEl.textContent = haveAny?`${total>=0?'+':''}${total.toFixed(2)} USDT`:'PnL н/д';
     if(_pfPrevTotal!=null && haveAny && Math.abs(total-_pfPrevTotal)>0.001){ tEl.classList.remove('pf-flash-up','pf-flash-down'); void tEl.offsetWidth; tEl.classList.add(total>_pfPrevTotal?'pf-flash-up':'pf-flash-down'); }
+    if(haveAny && !document.title.startsWith('⚡')){ document.title=(total>=0?'+':'')+total.toFixed(2)+' USDT · ScalpSniper'; }
     if(haveAny)_pfPrevTotal=total;
     const count=positions.length>1?`<span class="pf-count">${positions.length} позиции открыто</span>`:'';
     document.getElementById('pfBody').innerHTML=count+rows;
@@ -3321,6 +3331,29 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }catch(e){}
   }
   function _lcOpenPos(){ const a=activeZoneIdx(); if(a>=0&&typeof openPosFromZone==='function')openPosFromZone(a); }
+  // ── стены стакана в Сессии: ближайшая крупная сверху/снизу + дистанция (Binance спот, троттл 10с) ──
+  let _swLast=0,_swBusy=false;
+  async function _sessWallsTick(){
+    if(phase!=='live'||_swBusy)return;
+    const now=Date.now(); if(now-_swLast<10000)return; _swLast=now; _swBusy=true;
+    try{
+      const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'BTCUSDT';
+      const d=await fetch('https://api.binance.com/api/v3/depth?symbol='+sym+'&limit=20',{cache:'no-store'}).then(r=>r.json());
+      const el=document.getElementById('sessWalls');
+      if(el&&d.asks&&d.bids){
+        const px=(+d.asks[0][0]+ +d.bids[0][0])/2;
+        const sum=a=>a.reduce((s,x)=>s+(+x[1]),0);
+        const avgA=sum(d.asks)/d.asks.length, avgB=sum(d.bids)/d.bids.length;
+        const wa=d.asks.find(x=>+x[1]>avgA*1.8), wb=d.bids.find(x=>+x[1]>avgB*1.8);
+        const f=v=>typeof _rpx==='function'?_rpx(v):v;
+        const parts=[];
+        if(wa)parts.push('<span class="sw-up">⛰↑ '+f(+wa[0])+'×'+Math.round(+wa[1])+' ('+(((+wa[0]-px)/px)*100).toFixed(2)+'%)</span>');
+        if(wb)parts.push('<span class="sw-dn">⛰↓ '+f(+wb[0])+'×'+Math.round(+wb[1])+' ('+(((px-+wb[0])/px)*100).toFixed(2)+'%)</span>');
+        el.innerHTML=parts.length?('стены: '+parts.join(' · ')):'стены: рядом нет крупных';
+      }
+    }catch(e){}
+    _swBusy=false;
+  }
   function _lcCloseZone(){ const a=activeZoneIdx(); if(a>=0&&typeof openClose==='function')openClose(a); }
   function _sessPcToggle(){
     const w=document.getElementById('sessPcWrap'); if(!w)return;
@@ -3924,8 +3957,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _posAlerts(){
     const lp=_livePx(); if(!lp||typeof positions==='undefined')return;
     positions.filter(p=>(p.ticker||'BTC/USDT').toUpperCase()===_tkKey()).forEach(p=>{
-      if(p.stop){const dist=Math.abs(p.entry-p.stop)||1, adv=(p.side==='long')?(p.entry-lp):(lp-p.entry), f=adv/dist, k=p.id+'_s';
-        if(f>=0.8&&!_posAlertFlags[k]){_posAlertFlags[k]=true; if(typeof _zoneBeep==='function')_zoneBeep(); if(typeof _zoneTitleFlash==='function')_zoneTitleFlash();} if(f<0.6)_posAlertFlags[k]=false;}
+      if(p.stop){const k=p.id+'_s';
+        if(Math.abs(p.entry-p.stop)/p.entry<0.001){ // стоп в БУ: прогресс от входа не работает — алерт по дистанции до уровня
+          const d=(p.side==='long')?(lp-p.stop)/p.stop*100:(p.stop-lp)/p.stop*100;
+          if(d<=0.15&&!_posAlertFlags[k]){_posAlertFlags[k]=true; if(typeof _zoneBeep==='function')_zoneBeep(); if(typeof _zoneTitleFlash==='function')_zoneTitleFlash();}
+          if(d>0.3)_posAlertFlags[k]=false;
+        } else {
+          const dist=Math.abs(p.entry-p.stop)||1, adv=(p.side==='long')?(p.entry-lp):(lp-p.entry), f=adv/dist;
+          if(f>=0.8&&!_posAlertFlags[k]){_posAlertFlags[k]=true; if(typeof _zoneBeep==='function')_zoneBeep(); if(typeof _zoneTitleFlash==='function')_zoneTitleFlash();} if(f<0.6)_posAlertFlags[k]=false;
+        }}
       if(p.target){const dist=Math.abs(p.target-p.entry)||1, prog=(p.side==='long')?(lp-p.entry):(p.entry-lp), f=prog/dist, k=p.id+'_t';
         if(f>=0.8&&!_posAlertFlags[k]){_posAlertFlags[k]=true; if(typeof _zoneBeep==='function')_zoneBeep(); if(typeof _zoneTitleFlash==='function')_zoneTitleFlash();} if(f<0.6)_posAlertFlags[k]=false;}
     });
@@ -3967,7 +4007,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const sessEl=document.getElementById('livePrice');
     if(document.activeElement!==sessEl){sessEl.value=px;updateLive();}
     _setLiveInd('● LIVE','var(--green)');
-    if(phase==='live'){ const _p=parseFloat(px); if(isFinite(_p)){ if(!_sessHist.length||_sessHist[_sessHist.length-1]!==_p){ _sessHist.push(_p); if(_sessHist.length>140)_sessHist.shift(); } if(typeof _sessDrawPrice==='function')_sessDrawPrice(); } _chartRedraw(); }
+    if(phase==='live'){ const _p=parseFloat(px); if(isFinite(_p)){ if(!_sessHist.length||_sessHist[_sessHist.length-1]!==_p){ _sessHist.push(_p); if(_sessHist.length>140)_sessHist.shift(); } if(typeof _sessDrawPrice==='function')_sessDrawPrice(); } _chartRedraw(); if(typeof _sessWallsTick==='function')_sessWallsTick(); }
   }
   async function fetchLivePx(){
     const raw=document.getElementById('ticker').value.trim();
