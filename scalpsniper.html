@@ -3642,7 +3642,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   let _chartGeo=null;
   function _crosshair(mx,my){
     if(!_chartGeo||!_klines.length)return;
-    _drawChart(_klines,_chartGeo.currentPrice);
+    _drawChart(_mcVisible(),_chartGeo.currentPrice);
     const g=_chartGeo, cv=document.getElementById('miniChart'); if(!cv)return; const ctx=cv.getContext('2d');
     const ph=g.ph||g.H;
     if(mx>g.W-g.LBL)mx=g.W-g.LBL; if(my<0)my=0; if(my>ph)my=ph;
@@ -3682,9 +3682,41 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }
     ctx.restore();
   }
+  // ── Этап 3: зум/пан — окно по таймстампам, переживает обновления klines ──
+  let _mcView={t0:null,t1:null};
+  function _mcVisible(){
+    if(_mcView.t0==null||_klines.length<12)return _klines;
+    let i0=_klines.findIndex(c=>c.t>=_mcView.t0); if(i0<0)i0=0;
+    let i1=-1; for(let i=_klines.length-1;i>=0;i--){ if(_klines[i].t<=_mcView.t1){i1=i;break;} }
+    if(i1<0||i1-i0<8){ _mcView={t0:null,t1:null}; return _klines; }
+    return _klines.slice(i0,i1+1);
+  }
+  function _mcZoom(factor,cxFrac){
+    const full=_klines.length; if(full<14)return;
+    const vis=_mcVisible(), gi0=_klines.indexOf(vis[0]), len=vis.length;
+    const newLen=Math.max(12,Math.min(full,Math.round(len*factor)));
+    if(newLen>=full){ _mcView={t0:null,t1:null}; _chartRedraw(); return; }
+    const anchor=gi0+cxFrac*(len-1);
+    let ns=Math.round(anchor-cxFrac*(newLen-1));
+    ns=Math.max(0,Math.min(full-newLen,ns));
+    _mcView={t0:_klines[ns].t,t1:_klines[ns+newLen-1].t};
+    _chartRedraw();
+  }
+  function _mcPan(dC){
+    if(!dC)return;
+    const full=_klines.length, vis=_mcVisible();
+    if(vis.length>=full)return;
+    const gi0=_klines.indexOf(vis[0]), len=vis.length;
+    const ns=Math.max(0,Math.min(full-len,gi0+dC));
+    _mcView={t0:_klines[ns].t,t1:_klines[ns+len-1].t};
+    _chartRedraw();
+  }
+  function _mcResetView(){ _mcView={t0:null,t1:null}; _chartRedraw(); }
   function _chartRedraw(){
     const lp=parseFloat(document.getElementById('livePrice').value)||parseFloat(document.getElementById('price').value)||null;
-    if(_klines.length)_drawChart(_klines,lp);
+    if(_klines.length)_drawChart(_mcVisible(),lp);
+    const st=document.getElementById('mcStatus');
+    if(st){ if(_mcView.t0!=null){ if(!st.textContent.includes('зум'))st.textContent='зум · 2×клик сброс'; } else if(st.textContent.includes('зум'))st.textContent='live'; }
   }
   let _mcTall=(function(){try{return localStorage.getItem('msa_mc_tall_v1')==='1';}catch(e){return false;}})();
   function _mcToggleTall(){
@@ -3733,13 +3765,60 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const cv=document.getElementById('miniChart');
       if(cv){
         cv.style.cursor='crosshair';
-        cv.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();_crosshair(e.clientX-r.left,e.clientY-r.top);});
-        cv.addEventListener('mouseleave',()=>_chartRedraw());
-        // тач: кроссхэйр пальцем (мобайл)
-        cv.addEventListener('touchstart',e=>{const r=cv.getBoundingClientRect(),t=e.touches[0];_crosshair(t.clientX-r.left,t.clientY-r.top);},{passive:true});
-        cv.addEventListener('touchmove',e=>{const r=cv.getBoundingClientRect(),t=e.touches[0];_crosshair(t.clientX-r.left,t.clientY-r.top);e.preventDefault();},{passive:false});
-        cv.addEventListener('touchend',()=>setTimeout(()=>_chartRedraw(),1400));
+        let _drag=null,_dragMoved=false; // {type:'pan',x} | {type:'zone',idx,price}
+        const _rel=e=>{const r=cv.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};};
+        cv.addEventListener('mousemove',e=>{
+          const p=_rel(e);
+          if(_drag){ _dragMoved=true; const g=_chartGeo; if(!g)return;
+            if(_drag.type==='pan'){ const dC=Math.round((_drag.x-p.x)/(g.cw||6)); if(dC){_mcPan(dC);_drag.x=p.x;} }
+            else{ const ph=g.ph||g.H;
+              const price=g.minP+(1-Math.max(0,Math.min(ph,p.y))/ph)*(g.maxP-g.minP);
+              _drag.price=price; _chartRedraw();
+              const ctx=cv.getContext('2d'); const y=ph-((price-g.minP)/(g.maxP-g.minP))*ph;
+              ctx.save(); ctx.strokeStyle='rgba(255,176,32,.9)'; ctx.setLineDash([5,4]); ctx.lineWidth=1.2;
+              ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(g.W-g.LBL,y);ctx.stroke();
+              ctx.fillStyle='rgba(255,176,32,.95)';ctx.fillRect(g.W-g.LBL+2,y-8,g.LBL-4,16);
+              ctx.fillStyle='#16100a';ctx.font='bold 9px JetBrains Mono,monospace';
+              ctx.fillText(String(_rpx(price)),g.W-g.LBL+5,y+4); ctx.restore(); }
+            return; }
+          _crosshair(p.x,p.y);
+        });
+        cv.addEventListener('mousedown',e=>{
+          const p=_rel(e); _dragMoved=false; const g=_chartGeo;
+          const hit=(_zoneHitAreas||[]).find(h=>Math.abs(p.y-h.yCenter)<=6);
+          if(hit&&g&&p.x<g.W-g.LBL&&zones[hit.idx]&&!zones[hit.idx].closed&&!zones[hit.idx].expired){
+            _drag={type:'zone',idx:hit.idx,price:+zones[hit.idx].px}; cv.style.cursor='ns-resize'; }
+          else if(_mcView.t0!=null){ _drag={type:'pan',x:p.x}; cv.style.cursor='grabbing'; }
+          e.preventDefault();
+        });
+        const _endDrag=()=>{ if(!_drag)return;
+          if(_drag.type==='zone'&&_dragMoved&&isFinite(_drag.price)){
+            const z=zones[_drag.idx], np=_rpx(_drag.price);
+            if(z&&np>0&&np!==z.px){ z.px=np; save(); if(typeof renderZones==='function')renderZones(); if(typeof renderLadder==='function')renderLadder(); } }
+          _drag=null; cv.style.cursor='crosshair'; _chartRedraw(); };
+        cv.addEventListener('mouseup',_endDrag);
+        cv.addEventListener('mouseleave',()=>{ if(_drag)_endDrag(); else _chartRedraw(); });
+        cv.addEventListener('wheel',e=>{ e.preventDefault(); const p=_rel(e); const g=_chartGeo;
+          const frac=g?Math.max(0,Math.min(1,p.x/Math.max(1,g.W-g.LBL))):0.5;
+          _mcZoom(e.deltaY>0?1.25:0.8,frac); },{passive:false});
+        cv.addEventListener('dblclick',e=>{e.preventDefault();_mcResetView();});
+        // тач: пинч — зум; один палец — кроссхэйр (полный вид) или пан (в зуме)
+        let _tPinch=null,_tPan=null;
+        cv.addEventListener('touchstart',e=>{const r=cv.getBoundingClientRect();
+          if(e.touches.length===2){ _tPinch=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); }
+          else{ const t=e.touches[0]; if(_mcView.t0!=null)_tPan=t.clientX-r.left; else _crosshair(t.clientX-r.left,t.clientY-r.top); }
+        },{passive:true});
+        cv.addEventListener('touchmove',e=>{const r=cv.getBoundingClientRect();
+          if(e.touches.length===2&&_tPinch!=null){ const nd=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+            if(Math.abs(nd-_tPinch)>12){ _mcZoom(nd>_tPinch?0.8:1.25,0.5); _tPinch=nd; } }
+          else if(_tPan!=null&&e.touches.length===1){ const g=_chartGeo,x=e.touches[0].clientX-r.left;
+            if(g){ const dC=Math.round((_tPan-x)/(g.cw||6)); if(dC){_mcPan(dC);_tPan=x;} } }
+          else if(e.touches.length===1){ const t=e.touches[0]; _crosshair(t.clientX-r.left,t.clientY-r.top); }
+          e.preventDefault();
+        },{passive:false});
+        cv.addEventListener('touchend',e=>{ if(e.touches.length<2)_tPinch=null; if(e.touches.length===0){_tPan=null; setTimeout(()=>_chartRedraw(),1400);} },{passive:true});
         cv.addEventListener('click',e=>{
+          if(_dragMoved){_dragMoved=false;return;} // после перетаскивания не прыгаем к карточке
           const rect=cv.getBoundingClientRect();
           const cy=e.clientY-rect.top;
           const hit=_zoneHitAreas.find(h=>Math.abs(cy-h.yCenter)<=Math.max(h.bh*2,14));
