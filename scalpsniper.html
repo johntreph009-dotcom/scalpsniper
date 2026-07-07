@@ -271,6 +271,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .pf-row.pf-up .pf-rpnl{color:var(--green)}.pf-row.pf-down .pf-rpnl{color:var(--danger)}.pf-row.pf-na .pf-rpnl{color:var(--text-faint)}
   .pf-rpct{font-size:9px;font-weight:600;opacity:.8;font-family:'JetBrains Mono',monospace}
   .pf-dist{display:block;font-size:8.5px;font-weight:500;color:var(--text-dim);font-family:'JetBrains Mono',monospace;letter-spacing:.2px}
+  .pfit{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text-faint);margin-top:3px;letter-spacing:.3px}
+  .pfit.pfit-top{color:var(--accent);font-weight:700}
+  .proto.proto-lead{box-shadow:inset 0 0 0 1px rgba(255,122,24,.35)}
+  .pfit-note{font-size:9px;color:var(--text-faint);margin:4px 0 8px;line-height:1.5}
   .pf-close{background:none;border:1px solid var(--line);color:var(--text-faint);cursor:pointer;font-size:11px;width:20px;height:20px;border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1}
   .pf-close:hover{border-color:var(--green);color:var(--green)}
   .pf-flash-up{animation:pf-fl-up .5s ease}.pf-flash-down{animation:pf-fl-down .5s ease}
@@ -1083,11 +1087,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     </div>
     <div class="section-title">Стратегия для матчинга<span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Выбери протокол ДО сессии · В момент сделки думать поздно · Протокол определяет чеклист условий входа ниже</span></span></div>
     <div class="protos" id="protos">
-      <div class="proto sel" data-p="VALENTINI"><div class="pn">Valentini</div><div class="pd">failed auction / fade</div></div>
-      <div class="proto" data-p="SQUEEZE"><div class="pn">Squeeze</div><div class="pd">wall break</div></div>
-      <div class="proto" data-p="SHOTGUN"><div class="pn">Shotgun</div><div class="pd">liq basket</div></div>
-      <div class="proto" data-p="ELLIOTT_CLUSTER"><div class="pn">Elliott Clu</div><div class="pd">fib pullback</div></div>
+      <div class="proto sel" data-p="VALENTINI"><div class="pn">Valentini</div><div class="pd">failed auction / fade</div><div class="pfit" id="pfit_VALENTINI">—</div></div>
+      <div class="proto" data-p="SQUEEZE"><div class="pn">Squeeze</div><div class="pd">wall break</div><div class="pfit" id="pfit_SQUEEZE">—</div></div>
+      <div class="proto" data-p="SHOTGUN"><div class="pn">Shotgun</div><div class="pd">liq basket</div><div class="pfit" id="pfit_SHOTGUN">—</div></div>
+      <div class="proto" data-p="ELLIOTT_CLUSTER"><div class="pn">Elliott Clu</div><div class="pd">fib pullback</div><div class="pfit" id="pfit_ELLIOTT_CLUSTER">—</div></div>
     </div>
+    <div class="pfit-note">фит % — соответствие текущих условий (тренд · поток · объём · OI) каждому протоколу, считается по всем одновременно · наблюдение, выбор за тобой</div>
     <div id="protoChecks" class="proto-checks"></div>
     <div class="actions prep-sticky-bar">
       <span id="readinessBadge" class="rs-inline-badge">—</span>
@@ -4018,7 +4023,49 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       btcChip+
       (note?'<span class="dc-note'+noteCls+'">'+note+'</span>':'');
   }
-  function _refreshDayTrend(){ if(typeof _dayTrend==='function')_dayTrend().then(()=>{renderDayTrend(); if(typeof _dayContext==='function')_dayContext().then(()=>renderDayCtx());}); }
+  function _refreshDayTrend(){ if(typeof _dayTrend==='function')_dayTrend().then(()=>{renderDayTrend(); if(typeof _dayContext==='function')_dayContext().then(()=>{renderDayCtx(); if(typeof _renderProtoFit==='function')_renderProtoFit();});}); }
+  // ── протокол-радар: одновременный фит-расчёт ВСЕХ стратегий к текущим условиям (наблюдение, не выбор) ──
+  function _protoFit(){
+    const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):null; if(!sym)return null;
+    const tr=((_dayTrendCache[sym]||{}).val)||null;
+    const cx=(((_dayCtxCache||{})[sym]||{}).val)||null;
+    if(!tr||!cx)return null;
+    const S={VALENTINI:30,SQUEEZE:30,SHOTGUN:20,ELLIOTT_CLUSTER:20};
+    const str=tr.strength||0, dir=tr.dir;
+    const rv=(cx.rvol||{}).lvl, cvdDir=(cx.cvd||{}).dir, oiDir=(cx.oi||{}).dir, anom=!!cx.anomaly, fnd=(cx.funding||{}).state;
+    // VALENTINI — отбой/fade: рейндж или слабый тренд, спокойный поток, без аномалий
+    if(dir==='range'||str<=1)S.VALENTINI+=30;
+    if(rv==='low'||rv==='norm')S.VALENTINI+=15;
+    if(cvdDir==='flat')S.VALENTINI+=15;
+    if(anom)S.VALENTINI-=20;
+    // SQUEEZE — пробой стенки: тренд + поток в его сторону + объём/OI
+    if(str>=2)S.SQUEEZE+=25;
+    if((dir==='up'&&cvdDir==='buy')||(dir==='down'&&cvdDir==='sell'))S.SQUEEZE+=20;
+    if(rv==='high')S.SQUEEZE+=15; else if(rv==='norm')S.SQUEEZE+=8;
+    if(oiDir==='up')S.SQUEEZE+=10;
+    // SHOTGUN — корзина ликвидаций: всплеск активности, перекос фандинга
+    if(anom)S.SHOTGUN+=35;
+    if(rv==='high')S.SHOTGUN+=20;
+    if(fnd==='elev')S.SHOTGUN+=12; else if(fnd==='extreme')S.SHOTGUN+=20;
+    // ELLIOTT_CLUSTER — фиб-откат: тренд жив, поток временно против (откат) или пауза
+    if(str>=2)S.ELLIOTT_CLUSTER+=20;
+    if((dir==='up'&&cvdDir==='sell')||(dir==='down'&&cvdDir==='buy'))S.ELLIOTT_CLUSTER+=25;
+    if(cvdDir==='flat'&&str>=2)S.ELLIOTT_CLUSTER+=10;
+    Object.keys(S).forEach(k=>S[k]=Math.max(5,Math.min(95,S[k])));
+    return S;
+  }
+  function _renderProtoFit(){
+    const S=_protoFit();
+    const keys=['VALENTINI','SQUEEZE','SHOTGUN','ELLIOTT_CLUSTER'];
+    if(!S){ keys.forEach(k=>{const el=document.getElementById('pfit_'+k); if(el)el.textContent='—';}); return; }
+    const top=keys.reduce((a,b)=>S[a]>=S[b]?a:b);
+    keys.forEach(k=>{
+      const el=document.getElementById('pfit_'+k); if(!el)return;
+      el.textContent='фит '+S[k]+'%'+(k===top?' ●':'');
+      el.classList.toggle('pfit-top',k===top);
+      const card=el.closest('.proto'); if(card)card.classList.toggle('proto-lead',k===top);
+    });
+  }
   async function quickAnalyze(){
     if(_quickBusy)return;
     const raw=document.getElementById('ticker').value.trim()||'BTC/USDT';
