@@ -4410,19 +4410,35 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _dlWorkerCode(){ return `
     let symbol='BTCUSDT', N=12;
     let asks=[], bids=[], mid=0, midEma=0, cumDelta=0, tapeEma=0, tapeEmaPrev=0, tradeCount=0, gotDepth=false;
-    let depthWS=null, tradeWS=null, pollT=null;
+    let depthWS=null, tradeWS=null, pollT=null, mxWS=null, mxPing=null, lastMx=0;
     self.onmessage=function(e){ if(e.data&&e.data.cmd==='init'){ symbol=e.data.symbol||'BTCUSDT'; startStreams(); } };
     function startStreams(){
       const s=symbol.toLowerCase();
+      // основной источник — родная перп-книга (WS, полный топ-20)
       try{
-        depthWS=new WebSocket('wss://stream.binance.com:9443/ws/'+s+'@depth20@100ms');
-        depthWS.onmessage=function(ev){ try{ applyDepth(JSON.parse(ev.data)); }catch(e){} };
-        depthWS.onerror=function(){ startPoll(); };
-        depthWS.onclose=function(){ startPoll(); };
+        const ms=symbol.replace(/USDT$/,'_USDT');
+        mxWS=new WebSocket('wss://contract.mexc.com/edge');
+        mxWS.onopen=function(){ try{mxWS.send(JSON.stringify({method:'sub.depth.full',param:{symbol:ms,limit:20}}));}catch(e){}
+          mxPing=setInterval(function(){ try{mxWS.send(JSON.stringify({method:'ping'}));}catch(e){} },15000); };
+        mxWS.onmessage=function(ev){ try{ var d=JSON.parse(ev.data);
+          if(d.channel==='push.depth.full'&&d.data&&d.data.asks&&d.data.asks.length){ lastMx=Date.now(); applyDepth({asks:d.data.asks,bids:d.data.bids||[]}); } }catch(e){} };
+        mxWS.onerror=function(){};
+      }catch(e){}
+      // фолбэк — спот-книга; применяется только если перп молчит >3с
+      setTimeout(function(){
+        try{
+          depthWS=new WebSocket('wss://stream.binance.com:9443/ws/'+s+'@depth20@100ms');
+          depthWS.onmessage=function(ev){ if(Date.now()-lastMx<3000)return; try{ applyDepth(JSON.parse(ev.data)); }catch(e){} };
+          depthWS.onerror=function(){ if(Date.now()-lastMx>3000)startPoll(); };
+          depthWS.onclose=function(){ if(Date.now()-lastMx>3000)startPoll(); };
+        }catch(err){ if(Date.now()-lastMx>3000)startPoll(); }
+        setTimeout(function(){ if(!gotDepth) startPoll(); }, 3500);
+      }, 2500);
+      // лента сделок для дельты — как было
+      try{
         tradeWS=new WebSocket('wss://stream.binance.com:9443/ws/'+s+'@aggTrade');
         tradeWS.onmessage=function(ev){ try{ const t=JSON.parse(ev.data); tradeCount++; cumDelta=cumDelta*0.999+(t.m? -(+t.q):(+t.q)); }catch(e){} };
-      }catch(err){ startPoll(); }
-      setTimeout(function(){ if(!gotDepth) startPoll(); }, 3500);
+      }catch(e){}
       setInterval(tick, 100);
     }
     function applyDepth(d){
