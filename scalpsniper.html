@@ -1145,6 +1145,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           <button class="mc-tfbtn" data-tf="4h" onclick="setChartTf('4h')">4h</button>
         </div>
         <span class="mc-status" id="mcStatus">загрузка…</span>
+        <button type="button" class="mc-tfbtn" id="mcTallBtn" onclick="_mcToggleTall()" title="Развернуть/свернуть график по высоте">⤢</button>
       </div>
       <div class="mc-layers" id="mcLayers">
         <button class="mc-lyr" data-lyr="trend" onclick="toggleLayer('trend')" title="Тренд: MA-лента, цвет по тренду дня">тренд</button>
@@ -3396,7 +3397,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{
       const r=await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval='+tf+'&limit=65',{cache:'no-store'});
       if(!r.ok)return null;
-      return (await r.json()).map(k=>({o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5],tb:+k[9]}));
+      return (await r.json()).map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5],tb:+k[9]}));
     }catch{return null;}
   }
   // ── приятный live-график цены в Сессии (плавная area-кривая) ──
@@ -3430,7 +3431,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const cv=document.getElementById('miniChart');if(!cv)return;
     const W=cv.parentElement.clientWidth||600;
     const mob=W<560;
-    const H=mob?Math.round(Math.min(Math.max(W*0.95,290),440)):260,LBL=mob?64:86;
+    const H=mob?Math.round(Math.min(Math.max(W*0.95,290),440)):((typeof _mcTall!=='undefined'&&_mcTall)?Math.round(Math.min(window.innerHeight*0.68,560)):260),LBL=mob?64:86;
     const dpr=Math.min(window.devicePixelRatio||1,3);
     cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);
     cv.style.width=W+'px';cv.style.height=H+'px';
@@ -3445,44 +3446,43 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const lo=Math.min(...base),hi=Math.max(...base);
     const span=(hi-lo)||(hi*.01)||1;
     const minP=lo-span*.08,maxP=hi+span*.08;
-    const laneH=L.cvd?Math.round(H*0.20):0;   // нижняя CVD-полоса
+    const laneH=(L.cvd||L.vol)?Math.round(H*0.20):0;   // нижняя полоса: объём-гистограмма и/или CVD
     const ph=H-laneH;                          // высота ценового поля
     const toY=p=>ph-((p-minP)/(maxP-minP))*ph;
     // фон: тактикал вертикальный градиент
     const bg=ctx.createLinearGradient(0,0,0,H);
     bg.addColorStop(0,'#0e0d0b');bg.addColorStop(1,'#0a0907');
     ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
-    ctx.strokeStyle='rgba(255,255,255,.035)';ctx.lineWidth=.5;
-    [1,2,3].forEach(i=>{const y=ph/4*i;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();});
+    // ценовая сетка с подписями — полноценная шкала справа
+    const _fmtP=v=>String(typeof _rpx==='function'?_rpx(v):v);
+    ctx.font='8.5px JetBrains Mono,monospace';
+    for(let gi=0;gi<=4;gi++){
+      const gy=ph-ph*gi/4, gp=minP+(maxP-minP)*gi/4;
+      ctx.strokeStyle='rgba(255,255,255,.05)';ctx.lineWidth=.5;
+      ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(W-LBL,gy);ctx.stroke();
+      ctx.fillStyle='rgba(255,255,255,.4)';
+      ctx.fillText(_fmtP(gp),W-LBL+4,Math.max(8,Math.min(ph-2,gy+3)));
+    }
     ctx.strokeStyle='rgba(255,255,255,.06)';ctx.beginPath();ctx.moveTo(W-LBL,0);ctx.lineTo(W-LBL,H);ctx.stroke();
     _zoneHitAreas=[];
     let offTop=0,offBot=0; // stack counters for off-range zone markers
     const plotW=W-LBL;
+    const _zBadges=[]; // бейджи зон на шкале — рисуются после свечей с разрешением коллизий
     activeZ.forEach(z=>{
       const col=_MC_KIND[z.kind]||_MC_KIND.watch;
       const px=+z.px;
       const stars=Math.max(1,Math.min(3,z.stars||2));
       if(px>=minP&&px<=maxP){
         const y=toY(px);
-        const bh=Math.max(3,ph*(0.02+stars*0.018)); // полу-высота тепловой полосы ∝ сила
-        const a=0.10+stars*0.085;                  // пиковая прозрачность ∝ сила
-        _zoneHitAreas.push({idx:zones.indexOf(z),yCenter:y,bh});
-        // тепловая полоса — вертикальный градиент-свечение вокруг уровня
-        const g=ctx.createLinearGradient(0,y-bh,0,y+bh);
-        g.addColorStop(0,'rgba('+col.rgb+',0)');
-        g.addColorStop(.5,'rgba('+col.rgb+','+a.toFixed(3)+')');
-        g.addColorStop(1,'rgba('+col.rgb+',0)');
-        ctx.fillStyle=g;ctx.fillRect(0,y-bh,plotW,bh*2);
-        // ядро уровня — линия со свечением по силе
-        ctx.strokeStyle=col.line;ctx.lineWidth=stars>=3?1.4:stars>=2?1:.7;ctx.setLineDash([]);
-        ctx.shadowColor='rgba('+col.rgb+',.55)';ctx.shadowBlur=stars*2;
+        const bh=5;                       // лента ПОСТОЯННОЙ высоты — кластеры зон больше не сливаются
+        const a=0.05+stars*0.04;          // сила ★ = яркость, не толщина
+        _zoneHitAreas.push({idx:zones.indexOf(z),yCenter:y,bh:9});
+        ctx.fillStyle='rgba('+col.rgb+','+a.toFixed(3)+')';
+        ctx.fillRect(0,y-bh,plotW,bh*2);
+        ctx.strokeStyle='rgba('+col.rgb+','+(0.5+stars*0.16).toFixed(2)+')';
+        ctx.lineWidth=stars>=3?1.6:1;ctx.setLineDash([]);
         ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(plotW,y);ctx.stroke();
-        ctx.shadowBlur=0;
-        // метка на ценовой шкале: сила (пипсы) + цена
-        ctx.font='600 9px Rajdhani,sans-serif';ctx.fillStyle=col.line;
-        ctx.fillText('●'.repeat(stars),W-LBL+4,y-2);
-        ctx.font='9px JetBrains Mono,monospace';
-        ctx.fillText(z.px,W-LBL+4,y+8);
+        _zBadges.push({y:y,rgb:col.rgb,txt:(z.kind||'').toUpperCase().slice(0,5)+' '+z.px});
         if(z.stop){
           const sp=+z.stop;
           if(sp>=minP&&sp<=maxP){
@@ -3519,19 +3519,39 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const vols=candles.map(c=>+c.v||0),maxV=Math.max(1,...vols),avgV=vols.reduce((a,b)=>a+b,0)/(vols.length||1);
     candles.forEach((c,i)=>{
       const xc=pad+i*cw+cw/2,green=c.c>=c.o,col=green?'#2ee08a':'#ff5a5f';
-      const vn=(+c.v||0)/maxV;
-      const bw=Math.max(2,Math.round(cw*(L.vol?(0.42+0.5*vn):0.66)));
+      const bw=Math.max(2,Math.round(cw*0.68)); // тела постоянной ширины, полный контраст — объём ушёл в гистограмму
       const x=Math.round(xc)+0.5; // пиксель-выравнивание фитиля → чёткая 1px линия
-      ctx.globalAlpha=L.vol?(0.55+0.45*vn):1;
       ctx.strokeStyle=col;ctx.lineWidth=mob?1.3:1;ctx.setLineDash([]);
       ctx.beginPath();ctx.moveTo(x,toY(c.h));ctx.lineTo(x,toY(c.l));ctx.stroke();
       const top=Math.round(Math.min(toY(c.o),toY(c.c))),ht=Math.max(1.5,Math.round(Math.abs(toY(c.o)-toY(c.c))));
       ctx.fillStyle=col;ctx.fillRect(Math.round(xc-bw/2),top,bw,ht);
-      ctx.globalAlpha=1;
       if(L.vol&&avgV>0&&(+c.v||0)>avgV*2){ // RVOL-спайк — где реально дрались
         ctx.fillStyle='#ffd24a';ctx.beginPath();ctx.arc(xc,toY(c.h)-6,2.3,0,Math.PI*2);ctx.fill();
       }
     });
+    // временные метки по низу ценового поля
+    if(candles.length>5&&candles[0].t){
+      ctx.font='8px JetBrains Mono,monospace';ctx.fillStyle='rgba(255,255,255,.42)';
+      [0,Math.floor(candles.length/3),Math.floor(candles.length*2/3),candles.length-1].forEach(ti=>{
+        const d=new Date(candles[ti].t);
+        const s=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+        ctx.fillText(s,Math.min(plotW-30,Math.max(2,pad+ti*cw+cw/2-14)),ph-4);
+      });
+    }
+    // бейджи зон на шкале — поверх, с разрешением коллизий и коннекторами
+    if(_zBadges.length){
+      _zBadges.sort((a,b)=>a.y-b.y);
+      let prevB=-99;
+      _zBadges.forEach(b=>{
+        const by=Math.max(9,Math.min(ph-9,Math.max(b.y,prevB+17))); prevB=by;
+        if(Math.abs(by-b.y)>2){ ctx.strokeStyle='rgba('+b.rgb+',.5)';ctx.lineWidth=.7;ctx.setLineDash([]);
+          ctx.beginPath();ctx.moveTo(plotW,b.y);ctx.lineTo(W-LBL+2,by);ctx.stroke(); }
+        ctx.fillStyle='rgba(10,9,7,.92)';ctx.fillRect(W-LBL+1,by-8,LBL-2,16);
+        ctx.fillStyle='rgba('+b.rgb+',.2)';ctx.fillRect(W-LBL+1,by-8,LBL-2,16);
+        ctx.fillStyle='rgba('+b.rgb+',1)';ctx.font='bold 8.5px JetBrains Mono,monospace';
+        ctx.fillText(b.txt,W-LBL+4,by+3.5);
+      });
+    }
     // ── ТРЕНД: MA-лента, цвет по тренду дня + стрелка направления ──
     if(L.trend&&candles.length>10){
       const cl=candles.map(c=>c.c);
@@ -3590,25 +3610,32 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       ctx.setLineDash([]);
       ctx.fillStyle='rgba(255,255,255,.13)';ctx.fillRect(W-LBL+2,py-8,LBL-4,15);
       ctx.fillStyle='#fff';ctx.font='bold 9px JetBrains Mono,monospace';
-      ctx.fillText(currentPrice.toLocaleString(),W-LBL+5,py+4);
+      ctx.fillText(_fmtP(currentPrice),W-LBL+5,py+4);
     }
-    // ── CVD-полоса снизу: накопленный поток покупок/продаж ──
-    if(L.cvd&&laneH>8){
-      let cum=0;const cvd=candles.map(c=>{cum+=(2*(+c.tb||0)-(+c.v||0));return cum;});
-      const cmin=Math.min(0,...cvd),cmax=Math.max(0,...cvd),cr=(cmax-cmin)||1;
-      const y0=ph+5,lh=laneH-9,cY=v=>y0+lh-((v-cmin)/cr)*lh;
+    // ── нижняя полоса: объём-гистограмма (L.vol) + CVD-поток (L.cvd) ──
+    if(laneH>8){
       ctx.strokeStyle='rgba(255,255,255,.08)';ctx.lineWidth=.5;ctx.setLineDash([]);
       ctx.beginPath();ctx.moveTo(0,ph+1);ctx.lineTo(W,ph+1);ctx.stroke();
-      const zy=cY(0);ctx.strokeStyle='rgba(255,255,255,.12)';ctx.setLineDash([2,2]);
-      ctx.beginPath();ctx.moveTo(0,zy);ctx.lineTo(plotW,zy);ctx.stroke();ctx.setLineDash([]);
-      const cc=(cvd[cvd.length-1]>=0)?'63,185,80':'240,69,74';
-      ctx.beginPath();ctx.moveTo(pad+cw/2,zy);
-      cvd.forEach((v,i)=>ctx.lineTo(pad+i*cw+cw/2,cY(v)));
-      ctx.lineTo(pad+(cvd.length-1)*cw+cw/2,zy);ctx.closePath();
-      ctx.fillStyle='rgba('+cc+',.16)';ctx.fill();
-      ctx.strokeStyle='rgba('+cc+',.9)';ctx.lineWidth=1.2;ctx.beginPath();
-      cvd.forEach((v,i)=>{const x=pad+i*cw+cw/2;i?ctx.lineTo(x,cY(v)):ctx.moveTo(x,cY(v));});ctx.stroke();
-      ctx.font='8px JetBrains Mono,monospace';ctx.fillStyle='rgba(255,255,255,.45)';ctx.fillText('CVD '+(cvd[cvd.length-1]>=0?'покуп':'прод'),4,ph+11);
+      if(L.vol){ // гистограмма объёма: цвет по свече, спокойная прозрачность
+        const vbw=Math.max(1.5,cw*0.6);
+        candles.forEach((c,i)=>{
+          const vn=(+c.v||0)/maxV, vh=Math.max(1,vn*(laneH-12));
+          ctx.fillStyle=(c.c>=c.o)?'rgba(46,224,138,.32)':'rgba(255,90,95,.32)';
+          ctx.fillRect(pad+i*cw+cw/2-vbw/2,H-3-vh,vbw,vh);
+        });
+      }
+      if(L.cvd){
+        let cum=0;const cvd=candles.map(c=>{cum+=(2*(+c.tb||0)-(+c.v||0));return cum;});
+        const cmin=Math.min(0,...cvd),cmax=Math.max(0,...cvd),cr=(cmax-cmin)||1;
+        const y0=ph+5,lh=laneH-9,cY=v=>y0+lh-((v-cmin)/cr)*lh;
+        const zy=cY(0);ctx.strokeStyle='rgba(255,255,255,.12)';ctx.setLineDash([2,2]);
+        ctx.beginPath();ctx.moveTo(0,zy);ctx.lineTo(plotW,zy);ctx.stroke();ctx.setLineDash([]);
+        const cc=(cvd[cvd.length-1]>=0)?'63,185,80':'240,69,74';
+        ctx.strokeStyle='rgba('+cc+',.95)';ctx.lineWidth=1.3;ctx.beginPath();
+        cvd.forEach((v,i)=>{const x=pad+i*cw+cw/2;i?ctx.lineTo(x,cY(v)):ctx.moveTo(x,cY(v));});ctx.stroke();
+      }
+      ctx.font='8px JetBrains Mono,monospace';ctx.fillStyle='rgba(255,255,255,.45)';
+      ctx.fillText((L.vol?'VOL':'')+(L.vol&&L.cvd?' + ':'')+(L.cvd?'CVD':''),4,ph+11);
     }
     _chartGeo={W,H,ph,LBL,minP,maxP,pad,cw,candles,currentPrice};
   }
@@ -3624,22 +3651,47 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     ctx.strokeStyle='rgba(255,255,255,.32)';ctx.lineWidth=1;ctx.setLineDash([2,3]);
     ctx.beginPath();ctx.moveTo(mx,0);ctx.lineTo(mx,ph);ctx.stroke();
     ctx.beginPath();ctx.moveTo(0,my);ctx.lineTo(g.W-g.LBL,my);ctx.stroke();ctx.setLineDash([]);
+    const _fp=v=>String(typeof _rpx==='function'?_rpx(v):v);
     ctx.fillStyle='rgba(255,122,24,.95)';ctx.fillRect(g.W-g.LBL+2,my-8,g.LBL-4,15);
     ctx.fillStyle='#16100a';ctx.font='bold 9px JetBrains Mono,monospace';
-    ctx.fillText(Math.round(price).toLocaleString(),g.W-g.LBL+5,my+4);
+    ctx.fillText(_fp(price),g.W-g.LBL+5,my+4);
     const idx=Math.floor((mx-g.pad)/g.cw);
     if(idx>=0&&idx<g.candles.length){
       const c=g.candles[idx];
-      const t='O'+Math.round(c.o)+' H'+Math.round(c.h)+' L'+Math.round(c.l)+' C'+Math.round(c.c);
+      let t='O'+_fp(c.o)+' H'+_fp(c.h)+' L'+_fp(c.l)+' C'+_fp(c.c);
+      if(c.t){const d=new Date(c.t);t=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' · '+t;}
       ctx.font='9px JetBrains Mono,monospace'; const tw=ctx.measureText(t).width;
       ctx.fillStyle='rgba(13,12,10,.88)';ctx.fillRect(4,4,tw+8,15);
       ctx.fillStyle=c.c>=c.o?'#3fb950':'#ef4444';ctx.fillText(t,8,15);
+    }
+    // тултип зоны при наведении на уровень
+    const hit=(_zoneHitAreas||[]).find(h=>Math.abs(my-h.yCenter)<=9);
+    if(hit&&zones[hit.idx]){
+      const z=zones[hit.idx], zc=(_MC_KIND[z.kind]||_MC_KIND.watch);
+      const l1=(z.kind||'').toUpperCase()+' '+z.px+(z.stars?'  '+'★'.repeat(Math.min(3,z.stars)):'');
+      const l2=(z.note||'план не записан').slice(0,42);
+      const l3=(z.stop?'стоп '+z.stop+' · ':'')+(g.currentPrice?('до зоны '+((((+z.px)-g.currentPrice)/g.currentPrice)*100).toFixed(2)+'%'):'');
+      ctx.font='9px JetBrains Mono,monospace';
+      const bw2=Math.max(ctx.measureText(l1).width,ctx.measureText(l2).width,ctx.measureText(l3).width)+14;
+      let bx=mx+14; if(bx+bw2>g.W-g.LBL)bx=mx-bw2-14; const by=Math.max(4,Math.min(ph-52,my-24));
+      ctx.fillStyle='rgba(10,9,7,.95)';ctx.fillRect(bx,by,bw2,48);
+      ctx.strokeStyle='rgba('+zc.rgb+',.55)';ctx.lineWidth=1;ctx.strokeRect(bx+.5,by+.5,bw2-1,47);
+      ctx.fillStyle='rgba('+zc.rgb+',1)';ctx.fillText(l1,bx+7,by+14);
+      ctx.fillStyle='#c9cdd3';ctx.fillText(l2,bx+7,by+28);
+      ctx.fillStyle='#8a8f98';ctx.fillText(l3,bx+7,by+42);
     }
     ctx.restore();
   }
   function _chartRedraw(){
     const lp=parseFloat(document.getElementById('livePrice').value)||parseFloat(document.getElementById('price').value)||null;
     if(_klines.length)_drawChart(_klines,lp);
+  }
+  let _mcTall=(function(){try{return localStorage.getItem('msa_mc_tall_v1')==='1';}catch(e){return false;}})();
+  function _mcToggleTall(){
+    _mcTall=!_mcTall;
+    try{localStorage.setItem('msa_mc_tall_v1',_mcTall?'1':'0');}catch(e){}
+    const b=document.getElementById('mcTallBtn'); if(b)b.classList.toggle('active',_mcTall);
+    _chartRedraw();
   }
   // ── переключение ТФ прямо на графике (как на бирже) ──
   function setChartTf(tf){
