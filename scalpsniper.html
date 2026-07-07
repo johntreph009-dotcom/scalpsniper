@@ -124,6 +124,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .lc-copy{cursor:pointer} .lc-copy:hover{text-decoration:underline dotted;text-underline-offset:3px}
   .sess-walls{font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin:2px 0 8px;min-height:14px;letter-spacing:.2px}
   .sess-walls .sw-up{color:#F09595} .sess-walls .sw-dn{color:#5DCAA5}
+  .sess-walls .sw-src{color:var(--text-faint);font-size:8.5px;letter-spacing:.3px}
   .pos-bu{border-color:rgba(255,176,32,.5);color:#ffb020}
   .lc-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
   .lc-actions .calc-fill-btn{flex:1;min-width:140px;margin-top:0}
@@ -1665,6 +1666,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       : 'Журнал — разбор после сессии. Сделки и отработка зон, факт vs план, винрейт по типам и протоколам, бэкап и синхронизация. Ищи паттерн, не оправдание.';
     if(p==='demo')document.getElementById('phaseDesc').textContent='ДЕМО — реальный стакан и поток сделок Binance по выбранному тикеру. Модель считает гипотезу, демо-сделки виртуальные. Решения и реальный вход — за тобой.';
     if(p==='demo'){ if(typeof _demoStart==='function')_demoStart(); } else { if(typeof _demoStop==='function')_demoStop(); }
+    if(p==='live'){ if(typeof _mxWsStart==='function')_mxWsStart(); } else { if(typeof _mxWsStop==='function')_mxWsStop(); }
     if(p==='live'){
       const lpEl=document.getElementById('livePrice');
       const prepPx=document.getElementById('price').value;
@@ -3337,25 +3339,58 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }catch(e){}
   }
   function _lcOpenPos(){ const a=activeZoneIdx(); if(a>=0&&typeof openPosFromZone==='function')openPosFromZone(a); }
-  // ── стены стакана в Сессии: ближайшая крупная сверху/снизу + дистанция (Binance спот, троттл 10с) ──
+  // ── MEXC перп-стакан по WebSocket (REST закрыт CORS'ом, WS работает) — боевой источник стен Сессии ──
+  let _mxWs=null,_mxWsSym='',_mxBook=null,_mxWsPing=null,_mxWsTry=0;
+  function _mxSym(){ return _tkKey().replace('/','_'); }
+  function _mxWsStart(){
+    const sym=_mxSym();
+    if(_mxWs&&_mxWsSym===sym&&_mxWs.readyState<=1)return;
+    _mxWsStop();
+    try{
+      const ws=new WebSocket('wss://contract.mexc.com/edge');
+      _mxWs=ws; _mxWsSym=sym;
+      ws.onopen=()=>{ _mxWsTry=0;
+        try{ws.send(JSON.stringify({method:'sub.depth.full',param:{symbol:sym,limit:20}}));}catch(e){}
+        _mxWsPing=setInterval(()=>{try{ws.send(JSON.stringify({method:'ping'}));}catch(e){}},15000); };
+      ws.onmessage=m=>{ try{ const d=JSON.parse(m.data);
+        if(d.channel==='push.depth.full'&&d.data&&d.data.asks&&d.data.asks.length){ _mxBook={asks:d.data.asks,bids:d.data.bids||[],ts:Date.now(),sym:sym}; } }catch(e){} };
+      ws.onclose=()=>{ if(_mxWsPing){clearInterval(_mxWsPing);_mxWsPing=null;}
+        if(phase==='live'&&_mxWsTry<5){_mxWsTry++; setTimeout(()=>{if(phase==='live')_mxWsStart();},2000*_mxWsTry);} };
+      ws.onerror=()=>{ try{ws.close();}catch(e){} };
+    }catch(e){}
+  }
+  function _mxWsStop(){
+    if(_mxWsPing){clearInterval(_mxWsPing);_mxWsPing=null;}
+    if(_mxWs){try{_mxWs.onclose=null;_mxWs.close();}catch(e){}_mxWs=null;}
+    _mxBook=null; _mxWsSym='';
+  }
+  // ── стены стакана в Сессии: MEXC перп по WS, фолбэк Binance спот (троттл 10с) ──
   let _swLast=0,_swBusy=false;
   async function _sessWallsTick(){
     if(phase!=='live'||_swBusy)return;
     const now=Date.now(); if(now-_swLast<10000)return; _swLast=now; _swBusy=true;
     try{
-      const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'BTCUSDT';
-      const d=await fetch('https://api.binance.com/api/v3/depth?symbol='+sym+'&limit=20',{cache:'no-store'}).then(r=>r.json());
       const el=document.getElementById('sessWalls');
-      if(el&&d.asks&&d.bids){
-        const px=(+d.asks[0][0]+ +d.bids[0][0])/2;
-        const sum=a=>a.reduce((s,x)=>s+(+x[1]),0);
-        const avgA=sum(d.asks)/d.asks.length, avgB=sum(d.bids)/d.bids.length;
-        const wa=d.asks.find(x=>+x[1]>avgA*1.8), wb=d.bids.find(x=>+x[1]>avgB*1.8);
+      let asks=null,bids=null,src='';
+      if(_mxBook&&_mxBook.sym===_mxSym()&&now-_mxBook.ts<8000&&_mxBook.bids.length){
+        asks=_mxBook.asks.map(x=>[+x[0],+x[1]]); bids=_mxBook.bids.map(x=>[+x[0],+x[1]]); src='MEXC перп · контр.';
+      } else {
+        if(typeof _mxWsStart==='function')_mxWsStart(); // поднять WS к следующему тику
+        const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'BTCUSDT';
+        const d=await fetch('https://api.binance.com/api/v3/depth?symbol='+sym+'&limit=20',{cache:'no-store'}).then(r=>r.json());
+        if(d&&d.asks){ asks=d.asks.map(x=>[+x[0],+x[1]]); bids=d.bids.map(x=>[+x[0],+x[1]]); src='Binance спот'; }
+      }
+      if(el&&asks&&bids&&asks.length&&bids.length){
+        const px=(asks[0][0]+bids[0][0])/2;
+        const sum=a=>a.reduce((s,x)=>s+x[1],0);
+        const avgA=sum(asks)/asks.length, avgB=sum(bids)/bids.length;
+        const wa=asks.find(x=>x[1]>avgA*1.8), wb=bids.find(x=>x[1]>avgB*1.8);
         const f=v=>typeof _rpx==='function'?_rpx(v):v;
+        const fv=v=>v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?Math.round(v/1e3)+'K':String(Math.round(v));
         const parts=[];
-        if(wa)parts.push('<span class="sw-up">⛰↑ '+f(+wa[0])+'×'+Math.round(+wa[1])+' ('+(((+wa[0]-px)/px)*100).toFixed(2)+'%)</span>');
-        if(wb)parts.push('<span class="sw-dn">⛰↓ '+f(+wb[0])+'×'+Math.round(+wb[1])+' ('+(((px-+wb[0])/px)*100).toFixed(2)+'%)</span>');
-        el.innerHTML=parts.length?('стены: '+parts.join(' · ')):'стены: рядом нет крупных';
+        if(wa)parts.push('<span class="sw-up">⛰↑ '+f(wa[0])+'×'+fv(wa[1])+' ('+(((wa[0]-px)/px)*100).toFixed(2)+'%)</span>');
+        if(wb)parts.push('<span class="sw-dn">⛰↓ '+f(wb[0])+'×'+fv(wb[1])+' ('+(((px-wb[0])/px)*100).toFixed(2)+'%)</span>');
+        el.innerHTML=(parts.length?('стены: '+parts.join(' · ')):'стены: рядом нет крупных')+' <span class="sw-src">'+src+'</span>';
       }
     }catch(e){}
     _swBusy=false;
@@ -4198,6 +4233,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(typeof _chartRefresh==='function')_chartRefresh();
     if(typeof _markActiveChip==='function')_markActiveChip();
     renderPosition(); _syncSessTicker();
+    if(phase==='live'&&typeof _mxWsStart==='function'){_swLast=0;_mxWsStart();}
   }
   function _syncSessTicker(){
     const sel=document.getElementById('sessTicker'); if(!sel)return;
