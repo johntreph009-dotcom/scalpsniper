@@ -1114,7 +1114,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <span class="live-status" id="liveStatus" style="color:var(--text-dim)">введи цену</span>
       <span id="streakBadge" class="streak-badge" style="display:none"></span>
     </div>
-    <div class="sess-walls" id="sessWalls" title="Ближайшие крупные стены стакана (Binance спот, >1.8× среднего уровня) и дистанция до них"></div>
+    <div class="sess-walls" id="sessWalls" title="Сводная карта ликвидности: ближайшие концентрации в книге (агрегация нескольких площадок в долях) и дистанции до них"></div>
     <div class="session-ctx" id="sessionCtx"><div class="sc-bias" id="scBias"></div><div class="sc-guards" id="scGuards"></div></div>
     <div id="liveCard" class="live-card hide">
       <div class="lc-top"><span class="lc-num" id="lcNum">1</span><span class="lc-kind" id="lcKind">FADE</span></div>
@@ -3364,33 +3364,44 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(_mxWs){try{_mxWs.onclose=null;_mxWs.close();}catch(e){}_mxWs=null;}
     _mxBook=null; _mxWsSym='';
   }
-  // ── стены стакана в Сессии: MEXC перп по WS, фолбэк Binance спот (троттл 10с) ──
+  // ── сводная карта ликвидности в Сессии: агрегация книг (перп WS + спот) в ДОЛЯХ — единицы и бренды бирж не смешиваются и не светятся ──
   let _swLast=0,_swBusy=false;
   async function _sessWallsTick(){
     if(phase!=='live'||_swBusy)return;
     const now=Date.now(); if(now-_swLast<10000)return; _swLast=now; _swBusy=true;
     try{
       const el=document.getElementById('sessWalls');
-      let asks=null,bids=null,src='';
+      const books=[];
       if(_mxBook&&_mxBook.sym===_mxSym()&&now-_mxBook.ts<8000&&_mxBook.bids.length){
-        asks=_mxBook.asks.map(x=>[+x[0],+x[1]]); bids=_mxBook.bids.map(x=>[+x[0],+x[1]]); src='MEXC перп · контр.';
-      } else {
-        if(typeof _mxWsStart==='function')_mxWsStart(); // поднять WS к следующему тику
+        books.push({asks:_mxBook.asks.map(x=>[+x[0],+x[1]]),bids:_mxBook.bids.map(x=>[+x[0],+x[1]])});
+      } else if(typeof _mxWsStart==='function')_mxWsStart();
+      try{
         const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'BTCUSDT';
         const d=await fetch('https://api.binance.com/api/v3/depth?symbol='+sym+'&limit=20',{cache:'no-store'}).then(r=>r.json());
-        if(d&&d.asks){ asks=d.asks.map(x=>[+x[0],+x[1]]); bids=d.bids.map(x=>[+x[0],+x[1]]); src='Binance спот'; }
-      }
-      if(el&&asks&&bids&&asks.length&&bids.length){
-        const px=(asks[0][0]+bids[0][0])/2;
-        const sum=a=>a.reduce((s,x)=>s+x[1],0);
-        const avgA=sum(asks)/asks.length, avgB=sum(bids)/bids.length;
-        const wa=asks.find(x=>x[1]>avgA*1.8), wb=bids.find(x=>x[1]>avgB*1.8);
+        if(d&&d.asks&&d.asks.length)books.push({asks:d.asks.map(x=>[+x[0],+x[1]]),bids:d.bids.map(x=>[+x[0],+x[1]])});
+      }catch(e){}
+      if(el&&books.length){
         const f=v=>typeof _rpx==='function'?_rpx(v):v;
-        const fv=v=>v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?Math.round(v/1e3)+'K':String(Math.round(v));
-        const parts=[];
-        if(wa)parts.push('<span class="sw-up">⛰↑ '+f(wa[0])+'×'+fv(wa[1])+' ('+(((wa[0]-px)/px)*100).toFixed(2)+'%)</span>');
-        if(wb)parts.push('<span class="sw-dn">⛰↓ '+f(wb[0])+'×'+fv(wb[1])+' ('+(((px-wb[0])/px)*100).toFixed(2)+'%)</span>');
-        el.innerHTML=(parts.length?('стены: '+parts.join(' · ')):'стены: рядом нет крупных')+' <span class="sw-src">'+src+'</span>';
+        // каждая книга → доли своей стороны, затем среднее по общей ценовой сетке
+        const merge=side=>{
+          const acc={};
+          books.forEach(b=>{
+            const tot=b[side].reduce((s,x)=>s+x[1],0)||1;
+            b[side].forEach(x=>{ const p=f(x[0]); acc[p]=(acc[p]||0)+(x[1]/tot)/books.length; });
+          });
+          return Object.entries(acc).map(([p,sh])=>[+p,sh]).sort((a,b)=>side==='asks'?a[0]-b[0]:b[0]-a[0]);
+        };
+        const asks=merge('asks'), bids=merge('bids');
+        if(asks.length&&bids.length){
+          const px=(asks[0][0]+bids[0][0])/2;
+          const wall=arr=>{ const avg=arr.reduce((s,x)=>s+x[1],0)/arr.length; return arr.find(x=>x[1]>avg*1.8); };
+          const wa=wall(asks), wb=wall(bids);
+          const parts=[];
+          if(wa)parts.push('<span class="sw-up">⛰↑ '+f(wa[0])+' · '+(wa[1]*100).toFixed(0)+'% ('+(((wa[0]-px)/px)*100).toFixed(2)+'%)</span>');
+          if(wb)parts.push('<span class="sw-dn">⛰↓ '+f(wb[0])+' · '+(wb[1]*100).toFixed(0)+'% ('+(((px-wb[0])/px)*100).toFixed(2)+'%)</span>');
+          el.innerHTML=(parts.length?('ликвидность: '+parts.join(' · ')):'ликвидность: концентраций рядом нет')+' <span class="sw-src">сводно'+(books.length>1?' ×2':'')+'</span>';
+          el.title='Сводная карта ликвидности: несколько книг (перп+спот) нормируются в доли своей стороны и усредняются. Стена = уровень с долей >1.8× среднего. Проценты — доля стороны книги.';
+        }
       }
     }catch(e){}
     _swBusy=false;
