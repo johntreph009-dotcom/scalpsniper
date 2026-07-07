@@ -4107,11 +4107,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       asks.forEach(o=>{ let kind,proto,note,long;
         if(tdir==='up'&&o===nearestAsk){kind='break';proto='SQUEEZE';long=true;note='пробой ask-стены '+fmtM(o.n)+' по тренду↑';}
         else{kind='fade';proto='VALENTINI';long=false;note='отбой ask-стены '+fmtM(o.n)+(tdir==='up'?' (контр-тренд)':tdir==='down'?' по тренду↓':'');}
-        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*1.003),proto,stars:fStars(o,long),createdAt:Date.now()}); });
+        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*(long?0.997:1.003)),proto,stars:fStars(o,long),createdAt:Date.now()}); }); // стоп по НАПРАВЛЕНИЮ сделки: лонг → ниже, шорт → выше (фикс: break-зоны получали стоп не с той стороны)
       bids.forEach(o=>{ let kind,proto,note,long;
         if(tdir==='down'&&o===nearestBid){kind='break';proto='SQUEEZE';long=false;note='пробой bid-стены '+fmtM(o.n)+' по тренду↓';}
         else{kind='fade';proto='VALENTINI';long=true;note='отбой bid-стены '+fmtM(o.n)+(tdir==='down'?' (контр-тренд)':tdir==='up'?' по тренду↑':'');}
-        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*0.997),proto,stars:fStars(o,long),createdAt:Date.now()}); });
+        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*(long?0.997:1.003)),proto,stars:fStars(o,long),createdAt:Date.now()}); });
       z.sort((a,c)=>c.px-a.px);
       const topZ=z.slice().sort((a,c)=>(c.stars-a.stars)||(Math.abs(a.px-price)-Math.abs(c.px-price)))[0];
       _lastQuickPrice=price;
