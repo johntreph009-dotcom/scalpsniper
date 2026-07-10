@@ -4080,14 +4080,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const price=parseFloat((await j('https://api.binance.com/api/v3/ticker/price?symbol='+sym)).price);
       if(!price||!isFinite(price))throw new Error('нет цены');
       const depth=await j('https://api.binance.com/api/v3/depth?symbol='+sym+'&limit=1000');
-      const b=_niceBucket(price);
-      let poc=null,funding=null,oi=null,momUp=null;
-      try{const kl=await j('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval=5m&limit=96'); const m={}; kl.forEach(k=>{const tp=(+k[2]+ +k[3]+ +k[4])/3,v=+k[5],key=Math.round(tp/b)*b; m[key]=(m[key]||0)+v;}); let bv=-1; for(const k in m){if(m[k]>bv){bv=m[k];poc=+k;}}
+      // масштабирование под выбранный ТФ: диапазон уровней, кластеры и стопы дышат с таймфреймом
+      const tf=document.getElementById('tf')?.value||'5m';
+      const tfMult={'1m':0.6,'5m':1,'15m':1.8,'1h':3.2,'4h':6}[tf]||1;
+      const b=_niceBucket(price)*Math.max(1,tfMult*0.75);
+      const stopK=0.003*Math.sqrt(tfMult);
+      const tfKl={'1m':['1m',240],'5m':['5m',96],'15m':['15m',96],'1h':['1h',120],'4h':['4h',120]}[tf]||['5m',96];
+      let poc=null,funding=null,oi=null,momUp=null,swH=null,swL=null;
+      try{const kl=await j('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval='+tfKl[0]+'&limit='+tfKl[1]); const m={}; kl.forEach(k=>{const tp=(+k[2]+ +k[3]+ +k[4])/3,v=+k[5],key=Math.round(tp/b)*b; m[key]=(m[key]||0)+v;}); let bv=-1; for(const k in m){if(m[k]>bv){bv=m[k];poc=+k;}}
+        swH=Math.max(...kl.map(k=>+k[2])); swL=Math.min(...kl.map(k=>+k[3]));
         const closes=kl.map(k=>+k[4]).slice(-20); const ma=closes.reduce((a,c)=>a+c,0)/(closes.length||1); momUp = price>ma*1.0005?true : price<ma*0.9995?false : null; }catch(e){}
       try{const fr=await j('https://fapi.binance.com/fapi/v1/premiumIndex?symbol='+sym); funding=+(+fr.lastFundingRate*100).toFixed(4);}catch(e){}
       try{const o=await j('https://fapi.binance.com/fapi/v1/openInterest?symbol='+sym); oi=Math.round(+o.openInterest);}catch(e){}
       const agg=arr=>{const m={}; arr.forEach(a=>{const p=+a[0],q=+a[1],key=Math.round(p/b)*b; m[key]=(m[key]||0)+p*q;}); return m;};
-      const within=0.025;
+      const within=0.025*Math.min(tfMult,4); // 1m ±1.5% … 4h ±10%
       const pick=(m,side)=>Object.entries(m).map(([p,n])=>({p:+p,n})).filter(o=>{const d=(o.p-price)/price; return side==='ask'?(d>0.0003&&d<=within):(d<-0.0003&&d>=-within);}).sort((a,c)=>c.n-a.n).slice(0,3);
       const asks=pick(agg(depth.asks),'ask'), bids=pick(agg(depth.bids),'bid');
       if(!asks.length&&!bids.length)throw new Error('нет крупных стен в ±2.5%');
@@ -4107,11 +4113,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       asks.forEach(o=>{ let kind,proto,note,long;
         if(tdir==='up'&&o===nearestAsk){kind='break';proto='SQUEEZE';long=true;note='пробой ask-стены '+fmtM(o.n)+' по тренду↑';}
         else{kind='fade';proto='VALENTINI';long=false;note='отбой ask-стены '+fmtM(o.n)+(tdir==='up'?' (контр-тренд)':tdir==='down'?' по тренду↓':'');}
-        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*(long?0.997:1.003)),proto,stars:fStars(o,long),createdAt:Date.now()}); }); // стоп по НАПРАВЛЕНИЮ сделки: лонг → ниже, шорт → выше (фикс: break-зоны получали стоп не с той стороны)
+        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*(long?(1-stopK):(1+stopK))),proto,stars:fStars(o,long),createdAt:Date.now()}); }); // стоп по НАПРАВЛЕНИЮ сделки и масштабу ТФ
       bids.forEach(o=>{ let kind,proto,note,long;
         if(tdir==='down'&&o===nearestBid){kind='break';proto='SQUEEZE';long=false;note='пробой bid-стены '+fmtM(o.n)+' по тренду↓';}
         else{kind='fade';proto='VALENTINI';long=true;note='отбой bid-стены '+fmtM(o.n)+(tdir==='down'?' (контр-тренд)':tdir==='up'?' по тренду↑':'');}
-        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*(long?0.997:1.003)),proto,stars:fStars(o,long),createdAt:Date.now()}); });
+        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*(long?(1-stopK):(1+stopK))),proto,stars:fStars(o,long),createdAt:Date.now()}); });
+      // структура выбранного ТФ: экстремумы периода как watch-уровни (самодостаточность старших ТФ, где стакан мелок)
+      const farFromAll=p=>z.every(zz=>Math.abs(zz.px-p)/p>0.0015);
+      if(swH&&swH>price*1.003&&swH<=price*(1+within)&&farFromAll(swH))z.push({px:_rpx(swH),kind:'watch',note:'хай периода '+tf+' — структурный уровень',stop:null,proto:null,stars:2,createdAt:Date.now()});
+      if(swL&&swL<price*0.997&&swL>=price*(1-within)&&farFromAll(swL))z.push({px:_rpx(swL),kind:'watch',note:'лоу периода '+tf+' — структурный уровень',stop:null,proto:null,stars:2,createdAt:Date.now()});
       z.sort((a,c)=>c.px-a.px);
       const topZ=z.slice().sort((a,c)=>(c.stars-a.stars)||(Math.abs(a.px-price)-Math.abs(c.px-price)))[0];
       _lastQuickPrice=price;
@@ -4121,7 +4131,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const mix=[...new Set(z.map(x=>x.proto))].join('/');
       const trTxt=tdir==='up'?'тренд↑':tdir==='down'?'тренд↓':'рейндж';
       const cvTxt=cvdDir==='buy'?'CVD↑':cvdDir==='sell'?'CVD↓':'CVD≈';
-      if(st)st.textContent='✓ '+raw+': '+z.length+' зон ('+mix+') · '+trTxt+'×'+trend.strength+' · '+cvTxt+' · RVOL '+ctx.rvol.val+'× · цена '+price+' · POC '+(poc??'н/д')+(funding!=null?' · фанд '+funding+'%':'')+' · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+      if(st)st.textContent='✓ '+raw+': '+z.length+' зон ('+mix+') · ТФ '+tf+' ±'+(within*100).toFixed(1)+'% · '+trTxt+'×'+trend.strength+' · '+cvTxt+' · RVOL '+ctx.rvol.val+'× · цена '+price+' · POC '+(poc??'н/д')+(funding!=null?' · фанд '+funding+'%':'')+' · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
     }catch(e){ if(st)st.textContent='⚠ '+sym+': '+(e.message||'ошибка')+' (пара есть на Binance?)'; }
     finally{ _quickBusy=false; if(btn){btn.disabled=false;btn.textContent=oldT||'⚡ Обновить зоны (без скринов)';} }
   }
