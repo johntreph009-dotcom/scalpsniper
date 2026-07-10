@@ -1121,21 +1121,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     </div>
     <div class="sess-walls" id="sessWalls" title="Сводная карта ликвидности: ближайшие концентрации в книге (агрегация нескольких площадок в долях) и дистанции до них"></div>
     <div class="session-ctx" id="sessionCtx"><div class="sc-bias" id="scBias"></div><div class="sc-guards" id="scGuards"></div></div>
-    <div id="liveCard" class="live-card hide">
-      <div class="lc-top"><span class="lc-num" id="lcNum">1</span><span class="lc-kind" id="lcKind">FADE</span></div>
-      <div class="lc-grid">
-        <div class="lc-cell"><div class="lc-l">Цена зоны</div><div class="lc-v lc-copy" id="lcPx" onclick="copyToClip(this.textContent,this)" title="Тап — скопировать цену для ордера">—</div></div>
-        <div class="lc-cell"><div class="lc-l">Стоп</div><div class="lc-v lc-copy" id="lcStop" onclick="if(this.textContent!=='—')copyToClip(this.textContent,this)" title="Тап — скопировать стоп для ордера">—</div></div>
-        <div class="lc-cell"><div class="lc-l">Объём</div><div class="lc-v" id="lcSize">—</div></div>
-      </div>
-      <div class="lc-note" id="lcNote">—</div>
-      <div class="lc-dist" id="lcDist" style="display:none"></div>
-      <div class="lc-actions">
-        <button class="calc-fill-btn" id="lcPosBtn" onclick="_lcOpenPos()" style="display:none">▲ В позицию</button>
-        <button class="calc-fill-btn" id="lcCloseBtn" onclick="_lcCloseZone()" style="display:none">✓ Закрыть зону</button>
-        <button class="calc-fill-btn" id="calcFillBtn" onclick="fillCalcFromZone()" style="display:none">→ Подставить в калькулятор</button>
-      </div>
-    </div>
     <div class="sess-pchart">
       <div class="dl-price" onclick="_sessPcToggle()" style="cursor:pointer" title="Свернуть/развернуть график цены"><span class="dl-price-now" id="sessPxNow">—</span><span class="dl-price-chg" id="sessPxChg"></span><span class="dl-price-lbl">цена · live <span id="sessPcChev">▾</span></span></div>
       <div class="dl-pchart-wrap" id="sessPcWrap"><canvas id="sessPriceChart"></canvas></div>
@@ -1161,6 +1146,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <button class="mc-lyr" data-lyr="liq" onclick="toggleLayer('liq')" title="Тепловая карта РАСЧЁТНЫХ зон ликвидаций ×25/×50/×100 от цен и объёмов окна. Модель, не фактические данные бирж. Розовое выше цены — шорт-ликвидации (топливо роста), голубое ниже — лонг-ликвидации">ликв</button>
       </div>
       <canvas id="miniChart" height="180"></canvas>
+    </div>
+    <div id="liveCard" class="live-card hide">
+      <div class="lc-top"><span class="lc-num" id="lcNum">1</span><span class="lc-kind" id="lcKind">FADE</span></div>
+      <div class="lc-grid">
+        <div class="lc-cell"><div class="lc-l">Цена зоны</div><div class="lc-v lc-copy" id="lcPx" onclick="copyToClip(this.textContent,this)" title="Тап — скопировать цену для ордера">—</div></div>
+        <div class="lc-cell"><div class="lc-l">Стоп</div><div class="lc-v lc-copy" id="lcStop" onclick="if(this.textContent!=='—')copyToClip(this.textContent,this)" title="Тап — скопировать стоп для ордера">—</div></div>
+        <div class="lc-cell"><div class="lc-l">Объём</div><div class="lc-v" id="lcSize">—</div></div>
+      </div>
+      <div class="lc-note" id="lcNote">—</div>
+      <div class="lc-dist" id="lcDist" style="display:none"></div>
+      <div class="lc-actions">
+        <button class="calc-fill-btn" id="lcPosBtn" onclick="_lcOpenPos()" style="display:none">▲ В позицию</button>
+        <button class="calc-fill-btn" id="lcCloseBtn" onclick="_lcCloseZone()" style="display:none">✓ Закрыть зону</button>
+        <button class="calc-fill-btn" id="calcFillBtn" onclick="fillCalcFromZone()" style="display:none">→ Подставить в калькулятор</button>
+      </div>
     </div>
     <div class="zone-ladder" id="zoneLadder"></div>
     <div class="pos-block" id="posBlock"></div>
@@ -3784,6 +3784,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   let _mcView={t0:null,t1:null};
   function _mcVisible(){
     if(_mcView.t0==null||_klines.length<12)return _klines;
+    if(_mcView.right&&_mcView.len)return _klines.slice(-Math.min(_mcView.len,_klines.length)); // окно у правого края липнет к нему — новые свечи всегда видны
     let i0=_klines.findIndex(c=>c.t>=_mcView.t0); if(i0<0)i0=0;
     let i1=-1; for(let i=_klines.length-1;i>=0;i--){ if(_klines[i].t<=_mcView.t1){i1=i;break;} }
     if(i1<0||i1-i0<8){ _mcView={t0:null,t1:null}; return _klines; }
@@ -3797,7 +3798,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const anchor=gi0+cxFrac*(len-1);
     let ns=Math.round(anchor-cxFrac*(newLen-1));
     ns=Math.max(0,Math.min(full-newLen,ns));
-    _mcView={t0:_klines[ns].t,t1:_klines[ns+newLen-1].t};
+    _mcView={t0:_klines[ns].t,t1:_klines[ns+newLen-1].t,len:newLen,right:ns+newLen>=full};
     _chartRedraw();
   }
   function _mcPan(dC){
@@ -3806,7 +3807,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(vis.length>=full)return;
     const gi0=_klines.indexOf(vis[0]), len=vis.length;
     const ns=Math.max(0,Math.min(full-len,gi0+dC));
-    _mcView={t0:_klines[ns].t,t1:_klines[ns+len-1].t};
+    _mcView={t0:_klines[ns].t,t1:_klines[ns+len-1].t,len:len,right:ns+len>=full};
     _chartRedraw();
   }
   function _mcResetView(){ _mcView={t0:null,t1:null}; _chartRedraw(); }
