@@ -29,6 +29,18 @@
   --glass-blur:blur(24px) saturate(160%);
   --glass-blur-sm:blur(16px) saturate(140%);
   }
+  /* ── светлая тема «день»: тёплая бумажная, тактикал сохранён ── */
+  html[data-theme="light"]{
+    --bg:#f2f0ea; --panel:#faf9f5; --panel-2:#edeae2; --line:#d6d2c6; --line-soft:#e3e0d6;
+    --text:#1d2126; --text-dim:#3d444d; --text-faint:#737b85;
+    --accent:#d95f00; --accent-dim:#e8a266; --accent-soft:rgba(217,95,0,.10);
+    --green:#1a7f37; --green-dim:#9fd4ac; --warn:#9a6700; --danger:#cf222e; --info:#0969da; --fade:#8250df;
+    --glass-bg:rgba(0,0,0,.03); --glass-bg2:rgba(0,0,0,.05); --glass-border:rgba(0,0,0,.08);
+    --glass-specular:rgba(255,255,255,.65);
+    --glass-shadow:0 4px 24px rgba(0,0,0,.10),inset 0 1px 0 var(--glass-specular);
+    --glass-shadow-lg:0 8px 40px rgba(0,0,0,.14),inset 0 1px 0 var(--glass-specular);
+  }
+  .hdr-tgl{background:none;border:1px solid var(--line);color:var(--text-dim);border-radius:8px;padding:4px 9px;cursor:pointer;font-size:13px;line-height:1}
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);background-image:radial-gradient(circle at 50% -10%,#16110b 0%,#0a0b0d 55%);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.5;padding:24px 16px 60px;min-height:100vh;position:relative;overflow-x:clip}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 60% 40% at 20% 5%,rgba(255,122,24,.06) 0%,transparent 60%),radial-gradient(ellipse 40% 35% at 85% 25%,rgba(88,166,255,.04) 0%,transparent 55%),radial-gradient(ellipse 50% 45% at 50% 90%,rgba(188,140,255,.03) 0%,transparent 60%)}
@@ -1005,6 +1017,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
+      <button class="hdr-tgl" id="themeBtn" onclick="toggleTheme()" title="Тема: ночь/день">🌙</button>
+      <button class="hdr-tgl" id="muteBtn" onclick="toggleMute()" title="Звук алертов вкл/выкл">🔔</button>
       <button class="pwa-install" id="pwaInstall" style="display:none" onclick="_pwaInstall()" title="Установить как приложение">⤓ Установить</button>
       <div class="badge" id="modeBadge">PREP</div>
     </div>
@@ -3334,6 +3348,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function toggleLayer(k){_chartLayers[k]=!_chartLayers[k];_saveChartLayers();_markLayers();if(typeof _chartRedraw==='function')_chartRedraw();}
   let _lastAlertZone=-2,_lastApproachZone=-1;
   function _approachBeep(){
+    if(window._sndMuted)return;
     try{
       const ac=new(window.AudioContext||window.webkitAudioContext)();
       const osc=ac.createOscillator(),g=ac.createGain();
@@ -3435,6 +3450,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(o==='0'){ const w=document.getElementById('sessPcWrap'); if(w)w.style.display='none'; const ch=document.getElementById('sessPcChev'); if(ch)ch.textContent='▸'; }
   }
   function _zoneBeep(){
+    if(window._sndMuted)return;
     try{
       const ac=new(window.AudioContext||window.webkitAudioContext)();
       const osc=ac.createOscillator(),g=ac.createGain();
@@ -3488,7 +3504,24 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(now)now.textContent=fmt(cur);
     if(chg){ chg.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%'; chg.className='dl-price-chg '+(pct>=0?'up':'dn'); }
   }
+  // ── палитра canvas под тему (день/ночь) ──
+  const _PALS={
+    dark:{cvBg1:'#0e0d0b',cvBg2:'#0a0907',grid:'rgba(255,255,255,.05)',axis:'rgba(255,255,255,.4)',axisDim:'rgba(255,255,255,.42)',scaleLine:'rgba(255,255,255,.06)',curBg:'rgba(255,255,255,.13)',curTx:'#fff',badgeBg:'rgba(10,9,7,.92)',candleUp:'#2ee08a',candleDn:'#ff5a5f',crossTip:'rgba(13,12,10,.88)',crossLn:'rgba(255,255,255,.32)'},
+    light:{cvBg1:'#faf8f2',cvBg2:'#efece3',grid:'rgba(0,0,0,.07)',axis:'rgba(0,0,0,.55)',axisDim:'rgba(0,0,0,.5)',scaleLine:'rgba(0,0,0,.1)',curBg:'rgba(0,0,0,.12)',curTx:'#111',badgeBg:'rgba(255,255,255,.93)',candleUp:'#128a4a',candleDn:'#d13438',crossTip:'rgba(255,255,255,.93)',crossLn:'rgba(0,0,0,.4)'}
+  };
+  function _pal(){ return _PALS[document.documentElement.dataset.theme==='light'?'light':'dark']; }
+  function _themeInit(){ let t='dark'; try{t=localStorage.getItem('msa_theme')||'dark';}catch(e){} document.documentElement.dataset.theme=t; const b=document.getElementById('themeBtn'); if(b)b.textContent=t==='light'?'☀️':'🌙'; }
+  function toggleTheme(){
+    const t=document.documentElement.dataset.theme==='light'?'dark':'light';
+    document.documentElement.dataset.theme=t; try{localStorage.setItem('msa_theme',t);}catch(e){}
+    const b=document.getElementById('themeBtn'); if(b)b.textContent=t==='light'?'☀️':'🌙';
+    if(typeof _chartRedraw==='function')_chartRedraw();
+    if(typeof _sessDrawPrice==='function')_sessDrawPrice();
+  }
+  function _muteInit(){ window._sndMuted=false; try{window._sndMuted=localStorage.getItem('msa_mute')==='1';}catch(e){} const b=document.getElementById('muteBtn'); if(b)b.textContent=window._sndMuted?'🔕':'🔔'; }
+  function toggleMute(){ window._sndMuted=!window._sndMuted; try{localStorage.setItem('msa_mute',window._sndMuted?'1':'0');}catch(e){} const b=document.getElementById('muteBtn'); if(b)b.textContent=window._sndMuted?'🔕':'🔔'; }
   function _drawChart(candles,currentPrice){
+    const P=_pal();
     const cv=document.getElementById('miniChart');if(!cv)return;
     const W=cv.parentElement.clientWidth||600;
     const mob=W<560;
@@ -3512,19 +3545,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const toY=p=>ph-((p-minP)/(maxP-minP))*ph;
     // фон: тактикал вертикальный градиент
     const bg=ctx.createLinearGradient(0,0,0,H);
-    bg.addColorStop(0,'#0e0d0b');bg.addColorStop(1,'#0a0907');
+    bg.addColorStop(0,P.cvBg1);bg.addColorStop(1,P.cvBg2);
     ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
     // ценовая сетка с подписями — полноценная шкала справа
     const _fmtP=v=>String(typeof _rpx==='function'?_rpx(v):v);
     ctx.font='8.5px JetBrains Mono,monospace';
     for(let gi=0;gi<=4;gi++){
       const gy=ph-ph*gi/4, gp=minP+(maxP-minP)*gi/4;
-      ctx.strokeStyle='rgba(255,255,255,.05)';ctx.lineWidth=.5;
+      ctx.strokeStyle=P.grid;ctx.lineWidth=.5;
       ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(W-LBL,gy);ctx.stroke();
-      ctx.fillStyle='rgba(255,255,255,.4)';
+      ctx.fillStyle=P.axis;
       ctx.fillText(_fmtP(gp),W-LBL+4,Math.max(8,Math.min(ph-2,gy+3)));
     }
-    ctx.strokeStyle='rgba(255,255,255,.06)';ctx.beginPath();ctx.moveTo(W-LBL,0);ctx.lineTo(W-LBL,H);ctx.stroke();
+    ctx.strokeStyle=P.scaleLine;ctx.beginPath();ctx.moveTo(W-LBL,0);ctx.lineTo(W-LBL,H);ctx.stroke();
     _zoneHitAreas=[];
     let offTop=0,offBot=0; // stack counters for off-range zone markers
     const plotW=W-LBL;
@@ -3604,7 +3637,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const pad=4,cw=(W-pad*2-LBL)/Math.max(candles.length,1);
     const vols=candles.map(c=>+c.v||0),maxV=Math.max(1,...vols),avgV=vols.reduce((a,b)=>a+b,0)/(vols.length||1);
     candles.forEach((c,i)=>{
-      const xc=pad+i*cw+cw/2,green=c.c>=c.o,col=green?'#2ee08a':'#ff5a5f';
+      const xc=pad+i*cw+cw/2,green=c.c>=c.o,col=green?P.candleUp:P.candleDn;
       const bw=Math.max(2,Math.round(cw*0.68)); // тела постоянной ширины, полный контраст — объём ушёл в гистограмму
       const x=Math.round(xc)+0.5; // пиксель-выравнивание фитиля → чёткая 1px линия
       ctx.strokeStyle=col;ctx.lineWidth=mob?1.3:1;ctx.setLineDash([]);
@@ -3617,7 +3650,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     });
     // временные метки по низу ценового поля
     if(candles.length>5&&candles[0].t){
-      ctx.font='8px JetBrains Mono,monospace';ctx.fillStyle='rgba(255,255,255,.42)';
+      ctx.font='8px JetBrains Mono,monospace';ctx.fillStyle=P.axisDim;
       [0,Math.floor(candles.length/3),Math.floor(candles.length*2/3),candles.length-1].forEach(ti=>{
         const d=new Date(candles[ti].t);
         const s=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
@@ -3632,7 +3665,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         const by=Math.max(9,Math.min(ph-9,Math.max(b.y,prevB+17))); prevB=by;
         if(Math.abs(by-b.y)>2){ ctx.strokeStyle='rgba('+b.rgb+',.5)';ctx.lineWidth=.7;ctx.setLineDash([]);
           ctx.beginPath();ctx.moveTo(plotW,b.y);ctx.lineTo(W-LBL+2,by);ctx.stroke(); }
-        ctx.fillStyle='rgba(10,9,7,.92)';ctx.fillRect(W-LBL+1,by-8,LBL-2,16);
+        ctx.fillStyle=P.badgeBg;ctx.fillRect(W-LBL+1,by-8,LBL-2,16);
         ctx.fillStyle='rgba('+b.rgb+',.2)';ctx.fillRect(W-LBL+1,by-8,LBL-2,16);
         ctx.fillStyle='rgba('+b.rgb+',1)';ctx.font='bold 8.5px JetBrains Mono,monospace';
         ctx.fillText(b.txt,W-LBL+4,by+3.5);
@@ -3706,8 +3739,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=1;ctx.setLineDash([4,3]);
       ctx.beginPath();ctx.moveTo(0,py);ctx.lineTo(W-LBL,py);ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle='rgba(255,255,255,.13)';ctx.fillRect(W-LBL+2,py-8,LBL-4,15);
-      ctx.fillStyle='#fff';ctx.font='bold 9px JetBrains Mono,monospace';
+      ctx.fillStyle=P.curBg;ctx.fillRect(W-LBL+2,py-8,LBL-4,15);
+      ctx.fillStyle=P.curTx;ctx.font='bold 9px JetBrains Mono,monospace';
       ctx.fillText(_fmtP(currentPrice),W-LBL+5,py+4);
     }
     // ── нижняя полоса: объём-гистограмма (L.vol) + CVD-поток (L.cvd) ──
@@ -3742,11 +3775,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!_chartGeo||!_klines.length)return;
     _drawChart(_mcVisible(),_chartGeo.currentPrice);
     const g=_chartGeo, cv=document.getElementById('miniChart'); if(!cv)return; const ctx=cv.getContext('2d');
+    const PC=_pal();
     const ph=g.ph||g.H;
     if(mx>g.W-g.LBL)mx=g.W-g.LBL; if(my<0)my=0; if(my>ph)my=ph;
     const price=g.minP+(1-my/ph)*(g.maxP-g.minP);
     ctx.save();
-    ctx.strokeStyle='rgba(255,255,255,.32)';ctx.lineWidth=1;ctx.setLineDash([2,3]);
+    ctx.strokeStyle=PC.crossLn;ctx.lineWidth=1;ctx.setLineDash([2,3]);
     ctx.beginPath();ctx.moveTo(mx,0);ctx.lineTo(mx,ph);ctx.stroke();
     ctx.beginPath();ctx.moveTo(0,my);ctx.lineTo(g.W-g.LBL,my);ctx.stroke();ctx.setLineDash([]);
     const _fp=v=>String(typeof _rpx==='function'?_rpx(v):v);
@@ -3759,8 +3793,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       let t='O'+_fp(c.o)+' H'+_fp(c.h)+' L'+_fp(c.l)+' C'+_fp(c.c);
       if(c.t){const d=new Date(c.t);t=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' · '+t;}
       ctx.font='9px JetBrains Mono,monospace'; const tw=ctx.measureText(t).width;
-      ctx.fillStyle='rgba(13,12,10,.88)';ctx.fillRect(4,4,tw+8,15);
-      ctx.fillStyle=c.c>=c.o?'#3fb950':'#ef4444';ctx.fillText(t,8,15);
+      ctx.fillStyle=PC.crossTip;ctx.fillRect(4,4,tw+8,15);
+      ctx.fillStyle=c.c>=c.o?PC.candleUp:PC.candleDn;ctx.fillText(t,8,15);
     }
     // тултип зоны при наведении на уровень
     const hit=(_zoneHitAreas||[]).find(h=>Math.abs(my-h.yCenter)<=9);
@@ -3772,11 +3806,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       ctx.font='9px JetBrains Mono,monospace';
       const bw2=Math.max(ctx.measureText(l1).width,ctx.measureText(l2).width,ctx.measureText(l3).width)+14;
       let bx=mx+14; if(bx+bw2>g.W-g.LBL)bx=mx-bw2-14; const by=Math.max(4,Math.min(ph-52,my-24));
-      ctx.fillStyle='rgba(10,9,7,.95)';ctx.fillRect(bx,by,bw2,48);
+      ctx.fillStyle=PC.badgeBg;ctx.fillRect(bx,by,bw2,48);
       ctx.strokeStyle='rgba('+zc.rgb+',.55)';ctx.lineWidth=1;ctx.strokeRect(bx+.5,by+.5,bw2-1,47);
       ctx.fillStyle='rgba('+zc.rgb+',1)';ctx.fillText(l1,bx+7,by+14);
-      ctx.fillStyle='#c9cdd3';ctx.fillText(l2,bx+7,by+28);
-      ctx.fillStyle='#8a8f98';ctx.fillText(l3,bx+7,by+42);
+      ctx.fillStyle=PC.axis;ctx.fillText(l2,bx+7,by+28);
+      ctx.fillStyle=PC.axisDim;ctx.fillText(l3,bx+7,by+42);
     }
     ctx.restore();
   }
@@ -4851,7 +4885,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
   function toggleCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; const open=w.classList.toggle('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded',open?'true':'false'); try{localStorage.setItem('msa_calc_open_v1',open?'1':'0');}catch(e){} }
   function _restoreCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; let o='0'; try{o=localStorage.getItem('msa_calc_open_v1')||'0';}catch(e){} if(o==='1'){w.classList.add('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded','true');} }
-  load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers(); renderPosition(); _restoreCalc(); _sessPcRestore();
+  load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers(); renderPosition(); _restoreCalc(); _sessPcRestore(); _themeInit(); _muteInit();
   try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
   renderZones();recalc();
   if(typeof autoEvalZones==='function')setTimeout(()=>autoEvalZones({force:true}),1500);
