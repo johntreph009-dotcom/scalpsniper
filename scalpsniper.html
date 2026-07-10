@@ -16,7 +16,7 @@
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Rajdhani:wght@600;700&family=Archivo:wght@600;800&display=swap');
   :root{
     --bg:#0a0b0d; --panel:#121417; --panel-2:#181b1f; --line:#262b30; --line-soft:#1d2125;
-    --text:#dfe3e6; --text-dim:#b8c0c8; --text-faint:#8a949c;
+    --text:#e3e7ea; --text-dim:#bcc4cc; --text-faint:#96a1aa;
     --accent:#ff7a18; --accent-dim:#8a3f0c; --accent-soft:rgba(255,122,24,.12);
     --green:#3fb950; --green-dim:#2a6e36; --warn:#d29922; --danger:#f0454a; --info:#58a6ff; --fade:#bc8cff;
   /* ── liquid glass tokens ── */
@@ -29,28 +29,38 @@
   --glass-blur:blur(24px) saturate(160%);
   --glass-blur-sm:blur(16px) saturate(140%);
   }
-  /* ── светлая тема «день»: тёплая бумажная, тактикал сохранён ── */
+  /* ── светлая тема «день» v2: нейтральная, солидные панели (без стекла — контраст), по образцам GitHub/TV Light ── */
   html[data-theme="light"]{
-    --bg:#f2f0ea; --panel:#faf9f5; --panel-2:#edeae2; --line:#d6d2c6; --line-soft:#e3e0d6;
-    --text:#1d2126; --text-dim:#3d444d; --text-faint:#737b85;
-    --accent:#d95f00; --accent-dim:#e8a266; --accent-soft:rgba(217,95,0,.10);
-    --green:#1a7f37; --green-dim:#9fd4ac; --warn:#9a6700; --danger:#cf222e; --info:#0969da; --fade:#8250df;
-    --glass-bg:rgba(0,0,0,.03); --glass-bg2:rgba(0,0,0,.05); --glass-border:rgba(0,0,0,.08);
-    --glass-specular:rgba(255,255,255,.65);
-    --glass-shadow:0 4px 24px rgba(0,0,0,.10),inset 0 1px 0 var(--glass-specular);
-    --glass-shadow-lg:0 8px 40px rgba(0,0,0,.14),inset 0 1px 0 var(--glass-specular);
+    --bg:#f6f7f9; --panel:#ffffff; --panel-2:#eff1f4; --line:#d0d7de; --line-soft:#e3e7eb;
+    --text:#1f2328; --text-dim:#454f5a; --text-faint:#6e7781;
+    --accent:#bc4c00; --accent-dim:#e0a878; --accent-soft:rgba(188,76,0,.08);
+    --green:#1a7f37; --green-dim:#a8d8b5; --warn:#9a6700; --danger:#cf222e; --info:#0969da; --fade:#8250df;
+    --glass-bg:#ffffff; --glass-bg2:#f6f8fa; --glass-border:#d0d7de;
+    --glass-specular:rgba(255,255,255,.9);
+    --glass-shadow:0 1px 3px rgba(31,35,40,.08),0 4px 14px rgba(31,35,40,.06);
+    --glass-shadow-lg:0 4px 12px rgba(31,35,40,.10),0 10px 30px rgba(31,35,40,.08);
+    --glass-blur:none; --glass-blur-sm:none;
   }
   .hdr-tgl{background:none;border:1px solid var(--line);color:var(--text-dim);border-radius:8px;padding:4px 9px;cursor:pointer;font-size:13px;line-height:1}
-  html[data-theme="light"] body{background-image:radial-gradient(circle at 50% -10%,#f8f4ea 0%,#f2f0ea 55%)}
-  html[data-theme="light"] .live-card{background:linear-gradient(180deg,#fdf1e2,#f7eee1)}
-  html[data-theme="light"] .phase button.on,html[data-theme="light"] .proto.sel,html[data-theme="light"] .btn.primary,html[data-theme="light"] .addbtn,html[data-theme="light"] .mok,html[data-theme="light"] .paste-btn{background:linear-gradient(180deg,#fae2c8,#f4e8d5);color:#8a3d00}
-  html[data-theme="light"] .dl-price-now{color:#1d2126}
+  html[data-theme="light"] body{background-image:radial-gradient(circle at 50% -10%,#fbfcfd 0%,#f6f7f9 55%)}
+  html[data-theme="light"] body::before{display:none}
+  html[data-theme="light"] .live-card{background:linear-gradient(180deg,#fff6ec,#fdefe0);box-shadow:0 2px 10px rgba(188,76,0,.10)}
+  html[data-theme="light"] .phase button.on,html[data-theme="light"] .proto.sel,html[data-theme="light"] .btn.primary,html[data-theme="light"] .addbtn,html[data-theme="light"] .mok,html[data-theme="light"] .paste-btn{background:linear-gradient(180deg,#ffe3c7,#ffd8b0);color:#7a3400;border-color:#e0a878;box-shadow:none}
+  html[data-theme="light"] .dl-price-now{color:#1f2328}
   html[data-theme="light"] .rs-inline-badge,html[data-theme="light"] .je-meta{color:var(--text-dim)}
-  html[data-theme="light"] .dl-pchart-wrap{background:#faf8f2;border-color:var(--line)}
+  html[data-theme="light"] .dl-pchart-wrap{background:#ffffff;border-color:var(--line)}
   html[data-theme="light"] .mini-chart-hdr,html[data-theme="light"] .mc-layers{background:transparent}
-  html[data-theme="light"] .mini-chart-wrap{background:#f6f3ec;border-color:var(--line)}
+  html[data-theme="light"] .mini-chart-wrap{background:#ffffff;border-color:var(--line)}
   html[data-theme="light"] .section-title{color:var(--text)}
   html[data-theme="light"] .dl-price-chg.up{color:#128a4a} html[data-theme="light"] .dl-price-chg.dn{color:#c62828}
+  /* ── мобильная шапка: все элементы внутри, пилюля зоны компактная ── */
+  @media(max-width:600px){
+    #phaseNav{flex-wrap:nowrap;gap:3px;overflow:hidden}
+    #phaseNav .phase{flex-wrap:nowrap;gap:3px;min-width:0;flex:1}
+    #phaseNav button,.phase button{padding:8px 5px;font-size:9.5px;letter-spacing:.2px;min-width:0;flex:1 1 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #hdrZonePill{max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8px;padding:3px 5px;flex-shrink:0}
+    .hdr-tgl{padding:3px 6px;font-size:11px}
+  }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);background-image:radial-gradient(circle at 50% -10%,#16110b 0%,#0a0b0d 55%);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.5;padding:24px 16px 60px;min-height:100vh;position:relative;overflow-x:clip}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 60% 40% at 20% 5%,rgba(255,122,24,.06) 0%,transparent 60%),radial-gradient(ellipse 40% 35% at 85% 25%,rgba(88,166,255,.04) 0%,transparent 55%),radial-gradient(ellipse 50% 45% at 50% 90%,rgba(188,140,255,.03) 0%,transparent 60%)}
@@ -3517,7 +3527,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // ── палитра canvas под тему (день/ночь) ──
   const _PALS={
     dark:{cvBg1:'#0e0d0b',cvBg2:'#0a0907',grid:'rgba(255,255,255,.05)',axis:'rgba(255,255,255,.4)',axisDim:'rgba(255,255,255,.42)',scaleLine:'rgba(255,255,255,.06)',curBg:'rgba(255,255,255,.13)',curTx:'#fff',badgeBg:'rgba(10,9,7,.92)',candleUp:'#2ee08a',candleDn:'#ff5a5f',crossTip:'rgba(13,12,10,.88)',crossLn:'rgba(255,255,255,.32)'},
-    light:{cvBg1:'#faf8f2',cvBg2:'#efece3',grid:'rgba(0,0,0,.07)',axis:'rgba(0,0,0,.55)',axisDim:'rgba(0,0,0,.5)',scaleLine:'rgba(0,0,0,.1)',curBg:'rgba(0,0,0,.12)',curTx:'#111',badgeBg:'rgba(255,255,255,.93)',candleUp:'#128a4a',candleDn:'#d13438',crossTip:'rgba(255,255,255,.93)',crossLn:'rgba(0,0,0,.4)'}
+    light:{cvBg1:'#ffffff',cvBg2:'#f6f8fa',grid:'rgba(31,35,40,.08)',axis:'rgba(31,35,40,.6)',axisDim:'rgba(31,35,40,.55)',scaleLine:'rgba(31,35,40,.12)',curBg:'rgba(31,35,40,.12)',curTx:'#111',badgeBg:'rgba(255,255,255,.95)',candleUp:'#0f7a3d',candleDn:'#cf222e',crossTip:'rgba(255,255,255,.95)',crossLn:'rgba(31,35,40,.45)'}
   };
   function _pal(){ return _PALS[document.documentElement.dataset.theme==='light'?'light':'dark']; }
   function _themeInit(){ let t='dark'; try{t=localStorage.getItem('msa_theme')||'dark';}catch(e){} document.documentElement.dataset.theme=t; const b=document.getElementById('themeBtn'); if(b)b.textContent=t==='light'?'☀️':'🌙'; }
@@ -4115,7 +4125,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       btcChip+
       (note?'<span class="dc-note'+noteCls+'">'+note+'</span>':'');
   }
-  function _refreshDayTrend(){ if(typeof _dayTrend==='function')_dayTrend().then(()=>{renderDayTrend(); if(typeof _dayContext==='function')_dayContext().then(()=>{renderDayCtx(); if(typeof _renderProtoFit==='function')_renderProtoFit(); if(typeof _mpRefresh==='function')_mpRefresh();});}); }
+  function _refreshDayTrend(){ if(typeof _dayTrend==='function')_dayTrend().then(()=>{renderDayTrend(); _autoBias(); if(typeof _dayContext==='function')_dayContext().then(()=>{renderDayCtx(); if(typeof _renderProtoFit==='function')_renderProtoFit(); if(typeof _mpRefresh==='function')_mpRefresh();});}); }
+  // авто-байас: пустое поле заполняется ПРЕДЛОЖЕНИЕМ из тренда дня с пометкой (авто); ручной текст трейдера не трогается
+  function _autoBias(){
+    try{
+      const bEl=document.getElementById('bias'); if(!bEl)return;
+      const cur=(bEl.value||'').trim();
+      if(cur&&!cur.includes('(авто)'))return; // трейдер писал сам — не трогаем
+      const tv=((_dayTrendCache[(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'']||{}).val)||null;
+      if(!tv)return;
+      const nb=tv.dir==='up'?'↑ приоритет лонгов (авто)':tv.dir==='down'?'↓ приоритет шортов (авто)':'↔ рейндж: обе стороны, размер меньше (авто)';
+      if(cur!==nb){ bEl.value=nb;
+        try{if(typeof saveRules==='function')saveRules();}catch(e){}
+        try{if(typeof updateSessionCtx==='function')updateSessionCtx();}catch(e){}
+        try{if(typeof renderReadinessScore==='function')renderReadinessScore();}catch(e){}
+      }
+    }catch(e){}
+  }
   // ── MMI Layer 1: опционный Max Pain (Deribit public, кэш 15 мин) — гравитационный уровень как наблюдение ──
   let _mpCache={};
   async function _mpFetch(base){
@@ -4896,6 +4922,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function toggleCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; const open=w.classList.toggle('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded',open?'true':'false'); try{localStorage.setItem('msa_calc_open_v1',open?'1':'0');}catch(e){} }
   function _restoreCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; let o='0'; try{o=localStorage.getItem('msa_calc_open_v1')||'0';}catch(e){} if(o==='1'){w.classList.add('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded','true');} }
   load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers(); renderPosition(); _restoreCalc(); _sessPcRestore(); _themeInit(); _muteInit();
+  // авто-расчёт зон при входе: если разметка тикера отсутствует или старше 10 мин — quickAnalyze сам (без кнопки)
+  setTimeout(()=>{ try{ const fr=(typeof _getZonesFresh==='function')?_getZonesFresh():null;
+    if((!fr||Date.now()-fr>10*60*1000)&&typeof quickAnalyze==='function'&&!_quickBusy)quickAnalyze(); }catch(e){} },2500);
   try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
   renderZones();recalc();
   if(typeof autoEvalZones==='function')setTimeout(()=>autoEvalZones({force:true}),1500);
