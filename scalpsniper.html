@@ -1261,6 +1261,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div class="zones-fresh" id="zonesFresh"><span id="zonesFreshTxt"></span><button class="zf-refresh" onclick="quickAnalyze()" title="Пересобрать зоны из стакана Binance (без скринов)">↻ Обновить</button></div>
   <div id="dayTrend" class="day-trend" style="display:none"></div>
   <div id="dayCtx" class="day-ctx" style="display:none"></div>
+  <div id="mpChip" class="day-ctx" style="display:none" title="Max Pain ближайшей опционной экспирации: страйк, где продавцы опционов теряют меньше всего (данные открытого интереса). Гравитация — дистанция цены до уровня. Наблюдение, не прогноз."></div>
   <div class="zone-read" id="zoneRead" style="display:none"></div>
   <!-- input tools: collapsible (вставка + ручное добавление + депозит) -->
   <div class="zone-tools" id="zoneTools">
@@ -3654,6 +3655,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         if(p.target)posLine(p.target,'rgba(63,185,80,.9)','TP '+p.target);
       });
     }
+    // MMI Layer 1: линия опционного Max Pain (голубой пунктир)
+    if(typeof _mpCache!=='undefined'){
+      const mpBase=(_klSym||'').replace(/USDT$/,''); const mpc=_mpCache[mpBase];
+      const mpv=mpc&&mpc.val;
+      if(mpv&&mpv.mp>=minP&&mpv.mp<=maxP){
+        const my2=toY(mpv.mp);
+        ctx.strokeStyle='rgba(88,166,255,.6)';ctx.setLineDash([8,4]);ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(0,my2);ctx.lineTo(W-LBL,my2);ctx.stroke();ctx.setLineDash([]);
+        ctx.fillStyle='rgba(88,166,255,.95)';ctx.font='bold 8px JetBrains Mono,monospace';
+        ctx.fillText('MAX PAIN '+mpv.mp+' · '+mpv.daysLeft+'д',4,my2-3);
+      }
+    }
     if(currentPrice&&isFinite(currentPrice)){
       const py=toY(currentPrice);
       ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=1;ctx.setLineDash([4,3]);
@@ -4023,7 +4036,41 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       btcChip+
       (note?'<span class="dc-note'+noteCls+'">'+note+'</span>':'');
   }
-  function _refreshDayTrend(){ if(typeof _dayTrend==='function')_dayTrend().then(()=>{renderDayTrend(); if(typeof _dayContext==='function')_dayContext().then(()=>{renderDayCtx(); if(typeof _renderProtoFit==='function')_renderProtoFit();});}); }
+  function _refreshDayTrend(){ if(typeof _dayTrend==='function')_dayTrend().then(()=>{renderDayTrend(); if(typeof _dayContext==='function')_dayContext().then(()=>{renderDayCtx(); if(typeof _renderProtoFit==='function')_renderProtoFit(); if(typeof _mpRefresh==='function')_mpRefresh();});}); }
+  // ── MMI Layer 1: опционный Max Pain (Deribit public, кэш 15 мин) — гравитационный уровень как наблюдение ──
+  let _mpCache={};
+  async function _mpFetch(base){
+    const c=_mpCache[base]; if(c&&Date.now()-c.at<15*60*1000)return c.val;
+    try{
+      const r=await fetch('https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency='+base+'&kind=option',{cache:'no-store'}).then(x=>x.json());
+      const rows=(r.result||[]).map(o=>{const m=(o.instrument_name||'').split('-'); return {exp:m[1],K:+m[2],cp:m[3],oi:+o.open_interest||0};}).filter(x=>x.K&&x.oi>0);
+      if(!rows.length){_mpCache[base]={at:Date.now(),val:null};return null;}
+      const parseExp=s=>{const m=(s||'').match(/^(\d{1,2})([A-Z]{3})(\d{2})$/); if(!m)return null; const mon={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11}[m[2]]; return Date.UTC(2000+ +m[3],mon,+m[1],8);};
+      const exps=[...new Set(rows.map(x=>x.exp))].map(e=>({e,t:parseExp(e)})).filter(x=>x.t&&x.t>Date.now()).sort((a,b)=>a.t-b.t);
+      if(!exps.length){_mpCache[base]={at:Date.now(),val:null};return null;}
+      const exp=exps[0].e, expT=exps[0].t, set=rows.filter(x=>x.exp===exp);
+      const strikes=[...new Set(set.map(x=>x.K))].sort((a,b)=>a-b);
+      let best=null,bestPay=Infinity;
+      strikes.forEach(S=>{ let pay=0; set.forEach(x=>{ pay+=x.cp==='C'?x.oi*Math.max(0,S-x.K):x.oi*Math.max(0,x.K-S); }); if(pay<bestPay){bestPay=pay;best=S;} });
+      const val={mp:best,expiry:exp,daysLeft:+(((expT-Date.now())/86400000).toFixed(1)),oiN:set.length};
+      _mpCache[base]={at:Date.now(),val}; return val;
+    }catch(e){ return null; }
+  }
+  const _MP_BASES={BTC:1,ETH:1,SOL:1,XRP:1,BNB:1,PAXG:1};
+  function _mpBase(){ const b=(typeof _symFromTicker==='function'?_symFromTicker(_tkKey()):'').replace(/USDT$/,''); return _MP_BASES[b]?b:null; }
+  async function _mpRefresh(){
+    const el=document.getElementById('mpChip'); if(!el)return;
+    const base=_mpBase();
+    if(!base){ el.style.display='none'; return; }
+    const v=await _mpFetch(base);
+    if(!v||!v.mp){ el.style.display='none'; return; }
+    let grav='';
+    try{ const px=parseFloat(document.getElementById('livePrice')?.value)||parseFloat(document.getElementById('price')?.value);
+      if(px&&isFinite(px))grav=' · гравитация '+(((v.mp-px)/px*100)>=0?'+':'')+((v.mp-px)/px*100).toFixed(1)+'%'; }catch(e){}
+    el.style.display='';
+    el.innerHTML='<span class="dc-chip">OPT MAX PAIN <b>'+v.mp+'</b> · эксп '+v.expiry+' ('+v.daysLeft+'д)'+grav+'</span> <span style="color:var(--text-faint);font-size:9px">опционный уровень-магнит · наблюдение</span>';
+    if(typeof _chartRedraw==='function')_chartRedraw();
+  }
   // ── протокол-радар: одновременный фит-расчёт ВСЕХ стратегий к текущим условиям (наблюдение, не выбор) ──
   function _protoFit(){
     const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):null; if(!sym)return null;
