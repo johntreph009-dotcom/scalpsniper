@@ -1158,6 +1158,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <button class="mc-lyr" data-lyr="vol" onclick="toggleLayer('vol')" title="Объём в свечах + метки аномальных всплесков">объём</button>
         <button class="mc-lyr" data-lyr="cvd" onclick="toggleLayer('cvd')" title="CVD-полоса снизу: поток покупок/продаж">CVD</button>
         <button class="mc-lyr" data-lyr="piv" onclick="toggleLayer('piv')" title="Развороты (свинг H/L) + значок реакции зон">развороты</button>
+        <button class="mc-lyr" data-lyr="liq" onclick="toggleLayer('liq')" title="Тепловая карта РАСЧЁТНЫХ зон ликвидаций ×25/×50/×100 от цен и объёмов окна. Модель, не фактические данные бирж. Розовое выше цены — шорт-ликвидации (топливо роста), голубое ниже — лонг-ликвидации">ликв</button>
+        <button class="mc-lyr" data-lyr="liq" onclick="toggleLayer('liq')" title="Тепловая карта расчётных зон ликвидаций ×25/×50/×100 от свинг-экстремумов. Модель по структуре и объёму, не фактические данные бирж">ликв</button>
       </div>
       <canvas id="miniChart" height="180"></canvas>
     </div>
@@ -3327,7 +3329,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
   // ── Mini chart module ──
   let _klines=[],_klSym='',_klTf='',_chartTimer=null,_zoneHitAreas=[],_chartClickBound=false;
-  let _chartLayers=(()=>{try{return Object.assign({trend:true,vol:true,cvd:true,piv:true},JSON.parse(localStorage.getItem('msa_chart_layers_v1')||'{}'));}catch(e){return {trend:true,vol:true,cvd:true,piv:true};}})();
+  let _chartLayers=(()=>{try{return Object.assign({trend:true,vol:true,cvd:true,piv:true,liq:true},JSON.parse(localStorage.getItem('msa_chart_layers_v1')||'{}'));}catch(e){return {trend:true,vol:true,cvd:true,piv:true,liq:true};}})();
   function _saveChartLayers(){try{localStorage.setItem('msa_chart_layers_v1',JSON.stringify(_chartLayers));}catch(e){}}
   function _markLayers(){document.querySelectorAll('.mc-lyr').forEach(b=>b.classList.toggle('active',!!_chartLayers[b.dataset.lyr]));}
   function toggleLayer(k){_chartLayers[k]=!_chartLayers[k];_saveChartLayers();_markLayers();if(typeof _chartRedraw==='function')_chartRedraw();}
@@ -3346,7 +3348,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function _lcOpenPos(){ const a=activeZoneIdx(); if(a>=0&&typeof openPosFromZone==='function')openPosFromZone(a); }
   // ── MEXC перп-стакан по WebSocket (REST закрыт CORS'ом, WS работает) — боевой источник стен Сессии ──
-  let _mxWs=null,_mxWsSym='',_mxBook=null,_mxWsPing=null,_mxWsTry=0;
+  let _mxWs=null,_mxWsSym='',_mxBook=null,_mxWsPing=null,_mxWsTry=0,_mxWallAge={};
   function _mxSym(){ return _tkKey().replace('/','_'); }
   function _mxWsStart(){
     const sym=_mxSym();
@@ -3359,7 +3361,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         try{ws.send(JSON.stringify({method:'sub.depth.full',param:{symbol:sym,limit:20}}));}catch(e){}
         _mxWsPing=setInterval(()=>{try{ws.send(JSON.stringify({method:'ping'}));}catch(e){}},15000); };
       ws.onmessage=m=>{ try{ const d=JSON.parse(m.data);
-        if(d.channel==='push.depth.full'&&d.data&&d.data.asks&&d.data.asks.length){ _mxBook={asks:d.data.asks,bids:d.data.bids||[],ts:Date.now(),sym:sym}; } }catch(e){} };
+        if(d.channel==='push.depth.full'&&d.data&&d.data.asks&&d.data.asks.length){
+          _mxBook={asks:d.data.asks,bids:d.data.bids||[],ts:Date.now(),sym:sym};
+          // MMI Layer 3: возраст крупных уровней (спуфинг-детект: настоящая стена живёт, фейк переставляется)
+          const all=[..._mxBook.asks.map(x=>[+x[0],+x[1]]),..._mxBook.bids.map(x=>[+x[0],+x[1]])];
+          const avg=all.reduce((s,x)=>s+x[1],0)/(all.length||1); const nowT=Date.now(); const seen={};
+          all.forEach(x=>{ if(x[1]>avg*1.8){ const key=String(typeof _rpx==='function'?_rpx(x[0]):x[0]); seen[key]=1; if(!_mxWallAge[key])_mxWallAge[key]=nowT; } });
+          Object.keys(_mxWallAge).forEach(k=>{ if(!seen[k])delete _mxWallAge[k]; });
+        } }catch(e){} };
       ws.onclose=()=>{ if(_mxWsPing){clearInterval(_mxWsPing);_mxWsPing=null;}
         if(phase==='live'&&_mxWsTry<5){_mxWsTry++; setTimeout(()=>{if(phase==='live')_mxWsStart();},2000*_mxWsTry);} };
       ws.onerror=()=>{ try{ws.close();}catch(e){} };
@@ -3368,7 +3377,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _mxWsStop(){
     if(_mxWsPing){clearInterval(_mxWsPing);_mxWsPing=null;}
     if(_mxWs){try{_mxWs.onclose=null;_mxWs.close();}catch(e){}_mxWs=null;}
-    _mxBook=null; _mxWsSym='';
+    _mxBook=null; _mxWsSym=''; _mxWallAge={};
   }
   // ── сводная карта ликвидности в Сессии: агрегация книг (перп WS + спот) в ДОЛЯХ — единицы и бренды бирж не смешиваются и не светятся ──
   let _swLast=0,_swBusy=false;
@@ -3402,9 +3411,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           const px=(asks[0][0]+bids[0][0])/2;
           const wall=arr=>{ const avg=arr.reduce((s,x)=>s+x[1],0)/arr.length; return arr.find(x=>x[1]>avg*1.8); };
           const wa=wall(asks), wb=wall(bids);
+          const age=p=>{ const t=_mxWallAge[String(p)]; if(!t)return ''; const m=(Date.now()-t)/60000; return ' · '+(m<1?'‹1м':Math.round(m)+'м'); }; // возраст стены: ‹1м = свежая/переставляется, долгожитель = реальный интерес
           const parts=[];
-          if(wa)parts.push('<span class="sw-up">⛰↑ '+f(wa[0])+' · '+(wa[1]*100).toFixed(0)+'% ('+(((wa[0]-px)/px)*100).toFixed(2)+'%)</span>');
-          if(wb)parts.push('<span class="sw-dn">⛰↓ '+f(wb[0])+' · '+(wb[1]*100).toFixed(0)+'% ('+(((px-wb[0])/px)*100).toFixed(2)+'%)</span>');
+          if(wa)parts.push('<span class="sw-up">⛰↑ '+f(wa[0])+' · '+(wa[1]*100).toFixed(0)+'%'+age(f(wa[0]))+' ('+(((wa[0]-px)/px)*100).toFixed(2)+'%)</span>');
+          if(wb)parts.push('<span class="sw-dn">⛰↓ '+f(wb[0])+' · '+(wb[1]*100).toFixed(0)+'%'+age(f(wb[0]))+' ('+(((px-wb[0])/px)*100).toFixed(2)+'%)</span>');
           el.innerHTML=(parts.length?('ликвидность: '+parts.join(' · ')):'ликвидность: концентраций рядом нет')+' <span class="sw-src">сводно'+(books.length>1?' ×2':'')+'</span>';
           el.title='Сводная карта ликвидности: несколько книг (перп+спот) нормируются в доли своей стороны и усредняются. Стена = уровень с долей >1.8× среднего. Проценты — доля стороны книги.';
         }
@@ -3519,6 +3529,31 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _zoneHitAreas=[];
     let offTop=0,offBot=0; // stack counters for off-range zone markers
     const plotW=W-LBL;
+    // ── MMI Layer 2: тепловая карта РАСЧЁТНЫХ зон ликвидаций ×25/50/100 (модель от цен и объёмов окна, не факт) ──
+    if(L.liq&&candles.length>10){
+      const nB=60, step=(maxP-minP)/nB, buckets={};
+      const LEVS=[[100,0.5],[50,0.3],[25,0.2]];
+      const maxV2=Math.max(1,...candles.map(c=>+c.v||0));
+      candles.forEach(c=>{ const v=(+c.v||0)/maxV2; if(!v)return;
+        LEVS.forEach(lv=>{ const lev=lv[0],w=lv[1];
+          const liqL=c.c*(1-1/lev), liqS=c.c*(1+1/lev);
+          if(liqL>=minP&&liqL<=maxP){ const k=Math.min(nB-1,Math.floor((liqL-minP)/step)); (buckets[k]=buckets[k]||{l:0,s:0}).l+=v*w; }
+          if(liqS>=minP&&liqS<=maxP){ const k=Math.min(nB-1,Math.floor((liqS-minP)/step)); (buckets[k]=buckets[k]||{l:0,s:0}).s+=v*w; }
+        });
+      });
+      const vals=Object.values(buckets);
+      if(vals.length){
+        const maxW2=Math.max(0.001,...vals.map(bv=>Math.max(bv.l,bv.s)));
+        const bandW=plotW*0.22;
+        Object.keys(buckets).forEach(k=>{ const bv=buckets[k];
+          const yTop=toY(minP+(+k+1)*step), hB=Math.max(1,toY(minP+ +k*step)-yTop);
+          if(bv.s>0.02){ ctx.fillStyle='rgba(255,90,200,'+(0.04+0.26*bv.s/maxW2).toFixed(3)+')'; ctx.fillRect(plotW-bandW,yTop,bandW,hB); }
+          if(bv.l>0.02){ ctx.fillStyle='rgba(90,190,255,'+(0.04+0.26*bv.l/maxW2).toFixed(3)+')'; ctx.fillRect(plotW-bandW,yTop,bandW,hB); }
+        });
+        ctx.font='8px JetBrains Mono,monospace'; ctx.fillStyle='rgba(255,255,255,.35)';
+        ctx.fillText('LIQ ×25/50/100 · модель',plotW-bandW+4,12);
+      }
+    }
     const _zBadges=[]; // бейджи зон на шкале — рисуются после свечей с разрешением коллизий
     activeZ.forEach(z=>{
       const col=_MC_KIND[z.kind]||_MC_KIND.watch;
