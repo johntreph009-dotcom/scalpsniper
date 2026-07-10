@@ -41,6 +41,11 @@
     --glass-shadow-lg:0 8px 40px rgba(0,0,0,.14),inset 0 1px 0 var(--glass-specular);
   }
   .hdr-tgl{background:none;border:1px solid var(--line);color:var(--text-dim);border-radius:8px;padding:4px 9px;cursor:pointer;font-size:13px;line-height:1}
+  html[data-theme="light"] body{background-image:radial-gradient(circle at 50% -10%,#f8f4ea 0%,#f2f0ea 55%)}
+  html[data-theme="light"] .live-card{background:linear-gradient(180deg,#fdf1e2,#f7eee1)}
+  html[data-theme="light"] .phase button.on,html[data-theme="light"] .proto.sel,html[data-theme="light"] .btn.primary,html[data-theme="light"] .addbtn,html[data-theme="light"] .mok,html[data-theme="light"] .paste-btn{background:linear-gradient(180deg,#fae2c8,#f4e8d5);color:#8a3d00}
+  html[data-theme="light"] .dl-price-now{color:#1d2126}
+  html[data-theme="light"] .rs-inline-badge,html[data-theme="light"] .je-meta{color:var(--text-dim)}
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);background-image:radial-gradient(circle at 50% -10%,#16110b 0%,#0a0b0d 55%);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.5;padding:24px 16px 60px;min-height:100vh;position:relative;overflow-x:clip}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 60% 40% at 20% 5%,rgba(255,122,24,.06) 0%,transparent 60%),radial-gradient(ellipse 40% 35% at 85% 25%,rgba(88,166,255,.04) 0%,transparent 55%),radial-gradient(ellipse 50% 45% at 50% 90%,rgba(188,140,255,.03) 0%,transparent 60%)}
