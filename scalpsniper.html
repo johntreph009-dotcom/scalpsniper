@@ -56,8 +56,11 @@
   /* ── мобильная шапка: все элементы внутри, пилюля зоны компактная ── */
   @media(max-width:600px){
     #phaseNav{flex-wrap:nowrap;gap:3px;overflow:hidden}
+    /* шапка НЕ прилипает вплотную к верху: отступ + safe-area (чёлка/статусбар), скруглена со всех сторон */
+    .phase-nav{top:calc(env(safe-area-inset-top,0px) + 10px)}
+    .phase-nav.nav-scrolled{border-radius:12px;padding:7px 8px}
     #phaseNav .phase{flex-wrap:nowrap;gap:3px;min-width:0;flex:1}
-    #phaseNav button,.phase button{padding:8px 5px;font-size:9.5px;letter-spacing:.2px;min-width:0;flex:1 1 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #phaseNav button,.phase button{padding:12px 5px;font-size:9.5px;letter-spacing:.2px;min-width:0;flex:1 1 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     #hdrZonePill{max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8px;padding:3px 5px;flex-shrink:0}
     .hdr-tgl{padding:3px 6px;font-size:11px}
   }
