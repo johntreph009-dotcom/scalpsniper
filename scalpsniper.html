@@ -783,6 +783,24 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .zl-note{flex:1;font-size:10px;color:var(--text-dim);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
   .zl-row.done-row{opacity:.38}
 
+  /* ── ladder row expand (детали зоны) ── */
+  .zl-chev{font-size:9px;color:var(--text-faint);flex-shrink:0;transition:transform .15s;margin-left:-2px}
+  .zl-row.zl-open .zl-chev{transform:rotate(90deg);color:var(--accent)}
+  .zl-row.zl-open{border-radius:6px 6px 0 0;border-bottom-color:transparent}
+  .zl-detail{border:1px solid var(--line-soft);border-top:1px dashed var(--line-soft);border-radius:0 0 8px 8px;margin:-4px 0 2px;padding:10px 12px 11px;background:var(--glass-bg);font-size:11.5px;animation:zl-det-in .18s ease}
+  @keyframes zl-det-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+  .zl-d-note{color:var(--text);font-size:12px;line-height:1.45;margin-bottom:8px;word-break:break-word}
+  .zl-d-note.empty{color:var(--text-faint);font-style:italic}
+  .zl-d-grid{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin-bottom:9px}
+  .zl-d-k{font-size:9px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;align-self:center;white-space:nowrap}
+  .zl-d-v{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim)}
+  .zl-d-v b{color:var(--text);font-weight:700}
+  .zl-d-v .neg{color:var(--danger)} .zl-d-v .pos{color:var(--green)} .zl-d-v .wrn{color:var(--warn)}
+  .zl-d-actions{display:flex;gap:6px;flex-wrap:wrap}
+  .zl-d-btn{flex:1;min-width:110px;background:rgba(255,255,255,.04);border:1px solid var(--glass-border);color:var(--text-dim);font-family:inherit;font-size:10.5px;font-weight:700;letter-spacing:.4px;padding:9px 10px;border-radius:6px;cursor:pointer;transition:all .15s;text-transform:uppercase}
+  .zl-d-btn:hover{border-color:rgba(255,122,24,.4);color:var(--accent);background:rgba(255,122,24,.06)}
+  html[data-theme="light"] .zl-d-btn{background:rgba(0,0,0,.03)}
+
   /* hide ladder when no zones */
   .zone-ladder:empty{display:none}
 
@@ -1772,7 +1790,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const stars=`<span class="zl-stars s${st}">${'★'.repeat(st)}</span>`;
       const bar=`<span class="zl-bar"><span class="zl-bar-fill s${st}" style="width:${Math.round(st/3*100)}%"></span></span>`;
       const vb=z.verdict?`<span class="zl-vb zv-${z.verdict}" title="отработка">${z.verdict==='worked'?'✓':z.verdict==='failed'?'✗':'·'}</span>`:'';
-      html+=`<div class="${rowCls}" onclick="_ladderGoZone(${z.px})" title="К зоне ${z.px}">
+      const open=_zlOpen.has(z.px);
+      if(open)rowCls+=' zl-open';
+      html+=`<div class="${rowCls}" onclick="_zlToggle(${z.px})" title="${open?'Свернуть':'Детали зоны'} ${z.px}">
+        <span class="zl-chev">▸</span>
         <span class="zone-kind ${k.cls}" style="font-size:8px">${k.lbl}</span>
         <span class="zl-px">${z.px}</span>
         ${stars}${bar}
@@ -1780,10 +1801,49 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         ${vb}
         ${lp?`<span class="${distCls}">${distTxt}</span>`:''}
       </div>`;
+      if(open)html+=_zlDetail(z,i,lp);
     });
     if(lp&&!divPlaced)html+=divHtml;
     el.innerHTML=html;
   }
+  // раскрытые строки лестницы (ключ — цена зоны, переживает перерисовку)
+  let _zlOpen=new Set();
+  function _zlToggle(px){ if(_zlOpen.has(px))_zlOpen.delete(px);else _zlOpen.add(px); renderLadder(); }
+  function _zlDetail(z,i,lp){
+    const rows=[];
+    // стоп + расстояние от зоны
+    if(z.stop){
+      const sd=(z.stop-z.px)/z.px*100;
+      rows.push(['стоп',`<b>${z.stop}</b> <span class="neg">(${sd>0?'+':''}${sd.toFixed(2)}% от зоны)</span>`]);
+      const ps=posSize(z);
+      if(ps)rows.push(['объём по риску',`<b>${ps.notional.toFixed(0)}</b> USDT · ${ps.units.toFixed(3)} ед · риск ${ps.riskMoney.toFixed(1)} USDT`]);
+    }else rows.push(['стоп',`<span class="wrn">не задан ⚠</span>`]);
+    if(lp){const d=(z.px-lp)/lp*100;rows.push(['до зоны',`<b>${d>0?'+':''}${d.toFixed(2)}%</b> от текущей ${lp}`]);}
+    if(z.proto)rows.push(['протокол',`<b>${escapeHtml(String(z.proto))}</b>`]);
+    let st='ожидает касания';
+    if(z.closed)st='закрыта';else if(z.expired)st='истекла';
+    else if(z.triggeredAt)st='🎯 касание в '+new Date(z.triggeredAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+    if(z.verdict)st+=z.verdict==='worked'?' · <span class="pos">✓ сработала</span>':z.verdict==='failed'?' · <span class="neg">✗ не сработала</span>':'';
+    rows.push(['статус',st]);
+    if(z.createdAt)rows.push(['размечена',new Date(z.createdAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})]);
+    const grid=rows.map(r=>`<span class="zl-d-k">${r[0]}</span><span class="zl-d-v">${r[1]}</span>`).join('');
+    const note=z.note?`<div class="zl-d-note">${escapeHtml(z.note)}</div>`:`<div class="zl-d-note empty">план не записан</div>`;
+    const btns=`<div class="zl-d-actions">
+      ${z.stop?`<button class="zl-d-btn" onclick="event.stopPropagation();_zlCalc(${z.px})">→ калькулятор</button>`:''}
+      <button class="zl-d-btn" onclick="event.stopPropagation();_ladderGoZone(${z.px})">карточка ↗</button>
+      ${!z.closed&&!z.expired?`<button class="zl-d-btn" onclick="event.stopPropagation();_zlCloseZ(${z.px})">✓ закрыть</button>`:''}
+    </div>`;
+    return `<div class="zl-detail" onclick="event.stopPropagation()">${note}<div class="zl-d-grid">${grid}</div>${btns}</div>`;
+  }
+  function _zlCalc(px){
+    const z=zones.find(x=>x.px===px); if(!z)return;
+    if(z.px)document.getElementById('c_entry').value=z.px;
+    if(z.stop)document.getElementById('c_stop').value=z.stop;
+    recalc();
+    const cw=document.getElementById('calcWrap'); if(cw&&!cw.classList.contains('open')&&typeof toggleCalc==='function')toggleCalc();
+    document.querySelector('.calc')?.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+  function _zlCloseZ(px){ const idx=zones.findIndex(z=>z.px===px); if(idx>=0&&typeof openClose==='function')openClose(idx); }
   function _ladderGoZone(px){
     if(typeof zones==='undefined')return;
     const idx=zones.findIndex(z=>z.px===px); if(idx<0)return;
