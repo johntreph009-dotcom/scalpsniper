@@ -4939,7 +4939,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dldRenderHist(); _dldRenderBtn(); _dlSetRegime(_dlRegime,true);
     _dlLastSec=performance.now(); _dlFrames=0; _dlEngLast=0;
     const loop=ts=>{ if(!_dlRunning)return; _dlDraw(); _dlDrawPrice(); _dlFrames++;
-      if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); if(_gs)_gsTick(); }
+      if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); }
       if(ts-_dlLastSec>=1000){ const fps=Math.round(_dlFrames*1000/(ts-_dlLastSec)); _dlFrames=0; _dlLastSec=ts;
         const r=document.getElementById('dlRate'); if(r)r.textContent=fps+' FPS';
         const u=document.getElementById('dlUps'); if(u)u.textContent=_dlMsgCount; _dlMsgCount=0;
@@ -4948,7 +4948,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _dlRAF=requestAnimationFrame(loop);
   }
   function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; _dlSrc='—'; _dlMsgCount=0; _dlHist=[];
-    if(_gs){ _gs=null; const gp=document.getElementById('gsPanel'); if(gp)gp.style.display='none'; const gb=document.getElementById('gsBtn'); if(gb){gb.textContent='▶ спрей-дрилл · сетка';gb.classList.remove('on');} }
+    if(_gs){ _gs=null; if(_gsTimer){clearInterval(_gsTimer);_gsTimer=null;} const gp=document.getElementById('gsPanel'); if(gp)gp.style.display='none'; const gb=document.getElementById('gsBtn'); if(gb){gb.textContent='▶ спрей-дрилл · сетка';gb.classList.remove('on');} }
     if(_dlDrill){ _dlDrill=null; _dldRenderBtn(); const c=document.getElementById('dldCard'); if(c){c.textContent='дрилл прерван (выход из демо)';c.className='dld-card';} } }
   window.addEventListener('resize',()=>{ if(_dlRunning){_dlSetupCanvas();_dlSetupPriceCanvas();} });
 
@@ -5057,7 +5057,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // филл уровня → парный тейк на шаг; профит = шаг × закрытые пары; в тренде копится
   // инвентарь против движения (главная слабость и главный след ботов в стакане).
   // Наклон сетки — тренд дня + дельта потока; перестройка — выход за диапазон или дрейф.
-  let _gs=null;
+  let _gs=null,_gsTimer=null; // тик сетки на setInterval — не зависит от rAF (живёт и в фоне)
   function _gsBuild(px){
     const hh=_dlHist; if(!px||hh.length<12)return null;
     const wl=Math.min.apply(null,hh), wh=Math.max.apply(null,hh);
@@ -5076,11 +5076,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function _gsToggle(){
     const b=document.getElementById('gsBtn'), c=document.getElementById('gsCard'), p=document.getElementById('gsPanel');
-    if(_gs){ _gs=null; if(p)p.style.display='none'; if(c)c.textContent='';
+    if(_gs){ _gs=null; if(_gsTimer){clearInterval(_gsTimer);_gsTimer=null;} if(p)p.style.display='none'; if(c)c.textContent='';
       if(b){b.textContent='▶ спрей-дрилл · сетка';b.classList.remove('on');} return; }
     const g=_gsBuild(_dlHist[_dlHist.length-1]);
     if(!g){ if(c)c.textContent='жду поток (~15с данных)…'; return; }
     _gs=g; if(c)c.textContent='';
+    if(_gsTimer)clearInterval(_gsTimer); _gsTimer=setInterval(_gsTick,250);
     if(b){b.textContent='⏹ стоп сетки';b.classList.add('on');}
   }
   function _gsTick(){
