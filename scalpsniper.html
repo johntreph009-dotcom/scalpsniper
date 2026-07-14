@@ -593,6 +593,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .help-step b{color:var(--text)}
   .hs-n{flex-shrink:0;font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:var(--accent);min-width:18px;text-align:center}
   .help-motto{margin-top:10px;padding:9px 12px;border:1px dashed var(--accent-dim,rgba(255,122,24,.35));border-radius:8px;font-size:11px;color:var(--accent);text-align:center;letter-spacing:.3px}
+  /* спрей-дрилл: панель грид-модели в демо */
+  .gs-panel{margin:6px 0 10px;padding:9px 12px;border:1px dashed var(--line-soft);border-radius:8px;font-size:10.5px;line-height:1.75;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
+  .gs-panel b{color:var(--text)}
+  .gs-up{color:var(--green)} .gs-dn{color:var(--danger)}
+  .gs-note{color:var(--text-faint);font-size:9.5px}
   /* ===== close zone button (session) ===== */
   .zone-close{background:none;border:1px solid var(--green-dim);color:var(--green);cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;padding:5px 10px;border-radius:5px;white-space:nowrap;letter-spacing:.5px}
   .zone-close:hover{background:rgba(63,185,80,.12);border-color:var(--green)}
@@ -1413,7 +1418,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div id="demoPhase" class="hide demo-phase">
     <div class="dl-head">
       <span class="dl-badge">DEMO</span>
-      <span class="dl-title">Demo Lab · тренажёр</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Тренажёр чтения потока: стакан и лента реальные, сделки виртуальные · свайп/тап ↑↓ — твоя гипотеза, исход замеряется через 15с и 30с в bps против спреда · дрилл 5:00 — серия решений подряд с итоговой карточкой · история дриллов копится локально</span></span>
+      <span class="dl-title">Demo Lab · тренажёр</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Тренажёр чтения потока: стакан и лента реальные, сделки виртуальные · свайп/тап ↑↓ — твоя гипотеза, исход замеряется через 15с и 30с в bps против спреда · спрей-дрилл — модель сеточного бота на живом потоке: учись видеть его следы и слабости</span></span>
       <span class="ticker-input-wrap demo-tkwrap" id="demoTkWrap"><input id="demoTicker" class="sess-tk" autocomplete="off" placeholder="BTC/USDT" onfocus="_openDemoDD()" oninput="_filterDemoDD()" onchange="_pickDemoInput()" title="Сменить инструмент стакана"><button type="button" class="ticker-dd-toggle" id="demoDDToggle" onclick="_toggleDemoDD(event)" aria-label="Список тикеров">▾</button><div class="ticker-dd" id="demoTickerDD"></div></span>
       <span class="dl-rate" id="dlRate">—</span>
     </div>
@@ -1428,7 +1433,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="dl-pchart-wrap"><canvas id="dlPriceChart"></canvas></div>
     <div class="dl-canvas-lbl">Стакан <span id="dlSym">—</span> · <span id="dlSrc">подключение…</span> · <span id="dlUps">0</span> упд/с</div>
     <div class="dl-canvas-wrap"><canvas id="dlBook"></canvas></div>
-    <div class="dld-bar"><button type="button" class="dld-btn" id="dldBtn" onclick="_dldToggle()">▶ дрилл 5:00</button><span class="dld-card" id="dldCard"></span></div>
+    <div class="dld-bar"><button type="button" class="dld-btn" id="gsBtn" onclick="_gsToggle()">▶ спрей-дрилл · сетка</button><span class="dld-card" id="gsCard"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Демо сеточного бота: вокруг цены раскидывается сетка buy ниже / sell выше по диапазону потока, с наклоном по тренду дня и дельте · каждый филл ставит парный тейк на шаг · при уходе цены сетка перестраивается · зарабатывает шаг в рейндже, копит инвентарь в тренде · следы ботов в стакане: ровные интервалы одинаковых лимиток, возраст стен ‹1м, филлы с равным шагом · виртуально, модель</span></span></div>
+    <div id="gsPanel" class="gs-panel" style="display:none"></div>
     <div class="dl-swipes">
       <div class="dl-swipe up" id="dlLong">↑ свайп / тап — демо-лонг</div>
       <div class="dl-swipe dn" id="dlShort">↓ свайп / тап — демо-шорт</div>
@@ -1437,7 +1443,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="dl-feedback" id="dlFeedback"></div>
     <div class="dl-outcomes" id="dlOutcomes"></div>
     <div class="dl-readscore" id="dlReadScore"></div>
-    <div class="dl-readscore" id="dldHist"></div>
     <div class="dl-foot">DEMO · реальный стакан и лента Binance, сделки виртуальные · аналитика, не торговая рекомендация · реальные ордера не выставляются. Бар и режим — гипотеза модели; контр-тренд помечается, но не блокируется — решаешь ты.</div>
   </div>
   <div class="disclaimer">
@@ -1475,7 +1480,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <div class="help-step"><span class="hs-n">②</span><span><b>Сессия</b> — цена live сама тикает. Тап по строке лестницы — детали зоны. Касание зоны — плашка: тап по цене/стопу копирует для ордера, объём уже посчитан от риска. Вне зон — ждать, это инструкция.</span></div>
       <div class="help-step"><span class="hs-n">📈</span><span><b>График</b> — колесо/пинч зум, зажми и тяни — прокрутка, двойной тап — сброс. Потяни бейдж зоны у правой шкалы — перенос уровня. Слои (тренд/объём/CVD/развороты/ликв) включаются кнопками.</span></div>
       <div class="help-step"><span class="hs-n">③</span><span><b>Журнал</b> — закрывай каждую зону: исход + грейд A/B/C (про процесс, не результат). Раз в неделю: CSV-импорт с биржи и взгляд на Discipline Score.</span></div>
-      <div class="help-step"><span class="hs-n">◎</span><span><b>Демо</b> — тренажёр чтения стакана без риска: свайп — гипотеза, исход замеряется через 15/30с. Дрилл 5:00 — серия подряд.</span></div>
+      <div class="help-step"><span class="hs-n">◎</span><span><b>Демо</b> — тренажёр чтения стакана без риска: свайп — гипотеза, исход замеряется через 15/30с. Спрей-дрилл — живая модель сеточного бота: видно, как грид собирает рейндж и тонет в тренде.</span></div>
     </div>
     <div class="help-motto">решения приняты до сессии — в моменте только исполнение</div>
     <div class="modal-btns">
@@ -4873,7 +4878,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const ctx=_dlPCtx; if(!ctx)return; const W=_dlPW,H=_dlPH; ctx.clearRect(0,0,W,H);
     const hh=_dlHist, now=document.getElementById('dlPriceNow'), chg=document.getElementById('dlPriceChg');
     if(hh.length<2){ if(now&&hh.length)now.textContent=hh[0].toFixed(_dlDec); return; }
-    let lo=Math.min.apply(null,hh), hi=Math.max.apply(null,hh); if(hi-lo<1e-9){hi+=1;lo-=1;} const pd=(hi-lo)*0.15; lo-=pd; hi+=pd;
+    let lo=Math.min.apply(null,hh), hi=Math.max.apply(null,hh);
+    if(typeof _gs!=='undefined'&&_gs){ lo=Math.min(lo,_gs.lo); hi=Math.max(hi,_gs.hi); } // сетка целиком в кадре
+    if(hi-lo<1e-9){hi+=1;lo-=1;} const pd=(hi-lo)*0.15; lo-=pd; hi+=pd;
     const n=hh.length, dx=W/(n-1), toY=v=>H-2-((v-lo)/(hi-lo))*(H-4);
     const up=hh[n-1]>=hh[0], col=up?'#1D9E75':'#E24B4A';
     const path=new Path2D(); path.moveTo(0,toY(hh[0]));
@@ -4884,6 +4891,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     ctx.fillStyle=g; ctx.fill(area);
     ctx.strokeStyle=col; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke(path);
     ctx.fillStyle=col; ctx.beginPath(); ctx.arc((n-1)*dx,toY(hh[n-1]),3.2,0,7); ctx.fill();
+    // уровни спрей-дрилла: buy зелёный / sell красный пунктир, приглушены = заняты; маркер справа = инвентарь
+    if(typeof _gs!=='undefined'&&_gs){
+      ctx.save(); ctx.lineWidth=1;
+      _gs.levels.forEach(L=>{ const y=toY(L.px);
+        ctx.strokeStyle=L.side==='buy'?('rgba(29,158,117,'+(L.open?'.55':'.16')+')'):('rgba(226,75,74,'+(L.open?'.55':'.16')+')');
+        ctx.setLineDash([3,4]); ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); });
+      ctx.setLineDash([]);
+      _gs.inv.forEach(pp=>{ const y=toY(pp.entry); ctx.fillStyle=pp.side==='long'?'#1D9E75':'#E24B4A'; ctx.fillRect(W-7,y-2,6,4); });
+      ctx.restore();
+    }
     const cur=hh[n-1], first=hh[0], pct=first?((cur-first)/first*100):0;
     if(now)now.textContent=cur.toFixed(_dlDec);
     if(chg){ chg.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%'; chg.className='dl-price-chg '+(pct>=0?'up':'dn'); }
@@ -4922,7 +4939,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dldRenderHist(); _dldRenderBtn(); _dlSetRegime(_dlRegime,true);
     _dlLastSec=performance.now(); _dlFrames=0; _dlEngLast=0;
     const loop=ts=>{ if(!_dlRunning)return; _dlDraw(); _dlDrawPrice(); _dlFrames++;
-      if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); }
+      if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); if(_gs)_gsTick(); }
       if(ts-_dlLastSec>=1000){ const fps=Math.round(_dlFrames*1000/(ts-_dlLastSec)); _dlFrames=0; _dlLastSec=ts;
         const r=document.getElementById('dlRate'); if(r)r.textContent=fps+' FPS';
         const u=document.getElementById('dlUps'); if(u)u.textContent=_dlMsgCount; _dlMsgCount=0;
@@ -4931,6 +4948,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _dlRAF=requestAnimationFrame(loop);
   }
   function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; _dlSrc='—'; _dlMsgCount=0; _dlHist=[];
+    if(_gs){ _gs=null; const gp=document.getElementById('gsPanel'); if(gp)gp.style.display='none'; const gb=document.getElementById('gsBtn'); if(gb){gb.textContent='▶ спрей-дрилл · сетка';gb.classList.remove('on');} }
     if(_dlDrill){ _dlDrill=null; _dldRenderBtn(); const c=document.getElementById('dldCard'); if(c){c.textContent='дрилл прерван (выход из демо)';c.className='dld-card';} } }
   window.addEventListener('resize',()=>{ if(_dlRunning){_dlSetupCanvas();_dlSetupPriceCanvas();} });
 
@@ -5034,6 +5052,78 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       +(parts.length?'<br>'+parts.join(' · '):'')
       +'<br><span class="rs-note">исход = движение mid против спреда входа · виртуально, гипотеза, не результат сделки</span>';
   }
+  // ── Спрей-дрилл: демо сеточного бота (грид-модель) ──
+  // Механика реальных грид-ботов: buy-лимитки ниже цены / sell выше с равным шагом;
+  // филл уровня → парный тейк на шаг; профит = шаг × закрытые пары; в тренде копится
+  // инвентарь против движения (главная слабость и главный след ботов в стакане).
+  // Наклон сетки — тренд дня + дельта потока; перестройка — выход за диапазон или дрейф.
+  let _gs=null;
+  function _gsBuild(px){
+    const hh=_dlHist; if(!px||hh.length<12)return null;
+    const wl=Math.min.apply(null,hh), wh=Math.max.apply(null,hh);
+    const half=Math.max((wh-wl)*0.9, px*0.0008); // мин полудиапазон 8 bps
+    const sym=document.getElementById('dlSym')?.textContent||'';
+    const dt=(_dayTrendCache[sym]&&_dayTrendCache[sym].val)||null;
+    const flow=_dlModel?(_dlModel.pUp-_dlModel.pDown):0;
+    const slope=(hh[hh.length-1]-hh[0])/hh[0];
+    const sc=(dt?(dt.dir==='up'?1:dt.dir==='down'?-1:0):0)+(flow>0.22?1:flow<-0.22?-1:0)+(slope>0.0012?1:slope<-0.0012?-1:0);
+    const bias=sc>=2?'long':sc<=-2?'short':'neutral';
+    let nB=4,nS=4; if(bias==='long'){nB=5;nS=3;} if(bias==='short'){nB=3;nS=5;}
+    const step=half*2/8, levels=[];
+    for(let i=1;i<=nB;i++)levels.push({px:px-step*i,side:'buy',open:true});
+    for(let i=1;i<=nS;i++)levels.push({px:px+step*i,side:'sell',open:true});
+    return {center:px,step,lo:px-step*(nB+0.5),hi:px+step*(nS+0.5),levels,bias,inv:[],fills:0,pairs:0,realized:0,rebuilds:0,t0:Date.now(),lastRb:Date.now(),lastPx:px};
+  }
+  function _gsToggle(){
+    const b=document.getElementById('gsBtn'), c=document.getElementById('gsCard'), p=document.getElementById('gsPanel');
+    if(_gs){ _gs=null; if(p)p.style.display='none'; if(c)c.textContent='';
+      if(b){b.textContent='▶ спрей-дрилл · сетка';b.classList.remove('on');} return; }
+    const g=_gsBuild(_dlHist[_dlHist.length-1]);
+    if(!g){ if(c)c.textContent='жду поток (~15с данных)…'; return; }
+    _gs=g; if(c)c.textContent='';
+    if(b){b.textContent='⏹ стоп сетки';b.classList.add('on');}
+  }
+  function _gsTick(){
+    if(!_gs)return; const hh=_dlHist, px=hh[hh.length-1]; if(!px)return;
+    const prev=_gs.lastPx||px; _gs.lastPx=px;
+    // филлы: цена пересекла уровень
+    for(const L of _gs.levels){
+      if(!L.open)continue;
+      if(L.side==='buy'&&prev>L.px&&px<=L.px){ L.open=false;_gs.fills++;_gs.inv.push({side:'long',entry:L.px,tp:L.px+_gs.step,lvl:L}); }
+      else if(L.side==='sell'&&prev<L.px&&px>=L.px){ L.open=false;_gs.fills++;_gs.inv.push({side:'short',entry:L.px,tp:L.px-_gs.step,lvl:L}); }
+    }
+    // закрытие пар: тейк на шаг, уровень реоткрывается (как у реального грида)
+    _gs.inv=_gs.inv.filter(pp=>{
+      const hit=pp.side==='long'?px>=pp.tp:px<=pp.tp;
+      if(hit){ _gs.pairs++; _gs.realized+=_gs.step/pp.entry*10000; if(pp.lvl)pp.lvl.open=true; return false; }
+      return true;
+    });
+    // перестройка: выход за диапазон или устойчивый дрейф от центра
+    const out=px>_gs.hi||px<_gs.lo;
+    const drift=Math.abs(px-_gs.center)>_gs.step*2.4 && Date.now()-_gs.lastRb>15000;
+    if(out||drift){
+      const keep={inv:_gs.inv.map(x=>({side:x.side,entry:x.entry,tp:x.tp,lvl:null})),f:_gs.fills,p:_gs.pairs,r:_gs.realized,rb:_gs.rebuilds+1,t0:_gs.t0};
+      const ng=_gsBuild(px);
+      if(ng){ ng.inv=keep.inv; ng.fills=keep.f; ng.pairs=keep.p; ng.realized=keep.r; ng.rebuilds=keep.rb; ng.t0=keep.t0; _gs=ng; }
+    }
+    _gsRender(px);
+  }
+  function _gsRender(px){
+    const p=document.getElementById('gsPanel'); if(!p)return;
+    if(!_gs){ p.style.display='none'; return; }
+    const dec=_dlDec!=null?_dlDec:2;
+    const fl=_gs.inv.reduce((s,x)=>s+((px-x.entry)/x.entry*10000)*(x.side==='long'?1:-1),0);
+    const net=_gs.realized+fl;
+    const modeTxt=_gs.bias==='long'?'лонг-наклон 5/3':_gs.bias==='short'?'шорт-наклон 3/5':'нейтрал 4/4';
+    const stepBps=(_gs.step/_gs.center*10000).toFixed(1);
+    const el=Date.now()-_gs.t0, mm=Math.floor(el/60000), ss=String(Math.floor(el%60000/1000)).padStart(2,'0');
+    const cls=v=>v>=0?'gs-up':'gs-dn', sg=v=>(v>=0?'+':'')+v.toFixed(1);
+    p.style.display='block';
+    p.innerHTML='<b>СЕТКА</b> '+_gs.levels.length+' ур × '+stepBps+' bps · '+_gs.lo.toFixed(dec)+'–'+_gs.hi.toFixed(dec)+' · <b>'+modeTxt+'</b> · '+mm+':'+ss
+      +'<br>филлы <b>'+_gs.fills+'</b> · пары <b>'+_gs.pairs+'</b> · реализовано <b class="'+cls(_gs.realized)+'">'+sg(_gs.realized)+' bps</b> · инвентарь <b>'+_gs.inv.length+'</b> ур (<span class="'+cls(fl)+'">'+sg(fl)+'</span>) · итог <b class="'+cls(net)+'">'+sg(net)+'</b> · перестроек '+_gs.rebuilds
+      +'<br><span class="gs-note">'+(_gs.inv.length>=3?'⚠ копит инвентарь против движения — так сетку убивает тренд, и так её вычисляют':'собирает шаг в рейндже — штатный режим сеточника')+' · модель · демо</span>';
+  }
+
   // ── Дрилл: 5-минутная сессия с итоговой карточкой фактов ──
   const DLD_KEY='msa_demo_drills_v1';
   let _dlDrill=null; // {id,end,fin}
