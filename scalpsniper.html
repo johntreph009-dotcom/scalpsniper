@@ -566,6 +566,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .hint-wrap.tip-l .hint-tip::after{left:10px;right:auto}
   .hint-wrap.tip-r .hint-tip{left:auto;right:0}
   .hint-wrap.tip-r .hint-tip::after{left:auto;right:10px}
+  /* переворот вниз, когда сверху нет места (иначе обрезается краем экрана) */
+  .hint-wrap.tip-b .hint-tip{bottom:auto;top:calc(100% + 8px)}
+  .hint-wrap.tip-b .hint-tip::after{top:auto;bottom:100%;border-top-color:transparent;border-bottom-color:var(--panel-2)}
   /* readiness-пункты кликабельны — ведут к месту исправления */
   .rb-item{cursor:pointer}
   .rb-item:active{opacity:.7}
@@ -4699,7 +4702,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }catch(e){}
   }
 
-  // ── Hint tooltip toggle: делегирование (работает и для динамических «?») + умная сторона ──
+  // ── Hint tooltip toggle: делегирование (работает и для динамических «?») + умное позиционирование ──
+  // сторона (лево/право) и вертикаль (вверх/вниз) по позиции иконки, чтобы тултип не резался краями экрана
+  function _hintPos(ico,wrap){
+    const r=ico.getBoundingClientRect();
+    const tip=wrap.querySelector('.hint-tip');
+    const h=tip?tip.offsetHeight+14:130;
+    wrap.classList.toggle('tip-r',r.left>window.innerWidth/2);
+    wrap.classList.toggle('tip-l',r.left<=window.innerWidth/2);
+    wrap.classList.toggle('tip-b',r.top<h);
+  }
   document.addEventListener('click',e=>{
     const ico=e.target.closest('.hint-ico');
     if(ico){
@@ -4707,16 +4719,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const wrap=ico.closest('.hint-wrap');
       const wasOpen=wrap.classList.contains('open');
       document.querySelectorAll('.hint-wrap.open').forEach(x=>x.classList.remove('open'));
-      if(!wasOpen){
-        // сторона тултипа по позиции иконки, чтобы не уезжал за экран
-        const r=ico.getBoundingClientRect();
-        wrap.classList.remove('tip-l','tip-r');
-        wrap.classList.add(r.left>window.innerWidth/2?'tip-r':'tip-l');
-        wrap.classList.add('open');
-      }
+      if(!wasOpen){ _hintPos(ico,wrap); wrap.classList.add('open'); }
       return;
     }
     document.querySelectorAll('.hint-wrap.open').forEach(x=>x.classList.remove('open'));
+  });
+  // hover на десктопе идёт мимо click — позиционируем и там
+  document.addEventListener('mouseover',e=>{
+    const ico=e.target.closest('.hint-ico');
+    if(ico)_hintPos(ico,ico.closest('.hint-wrap'));
   });
 
   // ── Zone-add collapsible ──
