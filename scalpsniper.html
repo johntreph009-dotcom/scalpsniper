@@ -561,6 +561,28 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .hint-tip::after{content:'';position:absolute;top:100%;left:10px;border:5px solid transparent;border-top-color:var(--panel-2)}
   .hint-wrap:hover .hint-tip,.hint-wrap.open .hint-tip{opacity:1}
   @media(max-width:500px){.hint-tip{left:auto;right:0;max-width:min(220px,calc(100vw - 24px))}.hint-tip::after{left:auto;right:10px}.ticker-dd{max-width:calc(100vw - 18px)}}
+  /* умная сторона тултипа — ставится JS при открытии по позиции иконки */
+  .hint-wrap.tip-l .hint-tip{left:0;right:auto}
+  .hint-wrap.tip-l .hint-tip::after{left:10px;right:auto}
+  .hint-wrap.tip-r .hint-tip{left:auto;right:0}
+  .hint-wrap.tip-r .hint-tip::after{left:auto;right:10px}
+  /* readiness-пункты кликабельны — ведут к месту исправления */
+  .rb-item{cursor:pointer}
+  .rb-item:active{opacity:.7}
+  /* чеклист протокола в плашке активной зоны */
+  .lc-checks{margin-top:9px;padding-top:8px;border-top:1px dashed var(--line-soft);display:flex;flex-direction:column;gap:4px}
+  .lc-chk{display:flex;align-items:flex-start;gap:7px;font-size:10.5px;line-height:1.4;color:var(--text-dim);cursor:pointer;user-select:none}
+  .lc-chk .lcc-box{flex-shrink:0;width:13px;height:13px;border:1px solid var(--line);border-radius:3px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;line-height:1;color:transparent;margin-top:1px;transition:all .12s}
+  .lc-chk.on{color:var(--text)}
+  .lc-chk.on .lcc-box{background:rgba(63,185,80,.15);border-color:var(--green);color:var(--green)}
+  .lc-checks .lcc-head{font-size:9px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px}
+  /* help-оверлей «как работать» */
+  .help-box{max-width:420px;max-height:82vh;overflow-y:auto}
+  .help-steps{display:flex;flex-direction:column;gap:10px;margin:6px 0 4px}
+  .help-step{display:flex;gap:10px;font-size:11.5px;line-height:1.55;color:var(--text-dim)}
+  .help-step b{color:var(--text)}
+  .hs-n{flex-shrink:0;font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:var(--accent);min-width:18px;text-align:center}
+  .help-motto{margin-top:10px;padding:9px 12px;border:1px dashed var(--accent-dim,rgba(255,122,24,.35));border-radius:8px;font-size:11px;color:var(--accent);text-align:center;letter-spacing:.3px}
   /* ===== close zone button (session) ===== */
   .zone-close{background:none;border:1px solid var(--green-dim);color:var(--green);cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;padding:5px 10px;border-radius:5px;white-space:nowrap;letter-spacing:.5px}
   .zone-close:hover{background:rgba(63,185,80,.12);border-color:var(--green)}
@@ -1058,6 +1080,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
+      <button class="hdr-tgl" id="helpBtn" onclick="toggleHelp()" title="Как работать — цикл за 30 секунд">ⓘ</button>
       <button class="hdr-tgl" id="themeBtn" onclick="toggleTheme()" title="Тема: ночь/день">🌙</button>
       <button class="hdr-tgl" id="muteBtn" onclick="toggleMute()" title="Звук алертов вкл/выкл">🔔</button>
       <button class="pwa-install" id="pwaInstall" style="display:none" onclick="_pwaInstall()" title="Установить как приложение">⤓ Установить</button>
@@ -1164,7 +1187,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <!-- ===== LIVE PHASE ===== -->
   <div id="livePhase" class="hide">
     <div id="readinessBar" class="readiness-bar" style="display:none"></div>
-    <div class="section-title">Текущая цена <span class="ticker-input-wrap sess-tkwrap" id="sessTkWrap"><input id="sessTicker" class="sess-tk" autocomplete="off" placeholder="BTC/USDT" onfocus="_openSessDD()" oninput="_filterSessDD()" onchange="setSessionTicker(this.value)" title="Переключить инструмент в сессии"><button type="button" class="ticker-dd-toggle" id="sessDDToggle" onclick="_toggleSessDD(event)" aria-label="Список тикеров">▾</button><div class="ticker-dd" id="sessTickerDD"></div></span> <span class="tag" id="liveZoneCount"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Цена с Binance · обновляется каждые 5с · Переключай инструмент тут — зоны и позиции подхватятся · При входе в зону — звук + вспышка</span></span></div>
+    <div class="section-title">Текущая цена <span class="ticker-input-wrap sess-tkwrap" id="sessTkWrap"><input id="sessTicker" class="sess-tk" autocomplete="off" placeholder="BTC/USDT" onfocus="_openSessDD()" oninput="_filterSessDD()" onchange="setSessionTicker(this.value)" title="Переключить инструмент в сессии"><button type="button" class="ticker-dd-toggle" id="sessDDToggle" onclick="_toggleSessDD(event)" aria-label="Список тикеров">▾</button><div class="ticker-dd" id="sessTickerDD"></div></span> <span class="tag" id="liveZoneCount"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Цена с Binance · обновляется каждые 5с · Переключай инструмент тут — зоны и позиции подхватятся · При входе в зону — звук + вспышка · Тап по строке лестницы зон — полные детали (план, стоп, объём) и действия</span></span></div>
     <div class="live-bar">
       <span class="label" style="margin:0">Цена сейчас</span>
       <input id="livePrice" type="number" placeholder="103200" oninput="onLivePriceInput()" style="max-width:180px;font-size:16px;font-weight:700">
@@ -1192,6 +1215,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         </div>
         <span class="mc-status" id="mcStatus">загрузка…</span>
         <button type="button" class="mc-tfbtn" id="mcTallBtn" onclick="_mcToggleTall()" title="Развернуть/свернуть график по высоте">⤢</button>
+        <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Колесо / пинч — зум · зажми и тяни — прокрутка истории · двойной тап — сброс к последним свечам · потяни бейдж зоны у правой шкалы — перенос уровня · Полосы — твои зоны (ярче = приоритет) · синий пунктир — MAX PAIN · розовое/голубое — модель ликвидаций · ⤢ — выше график</span></span>
       </div>
       <div class="mc-layers" id="mcLayers">
         <button class="mc-lyr" data-lyr="trend" onclick="toggleLayer('trend')" title="Тренд: MA-лента, цвет по тренду дня">тренд</button>
@@ -1211,6 +1235,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       </div>
       <div class="lc-note" id="lcNote">—</div>
       <div class="lc-dist" id="lcDist" style="display:none"></div>
+      <div class="lc-checks" id="lcChecks" style="display:none"></div>
       <div class="lc-actions">
         <button class="calc-fill-btn" id="lcPosBtn" onclick="_lcOpenPos()" style="display:none">▲ В позицию</button>
         <button class="calc-fill-btn" id="lcCloseBtn" onclick="_lcCloseZone()" style="display:none">✓ Закрыть зону</button>
@@ -1243,7 +1268,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <!-- ===== JOURNAL PHASE ===== -->
   <div id="journalPhase" class="hide">
     <div class="j-sect">
-      <div class="section-title">Итоги <span class="tag">общая статистика</span></div>
+      <div class="section-title">Итоги <span class="tag">общая статистика</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Discipline Score 0–100 — только про процесс, не про доходность: план→факт (вес 40) · грейды A/B (25) · вердикты зонам (20) · рефлексия-заметки (15) · компонент входит в расчёт с 3+ наблюдений — заполняй грейды и вердикты, иначе скор занижен</span></span></div>
       <div class="j-row" id="jMainStats">
         <div class="jstat"><div class="jsl">Суммарный P&L</div><div class="jsv dim" id="jTotalPnl">—</div><div class="jsub" id="jPnlSub">нет сделок</div></div>
         <div class="jstat"><div class="jsl">Сделок / пропущено</div><div class="jsv dim" id="jTradeCount">—</div><div class="jsub" id="jWinCount">—</div></div>
@@ -1279,7 +1304,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="section-title">Журнал отработки зон <span class="tag">все размеченные · новые сверху</span></div>
     <div id="zrjBar"></div>
     <div class="zr-journal" id="zrJournal"></div>
-    <div class="section-title">История сделок <span class="tag">новые сверху</span>
+    <div class="section-title">История сделок <span class="tag">новые сверху</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Грейд — про процесс, не результат: A — вход и ведение строго по плану зоны · B — небольшое отклонение (раньше/позже, двинул стоп по правилу) · C — нарушение (вход без зоны, снял стоп, превысил риск) · LOSS может быть A, WIN может быть C · Импорт CSV — сверка журнала с биржей раз в неделю, дубли отсеются</span></span>
       <button class="paste-px" style="margin-left:auto" onclick="document.getElementById('mxCsvFile').click()" title="Импорт закрытых сделок из CSV-выгрузки биржи (MEXC, Binance и др.)">⭱ Импорт сделок (CSV)</button>
       <input type="file" id="mxCsvFile" accept=".csv,text/csv" style="display:none" onchange="_mxHandleFile(this)">
     </div>
@@ -1378,7 +1403,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div id="demoPhase" class="hide demo-phase">
     <div class="dl-head">
       <span class="dl-badge">DEMO</span>
-      <span class="dl-title">Demo Lab · тренажёр</span>
+      <span class="dl-title">Demo Lab · тренажёр</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Тренажёр чтения потока: стакан и лента реальные, сделки виртуальные · свайп/тап ↑↓ — твоя гипотеза, исход замеряется через 15с и 30с в bps против спреда · дрилл 5:00 — серия решений подряд с итоговой карточкой · история дриллов копится локально</span></span>
       <span class="ticker-input-wrap demo-tkwrap" id="demoTkWrap"><input id="demoTicker" class="sess-tk" autocomplete="off" placeholder="BTC/USDT" onfocus="_openDemoDD()" oninput="_filterDemoDD()" onchange="_pickDemoInput()" title="Сменить инструмент стакана"><button type="button" class="ticker-dd-toggle" id="demoDDToggle" onclick="_toggleDemoDD(event)" aria-label="Список тикеров">▾</button><div class="ticker-dd" id="demoTickerDD"></div></span>
       <span class="dl-rate" id="dlRate">—</span>
     </div>
@@ -1428,6 +1453,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="modal-btns">
       <button class="mok" onclick="confirmOpenPos()">Открыть позицию</button>
       <button class="mcancel" onclick="closePosModal()">Отмена</button>
+    </div>
+  </div>
+</div>
+<!-- ===== HELP MODAL ===== -->
+<div class="modal-overlay hide" id="helpModal" onclick="if(event.target===this)toggleHelp()">
+  <div class="modal-box help-box">
+    <div class="modal-head">Как работать</div>
+    <div class="help-steps">
+      <div class="help-step"><span class="hs-n">①</span><span><b>Подготовка</b> — тикер дня, скрины/наблюдения (Ctrl+V), протокол под рынок → «⚡ Обновить зоны» или разбор по скринам → у каждой боевой зоны стоп → байас и лимиты дня. Цель: готовность ≥70%.</span></div>
+      <div class="help-step"><span class="hs-n">②</span><span><b>Сессия</b> — цена live сама тикает. Тап по строке лестницы — детали зоны. Касание зоны — плашка: тап по цене/стопу копирует для ордера, объём уже посчитан от риска. Вне зон — ждать, это инструкция.</span></div>
+      <div class="help-step"><span class="hs-n">📈</span><span><b>График</b> — колесо/пинч зум, зажми и тяни — прокрутка, двойной тап — сброс. Потяни бейдж зоны у правой шкалы — перенос уровня. Слои (тренд/объём/CVD/развороты/ликв) включаются кнопками.</span></div>
+      <div class="help-step"><span class="hs-n">③</span><span><b>Журнал</b> — закрывай каждую зону: исход + грейд A/B/C (про процесс, не результат). Раз в неделю: CSV-импорт с биржи и взгляд на Discipline Score.</span></div>
+      <div class="help-step"><span class="hs-n">◎</span><span><b>Демо</b> — тренажёр чтения стакана без риска: свайп — гипотеза, исход замеряется через 15/30с. Дрилл 5:00 — серия подряд.</span></div>
+    </div>
+    <div class="help-motto">решения приняты до сессии — в моменте только исполнение</div>
+    <div class="modal-btns">
+      <button class="mcancel" onclick="toggleHelp()">Закрыть</button>
     </div>
   </div>
 </div>
@@ -2150,6 +2192,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           const ps2=posSize(z); if(ps2)bits.push('риск сейчас ~'+(Math.abs(lp-z.stop)*ps2.units).toFixed(2)+' USDT'); }
         ld.textContent=bits.join(' · '); ld.style.display='block'; }
       if(z.proto && z.proto!==selProto && typeof selectProto==='function'){ selectProto(z.proto); }
+      _renderLcChecks();
       _updateHdrZone(z);
     } else {
       st.textContent='вне размеченных зон — ждать';st.style.color='var(--text-faint)';
@@ -2163,6 +2206,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const cfb2=document.getElementById('calcFillBtn');if(cfb2)cfb2.style.display='none';
       const pb2=document.getElementById('lcPosBtn'); if(pb2)pb2.style.display='none';
       const cb2=document.getElementById('lcCloseBtn'); if(cb2)cb2.style.display='none';
+      const lcc=document.getElementById('lcChecks'); if(lcc)lcc.style.display='none';
       // пред-алерт подхода: тихий бип + статус при цене в 0.3% от ближайшей зоны (сброс при откате за 0.45%)
       let ni=-1,ndp=Infinity;
       zones.forEach((z2,i2)=>{ if(z2.closed||z2.expired)return; const dp=Math.abs(z2.px-lp)/lp*100; if(dp<ndp){ndp=dp;ni=i2;} });
@@ -2283,7 +2327,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     document.getElementById('modalErr').style.display='none';
   }
   function submitClose(){
-    if(!pendingOutcome){document.getElementById('modalErr').style.display='block';return;}
+    const _er=document.getElementById('modalErr');
+    if(!pendingOutcome){_er.textContent='Выбери исход — WIN, LOSS или ПРОПУСТИЛ';_er.style.display='block';return;}
+    // грейд обязателен для сделок (win/loss): без него Discipline Score слепой. Грейд — про процесс: LOSS может быть A
+    if(pendingOutcome!=='skip'&&!pendingGrade){_er.textContent='Выбери грейд A/B/C — это про процесс, не результат (LOSS может быть A)';_er.style.display='block';return;}
+    _er.style.display='none';
     if(closingPosId){
       const p=positions.find(x=>String(x.id)===String(closingPosId));
       if(p){
@@ -3084,7 +3132,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!protoCheckState[selProto])return;
     protoCheckState[selProto][i]=!protoCheckState[selProto][i];
     renderProtoChecks();renderReadinessScore();
+    if(typeof _renderLcChecks==='function')_renderLcChecks();
   }
+  // компакт-чеклист протокола в плашке активной зоны («проверь глазами» без ухода из сессии)
+  function _renderLcChecks(){
+    const el=document.getElementById('lcChecks'); if(el===null)return;
+    const card=document.getElementById('liveCard');
+    if(!card||card.classList.contains('hide')||card.classList.contains('flat')){el.style.display='none';return;}
+    const checks=PROTO_CHECKS[selProto]||[];
+    if(!checks.length){el.style.display='none';return;}
+    const st=protoCheckState[selProto]||[];
+    el.innerHTML='<span class="lcc-head">чеклист '+selProto+' — проверь глазами · тап = отметка</span>'+
+      checks.map((c,i)=>`<span class="lc-chk${st[i]?' on':''}" onclick="_lcToggleCheckOnly(${i})"><span class="lcc-box">✓</span>${escapeHtml(c)}</span>`).join('');
+    el.style.display='flex';
+  }
+  function _lcToggleCheckOnly(i){ toggleCheck(i); }
+  // помощь «как работать»
+  function toggleHelp(){ document.getElementById('helpModal')?.classList.toggle('hide'); }
 
   // ── session readiness check (Validation) ──
   function checkSessionReadiness(){
@@ -3092,27 +3156,36 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!el)return;
     const active=zones.filter(z=>!z.closed&&!z.expired);
     const items=[];
-    if(active.length===0){items.push({c:'rb-danger',t:'⚠ Нет активных зон',h:'Разметь зоны в Подготовке — без них сессия слепа'});}
+    if(active.length===0){items.push({c:'rb-danger',t:'⚠ Нет активных зон',h:'Разметь зоны в Подготовке — без них сессия слепа. Тап — перейти',g:'quickBtn'});}
     else{items.push({c:'rb-ok',t:'✓ Зон: '+active.length,h:'Активные зоны на сессию'});}
     const noStop=active.filter(z=>!z.stop).length;
-    if(noStop>0)items.push({c:'rb-warn',t:'⚡ Без стопа: '+noStop,h:'У '+noStop+' зон нет стопа — сайзинг и риск по ним не считаются. Добавь стоп в карточке зоны'});
+    if(noStop>0)items.push({c:'rb-warn',t:'⚡ Без стопа: '+noStop,h:'У '+noStop+' зон нет стопа — сайзинг и риск по ним не считаются. Тап — к списку зон',g:'zonesList'});
     const bias=document.getElementById('bias')?.value?.trim();
-    if(!bias){items.push({c:'rb-warn',t:'⚡ Байас не задан',h:'Задай байас дня в Подготовке (правила сессии) — фильтр против контртрендовых входов'});}
+    if(!bias){items.push({c:'rb-warn',t:'⚡ Байас не задан',h:'Задай байас дня — фильтр против контртрендовых входов. Тап — к полю',g:'bias'});}
     else{items.push({c:'rb-ok',t:'✓ Байас',h:'Байас дня задан'});}
     const maxL=document.getElementById('maxLoss')?.value;
     const maxT=document.getElementById('maxTrades')?.value;
-    if(!maxL&&!maxT){items.push({c:'rb-warn',t:'⚡ Лимиты не заданы',h:'Задай лимит убытка и сделок в Подготовке — это твой стоп-день и защита от тильта'});}
+    if(!maxL&&!maxT){items.push({c:'rb-warn',t:'⚡ Лимиты не заданы',h:'Задай лимит убытка и сделок — стоп-день и защита от тильта. Тап — к полям',g:'maxLoss'});}
     else{items.push({c:'rb-ok',t:'✓ Лимиты',h:'Лимиты сессии заданы'});}
     const checks=PROTO_CHECKS[selProto];
     const state=protoCheckState[selProto]||[];
     const done=state.filter(Boolean).length;
     const total=checks?checks.length:0;
     if(total>0){
-      if(done<total){items.push({c:done>=Math.ceil(total/2)?'rb-warn':'rb-danger',t:`⚡ Протокол ${done}/${total}`,h:'Отмечено '+done+' из '+total+' условий входа протокола — чеклист в Подготовке под выбором стратегии'});}
+      if(done<total){items.push({c:done>=Math.ceil(total/2)?'rb-warn':'rb-danger',t:`⚡ Протокол ${done}/${total}`,h:'Отмечено '+done+' из '+total+' условий входа — чеклист теперь и в плашке активной зоны. Тап — к чеклисту',g:'protoChecks'});}
       else{items.push({c:'rb-ok',t:'✓ Протокол OK',h:'Все условия входа протокола отмечены'});}
     }
     el.style.display='flex';
-    el.innerHTML=items.map(it=>`<span class="rb-item ${it.c}" title="${it.h||''}">${it.t}</span>`).join('');
+    el.innerHTML=items.map(it=>`<span class="rb-item ${it.c}" title="${it.h||''}"${it.g?` onclick="_rbGo('${it.g}')"`:''}>${it.t}</span>`).join('');
+  }
+  // тап по readiness-пункту → к месту исправления (в Подготовке)
+  function _rbGo(id){
+    const t=document.getElementById(id); if(!t)return;
+    const inPrep=['quickBtn','bias','maxLoss','protoChecks'].includes(id);
+    if(inPrep&&phase!=='prep'&&typeof setPhase==='function')setPhase('prep');
+    setTimeout(()=>{ t.scrollIntoView({behavior:'smooth',block:'center'});
+      t.classList.remove('zl-flash');void t.offsetWidth;t.classList.add('zl-flash');
+      if(t.tagName==='INPUT')try{t.focus({preventScroll:true})}catch(e){} },inPrep?250:60);
   }
 
 
@@ -3512,7 +3585,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           const parts=[];
           if(wa)parts.push('<span class="sw-up">⛰↑ '+f(wa[0])+' · '+(wa[1]*100).toFixed(0)+'%'+age(f(wa[0]))+' ('+(((wa[0]-px)/px)*100).toFixed(2)+'%)</span>');
           if(wb)parts.push('<span class="sw-dn">⛰↓ '+f(wb[0])+' · '+(wb[1]*100).toFixed(0)+'%'+age(f(wb[0]))+' ('+(((px-wb[0])/px)*100).toFixed(2)+'%)</span>');
-          el.innerHTML=(parts.length?('ликвидность: '+parts.join(' · ')):'ликвидность: концентраций рядом нет')+' <span class="sw-src">сводно'+(books.length>1?' ×2':'')+'</span>';
+          el.innerHTML=(parts.length?('ликвидность: '+parts.join(' · ')):'ликвидность: концентраций рядом нет')+' <span class="sw-src">сводно'+(books.length>1?' ×2':'')+'</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Сводная карта ликвидности из нескольких книг (перп+спот) · стена = узел ≥1.8× среднего, % — доля стороны книги · стрелка и % — где и как далеко от цены · возраст: ‹1м — свежая/переставляется, долгожитель — реальный интерес · наблюдение, не сигнал</span></span>';
           el.title='Сводная карта ликвидности: несколько книг (перп+спот) нормируются в доли своей стороны и усредняются. Стена = уровень с долей >1.8× среднего. Проценты — доля стороны книги.';
         }
       }
@@ -4236,7 +4309,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{ const px=parseFloat(document.getElementById('livePrice')?.value)||parseFloat(document.getElementById('price')?.value);
       if(px&&isFinite(px))grav=' · гравитация '+(((v.mp-px)/px*100)>=0?'+':'')+((v.mp-px)/px*100).toFixed(1)+'%'; }catch(e){}
     el.style.display='';
-    el.innerHTML='<span class="dc-chip">OPT MAX PAIN <b>'+v.mp+'</b> · эксп '+v.expiry+' ('+v.daysLeft+'д)'+grav+'</span> <span style="color:var(--text-faint);font-size:9px">опционный уровень-магнит · наблюдение</span>';
+    el.innerHTML='<span class="dc-chip">OPT MAX PAIN <b>'+v.mp+'</b> · эксп '+v.expiry+' ('+v.daysLeft+'д)'+grav+'</span> <span style="color:var(--text-faint);font-size:9px">опционный уровень-магнит · наблюдение</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Max Pain — страйк ближайшей опционной экспирации, где покупатели опционов теряют больше всего (по открытому интересу) · цена часто гравитирует к нему перед экспирацией · гравитация — текущая дистанция · синий пунктир на графике · наблюдение, не прогноз</span></span>';
     if(typeof _chartRedraw==='function')_chartRedraw();
   }
   // ── протокол-радар: одновременный фит-расчёт ВСЕХ стратегий к текущим условиям (наблюдение, не выбор) ──
@@ -4626,17 +4699,25 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }catch(e){}
   }
 
-  // ── Hint tooltip mobile toggle ──
-  document.querySelectorAll('.hint-ico').forEach(ico=>{
-    ico.addEventListener('click',e=>{
+  // ── Hint tooltip toggle: делегирование (работает и для динамических «?») + умная сторона ──
+  document.addEventListener('click',e=>{
+    const ico=e.target.closest('.hint-ico');
+    if(ico){
       e.stopPropagation();
       const wrap=ico.closest('.hint-wrap');
       const wasOpen=wrap.classList.contains('open');
       document.querySelectorAll('.hint-wrap.open').forEach(x=>x.classList.remove('open'));
-      if(!wasOpen)wrap.classList.add('open');
-    });
+      if(!wasOpen){
+        // сторона тултипа по позиции иконки, чтобы не уезжал за экран
+        const r=ico.getBoundingClientRect();
+        wrap.classList.remove('tip-l','tip-r');
+        wrap.classList.add(r.left>window.innerWidth/2?'tip-r':'tip-l');
+        wrap.classList.add('open');
+      }
+      return;
+    }
+    document.querySelectorAll('.hint-wrap.open').forEach(x=>x.classList.remove('open'));
   });
-  document.addEventListener('click',()=>document.querySelectorAll('.hint-wrap.open').forEach(x=>x.classList.remove('open')));
 
   // ── Zone-add collapsible ──
   function toggleZoneAdd(forceOpen){
