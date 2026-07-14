@@ -64,6 +64,13 @@
     #hdrZonePill{max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8px;padding:3px 5px;flex-shrink:0}
     .hdr-tgl{padding:3px 6px;font-size:11px}
   }
+  /* PWA (standalone/fullscreen): страница рисуется ПОД статусбаром телефона, а env(safe-area) местами = 0.
+     Жёсткий фолбэк: контент и липкая шапка всегда ниже статусбара (часы/батарея ~44-59px на iPhone),
+     берём максимум из env и константы — если env работает, победит он. */
+  @media(max-width:600px) and (display-mode:standalone),(max-width:600px) and (display-mode:fullscreen){
+    body{padding-top:max(calc(env(safe-area-inset-top,0px) + 12px),52px)}
+    .phase-nav{top:max(calc(env(safe-area-inset-top,0px) + 8px),50px)}
+  }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);background-image:radial-gradient(circle at 50% -10%,#16110b 0%,#0a0b0d 55%);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.5;padding:24px 16px 60px;min-height:100vh;position:relative;overflow-x:clip}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 60% 40% at 20% 5%,rgba(255,122,24,.06) 0%,transparent 60%),radial-gradient(ellipse 40% 35% at 85% 25%,rgba(88,166,255,.04) 0%,transparent 55%),radial-gradient(ellipse 50% 45% at 50% 90%,rgba(188,140,255,.03) 0%,transparent 60%)}
