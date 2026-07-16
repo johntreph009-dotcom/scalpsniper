@@ -5252,11 +5252,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   const _POS=/etf|approv|listing|partnership|adoption|rally|record high|integrat|launch|upgrade|accumulat/i;
   async function _newsTick(){
     try{
-      const r=await fetch('https://min-api.cryptocompare.com/data/v2/news/?lang=EN',{cache:'no-store'});
+      // новости через наш Cloudflare-воркер (CryptoPanic RSS + резерв), CORS открыт для терминала
+      const r=await fetch('https://scalpsniper-ai-proxy.johntreph009.workers.dev/api/news',{cache:'no-store'});
       if(!r.ok)return; const d=await r.json();
       const base=(document.getElementById('dlSym')?.textContent||'BTCUSDT').replace('USDT','');
-      const scored=(d.Data||[]).slice(0,40).map(n=>({title:n.title||'',src:(n.source_info&&n.source_info.name)||n.source||'',ts:(n.published_on||0)*1000,cat:String(n.categories||''),tone:_NEG.test(n.title)?-1:_POS.test(n.title)?1:0}));
-      const mine=scored.filter(n=>n.cat.includes(base)||n.title.toUpperCase().includes(base));
+      const scored=(d.items||[]).slice(0,40).map(n=>({title:n.title||'',src:n.src||'',ts:n.ts||Date.now(),cat:'',tone:_NEG.test(n.title)?-1:_POS.test(n.title)?1:0}));
+      const mine=scored.filter(n=>n.title.toUpperCase().includes(base)||/BITCOIN|BTC/.test(n.title.toUpperCase())&&base==='BTC'||/SOLANA/.test(n.title.toUpperCase())&&base==='SOL');
       const rest=scored.filter(n=>!mine.includes(n));
       _bgNews=[...mine.slice(0,3),...rest.slice(0,Math.max(1,4-Math.min(3,mine.length)))].map(n=>({...n,ago:Math.max(1,Math.round((Date.now()-n.ts)/6e4))}));
       _bgNews.forEach(n=>{
