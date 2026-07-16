@@ -1397,6 +1397,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="dl-canvas-wrap"><canvas id="dlBook"></canvas></div>
     <div class="dld-bar"><button type="button" class="dld-btn" id="gsBtn" onclick="_gsToggle()">▶ спрей-дрилл · сетка</button><span class="dld-card" id="gsCard"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Демо сеточного бота: вокруг цены раскидывается сетка buy ниже / sell выше по диапазону потока, с наклоном по тренду дня и дельте · каждый филл ставит парный тейк на шаг · при уходе цены сетка перестраивается · зарабатывает шаг в рейндже, копит инвентарь в тренде · следы ботов в стакане: ровные интервалы одинаковых лимиток, возраст стен ‹1м, филлы с равным шагом · виртуально, модель</span></span></div>
     <div id="gsPanel" class="gs-panel" style="display:none"></div>
+    <div class="dld-bar"><button type="button" class="dld-btn" id="apBtn" onclick="_apToggle()">▶ автопилот · демо</button><span class="dld-card" id="apCard"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Стратегии из реестра сами открывают ВИРТУАЛЬНЫЕ сделки: на каждом тике потока считается фит всех стратегий, у лидера ≥55% проверяется контекст и триггер (стены с возрастом, съедание, дельта-развороты, фиб-откаты, кластеры ликвидаций) · одна сделка за раз, стоп/тейк/отмена по правилам стратегии, комиссия 5 bps в PnL · исходы копятся по сегментам рынка — так стратегии доказывают, где они живут · реальные ордера НЕ открывает</span></span></div>
+    <div id="apPanel" class="gs-panel" style="display:none"></div>
     <div class="dl-swipes">
       <div class="dl-swipe up" id="dlLong">↑ свайп / тап — демо-лонг</div>
       <div class="dl-swipe dn" id="dlShort">↓ свайп / тап — демо-шорт</div>
@@ -3091,7 +3093,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         'POC / VAH / VAL рядом с уровнем входа',
         'Нет пробоя структурного уровня выше/ниже'
       ],
-      fit:f=>{let s=0;if(f.dir==='range'||f.str<=1)s+=30;if(f.rv==='low'||f.rv==='norm')s+=15;if(f.cvdDir==='flat')s+=15;if(f.anom)s-=20;return s;}},
+      fit:f=>{let s=0;if(f.dir==='range'||f.str<=1)s+=30;if(f.rv==='low'||f.rv==='norm')s+=15;if(f.cvdDir==='flat')s+=15;if(f.anom)s-=20;return s;},
+      // автопилот: отбой от зрелой стены при развороте дельты/абсорбции
+      auto:{
+        ctx:f=>(f.dir==='range'||f.str<=1)&&f.rv!=='high'&&!f.anom,
+        trig:m=>{
+          const w=m.walls.find(w=>w.dist<=4&&w.age>=45e3&&w.eaten<0.3&&w.s>=m.avg*1.6);
+          if(!w)return null;
+          const approach=w.side==='ask'?m.pxSlope>0:m.pxSlope<0;
+          const flip=w.side==='ask'?m.deltaSlope<0:m.deltaSlope>0;
+          if(!approach||!(flip||m.absorb))return null;
+          return {side:w.side==='ask'?'short':'long',stopBps:5,tpBps:7.5,ref:w.key};
+        },
+        cancel:(m,pos)=>{const w=m.walls.find(x=>x.key===pos.ref);return !w||w.eaten>0.6;}
+      }},
     SQUEEZE:{name:'Squeeze',sub:'wall break',aliases:['squeeze','sqz','wallbreak'],base:30,
       checks:[
         'Стенка ≥ 1М USDT в стакане на уровне пробоя',
@@ -3099,7 +3114,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         'Объём агрессора превышает / съедает стенку',
         'Нет крупной контрстенки сразу за уровнем'
       ],
-      fit:f=>{let s=0;if(f.str>=2)s+=25;if((f.dir==='up'&&f.cvdDir==='buy')||(f.dir==='down'&&f.cvdDir==='sell'))s+=20;if(f.rv==='high')s+=15;else if(f.rv==='norm')s+=8;if(f.oiDir==='up')s+=10;return s;}},
+      fit:f=>{let s=0;if(f.str>=2)s+=25;if((f.dir==='up'&&f.cvdDir==='buy')||(f.dir==='down'&&f.cvdDir==='sell'))s+=20;if(f.rv==='high')s+=15;else if(f.rv==='norm')s+=8;if(f.oiDir==='up')s+=10;return s;},
+      // автопилот: стенку съедают быстро при дельте в сторону пробоя
+      auto:{
+        ctx:f=>f.str>=1&&!((f.dir==='up'&&f.cvdDir==='sell')||(f.dir==='down'&&f.cvdDir==='buy')),
+        trig:m=>{
+          const w=m.walls.find(w=>w.dist<=8&&w.eaten>=0.45&&w.eatMs<=12e3&&w.s0>=m.avg*1.6);
+          if(!w)return null;
+          const long=w.side==='ask';
+          if(long?m.deltaSlope<=0:m.deltaSlope>=0)return null;
+          return {side:long?'long':'short',stopBps:5,tpBps:10,ref:w.key};
+        },
+        cancel:(m,pos)=>{const w=m.walls.find(x=>x.key===pos.ref);return !!w&&w.s>=w.s0*0.8;} // refill = спуф
+      }},
     SHOTGUN:{name:'Shotgun',sub:'liq basket',aliases:['shotgun','shot','liq','liqbasket'],base:20,
       checks:[
         'Кластер ликвидаций — несколько зон рядом',
@@ -3107,7 +3134,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         'Funding rate / OI подтверждают направление сноса',
         'Нет структурного разворота против направления'
       ],
-      fit:f=>{let s=0;if(f.anom)s+=35;if(f.rv==='high')s+=20;if(f.fnd==='elev')s+=12;else if(f.fnd==='extreme')s+=20;return s;}},
+      fit:f=>{let s=0;if(f.anom)s+=35;if(f.rv==='high')s+=20;if(f.fnd==='elev')s+=12;else if(f.fnd==='extreme')s+=20;return s;},
+      // автопилот: снос в сторону близкого кластера ликвидаций при ускорении ленты
+      auto:{
+        ctx:f=>f.anom||f.rv==='high'||f.fnd==='elev'||f.fnd==='extreme',
+        trig:m=>{
+          if(m.liqNearBps==null||m.liqNearBps>10||m.accel<1.4)return null;
+          const long=m.liqNearSide==='up';
+          if(long?m.pxSlope<=0:m.pxSlope>=0)return null; // движение уже к кластеру
+          return {side:long?'long':'short',stopBps:7,tpBps:Math.min(14,m.liqNearBps+4)};
+        },
+        cancel:m=>m.accel<0.8 // поток заглох до сноса
+      }},
     ELLIOTT_CLUSTER:{name:'Elliott Clu',sub:'fib pullback',aliases:['elliott','elliottcluster','elliot','fib','cluster'],base:20,
       checks:[
         'Волна размечена (0→1→2 чётко видны)',
@@ -3115,7 +3153,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         'VPVR: LVN (Low Volume Node) в зоне отката',
         'Дельта показывает абсорбцию в зоне'
       ],
-      fit:f=>{let s=0;if(f.str>=2)s+=20;if((f.dir==='up'&&f.cvdDir==='sell')||(f.dir==='down'&&f.cvdDir==='buy'))s+=25;if(f.cvdDir==='flat'&&f.str>=2)s+=10;return s;}}
+      fit:f=>{let s=0;if(f.str>=2)s+=20;if((f.dir==='up'&&f.cvdDir==='sell')||(f.dir==='down'&&f.cvdDir==='buy'))s+=25;if(f.cvdDir==='flat'&&f.str>=2)s+=10;return s;},
+      // автопилот: вход по тренду из фиб-зоны отката при затухании дельты
+      auto:{
+        ctx:f=>f.str>=2||(f.str>=1&&((f.dir==='up'&&f.cvdDir==='sell')||(f.dir==='down'&&f.cvdDir==='buy'))),
+        trig:m=>{
+          const up=m.f.dir==='up';
+          const r=up?m.retrUp:m.retrDn;
+          if(r==null||r<0.35||r>0.65||!m.deltaCalm)return null;
+          const tp=up?(m.swingHi-m.px)/m.px*1e4:(m.px-m.swingLo)/m.px*1e4;
+          if(tp<6)return null; // до свинга слишком близко — нечего брать
+          return {side:up?'long':'short',stopBps:8,tpBps:Math.min(20,tp)};
+        },
+        cancel:m=>{const up=m.f.dir==='up';const r=up?m.retrUp:m.retrDn;return r!=null&&r>0.78;}
+      }}
   };
   // производные структуры — НЕ редактировать, всё берётся из PROTOCOLS
   const PROTO_CHECKS=Object.fromEntries(Object.entries(PROTOCOLS).map(([k,v])=>[k,v.checks]));
@@ -4787,7 +4838,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(_dlRunning)return; _dlRunning=true;
     try{ const blob=new Blob([_dlWorkerCode()],{type:'application/javascript'});
       _dlWorker=new Worker(URL.createObjectURL(blob));
-      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); if(_dlHist.length>180)_dlHist.shift();} } };
+      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); if(_dlHist.length>180)_dlHist.shift();} if(typeof _apOnSnap==='function')_apOnSnap(); } };
       const _raw=(document.getElementById('ticker')&&document.getElementById('ticker').value)||'BTC/USDT';
       const _sym=(typeof _symFromTicker==='function')?_symFromTicker(_raw):'BTCUSDT';
       _dlWorker.postMessage({cmd:'init',symbol:_sym});
@@ -4807,6 +4858,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; _dlSrc='—'; _dlMsgCount=0; _dlHist=[];
     if(_gs){ _gs=null; if(_gsTimer){clearInterval(_gsTimer);_gsTimer=null;} const gp=document.getElementById('gsPanel'); if(gp)gp.style.display='none'; const gb=document.getElementById('gsBtn'); if(gb){gb.textContent='▶ спрей-дрилл · сетка';gb.classList.remove('on');} }
+    if(_ap.on)_apToggle(); // автопилот гаснет вместе с демо
     if(_dlDrill){ _dlDrill=null; _dldRenderBtn(); const c=document.getElementById('dldCard'); if(c){c.textContent='дрилл прерван (выход из демо)';c.className='dld-card';} } }
   window.addEventListener('resize',()=>{ if(_dlRunning){_dlSetupCanvas();_dlSetupPriceCanvas();} });
 
@@ -4981,6 +5033,136 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     p.innerHTML='<b>СЕТКА</b> '+_gs.levels.length+' ур × '+stepBps+' bps · '+_gs.lo.toFixed(dec)+'–'+_gs.hi.toFixed(dec)+' · <b>'+modeTxt+'</b> · '+mm+':'+ss
       +'<br>филлы <b>'+_gs.fills+'</b> · пары <b>'+_gs.pairs+'</b> · реализовано <b class="'+cls(_gs.realized)+'">'+sg(_gs.realized)+' bps</b> · инвентарь <b>'+_gs.inv.length+'</b> ур (<span class="'+cls(fl)+'">'+sg(fl)+'</span>) · итог <b class="'+cls(net)+'">'+sg(net)+'</b> · перестроек '+_gs.rebuilds
       +'<br><span class="gs-note">'+(_gs.inv.length>=3?'⚠ копит инвентарь против движения — так сетку убивает тренд, и так её вычисляют':'собирает шаг в рейндже — штатный режим сеточника')+' · модель · демо</span>';
+  }
+
+  // ═══════════ АВТОПИЛОТ (демо) — стратегии из реестра сами открывают ВИРТУАЛЬНЫЕ сделки ═══════════
+  // Тик на КАЖДОМ сообщении потока (макс. частота). Одна сделка за раз, cooldown 45с,
+  // комиссия 5 bps на круг зашита в PnL, макс. ведение 180с. Реальных ордеров нет и не будет.
+  const AP_FEE=5, AP_MINFIT=55, AP_COOLDOWN=45e3, AP_MAXHOLD=180e3;
+  const AP_LOGKEY='msa_autopilot_v1', AP_SEGKEY='msa_segstats_v1';
+  let _ap={on:false,pos:null,cdUntil:0,walls:{},dHist:[],tHist:[],log:[],seg:{},today:{n:0,w:0,sum:0}};
+  try{_ap.log=JSON.parse(localStorage.getItem(AP_LOGKEY)||'[]');}catch(e){}
+  try{_ap.seg=JSON.parse(localStorage.getItem(AP_SEGKEY)||'{}');}catch(e){}
+  function _apCtxF(){ // дневной контекст — тот же вектор, что кормит фит-радар
+    const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):null;
+    const tr=sym&&((_dayTrendCache[sym]||{}).val)||{};
+    const cx=sym&&(((_dayCtxCache||{})[sym]||{}).val)||{};
+    return {dir:tr.dir||'range',str:tr.strength||0,rv:(cx.rvol||{}).lvl||'norm',cvdDir:(cx.cvd||{}).dir||'flat',oiDir:(cx.oi||{}).dir||'flat',anom:!!cx.anomaly,fnd:(cx.funding||{}).state||'norm'};
+  }
+  function _apSegKey(f){return f.dir+(f.str>=2?'²':'')+'·rv:'+f.rv+'·cvd:'+f.cvdDir;}
+  function _apMicro(){ // микро-состояние из последнего снапа
+    const s=_dlSnap; if(!s||!_dlModel)return null;
+    const px=s[0], n=s[1]|0; if(!px||!n)return null;
+    let k=2; const aP=[],aS=[],bP=[],bS=[];
+    for(let i=0;i<n;i++)aP.push(s[k++]); for(let i=0;i<n;i++)aS.push(s[k++]);
+    for(let i=0;i<n;i++)bP.push(s[k++]); for(let i=0;i<n;i++)bS.push(s[k++]);
+    const all=[...aS,...bS], avg=all.reduce((x,y)=>x+y,0)/(all.length||1);
+    // трекинг стен: возраст, макс. размер, скорость съедания
+    const now=Date.now(), seen={};
+    const upd=(side,p,sz)=>{
+      const key=side+':'+p.toFixed(4); seen[key]=1;
+      const w=_ap.walls[key];
+      if(!w){ if(sz>=avg*1.4)_ap.walls[key]={key,side,p,s:sz,s0:sz,t0:now,tEat:null,last:now}; return; }
+      if(sz>w.s0)w.s0=sz;
+      if(w.tEat==null&&sz<w.s0*0.9)w.tEat=now;
+      if(sz>=w.s0*0.9)w.tEat=null; // восстановилась
+      w.s=sz; w.last=now;
+    };
+    for(let i=0;i<n;i++){upd('ask',aP[i],aS[i]);upd('bid',bP[i],bS[i]);}
+    Object.keys(_ap.walls).forEach(key=>{const w=_ap.walls[key];if(!seen[key]&&now-w.last>30e3)delete _ap.walls[key];});
+    const walls=Object.values(_ap.walls).map(w=>({...w,age:now-w.t0,eaten:w.s0>0?1-w.s/w.s0:0,eatMs:w.tEat?now-w.tEat:1e9,dist:Math.abs(w.p-px)/px*1e4})).filter(w=>w.dist<=25);
+    // дельта-окна и лента
+    _ap.dHist.push(_dlModel.delta||0); if(_ap.dHist.length>16)_ap.dHist.shift();
+    _ap.tHist.push(_dlModel.tape||0); if(_ap.tHist.length>16)_ap.tHist.shift();
+    const d=_ap.dHist, avgN=(arr)=>arr.reduce((x,y)=>x+y,0)/(arr.length||1);
+    const deltaSlope=d.length>=6?avgN(d.slice(-3))-avgN(d.slice(-9,-3)):0;
+    const dAbs=d.length>=8?Math.abs(avgN(d.slice(-3))-avgN(d.slice(-6,-3)))<Math.abs(avgN(d.slice(-6,-3))-avgN(d.slice(-9,-6))):false;
+    const tapeNow=_ap.tHist[_ap.tHist.length-1]||0, tapeAvg=avgN(_ap.tHist)||0.1;
+    // свинги окна и фиб-откаты
+    const hh=_dlHist, swingHi=hh.length?Math.max.apply(null,hh):px, swingLo=hh.length?Math.min.apply(null,hh):px;
+    const rng=swingHi-swingLo;
+    const retrUp=rng>0?(swingHi-px)/rng:null, retrDn=rng>0?(px-swingLo)/rng:null;
+    const pxSlope=hh.length>=5?hh[hh.length-1]-hh[hh.length-5]:0;
+    // модель кластеров ликвидаций от центра окна (та же, что на графике: ×25/50/100)
+    const c=(swingHi+swingLo)/2; let liqNearBps=null, liqNearSide=null;
+    [100,50,25].forEach(lev=>{
+      const up=c*(1+1/lev), dn=c*(1-1/lev);
+      const dU=(up-px)/px*1e4, dD=(px-dn)/px*1e4;
+      if(dU>0&&(liqNearBps==null||dU<liqNearBps)){liqNearBps=dU;liqNearSide='up';}
+      if(dD>0&&(liqNearBps==null||dD<liqNearBps)){liqNearBps=dD;liqNearSide='down';}
+    });
+    return {px,avg,walls,deltaSlope,deltaCalm:dAbs,tapeNow,tapeAvg,accel:tapeNow/Math.max(tapeAvg,0.1),absorb:!!_dlModel.absorb,pxSlope,swingHi,swingLo,retrUp,retrDn,liqNearBps,liqNearSide,f:_apCtxF()};
+  }
+  function _apOnSnap(){
+    if(!_ap.on)return;
+    try{
+      const m=_apMicro(); if(!m)return;
+      if(_ap.pos){_apManage(m);_apRender(m);return;}
+      if(Date.now()<_ap.cdUntil){_apRender(m);return;}
+      // фиты по всем стратегиям, лидер ≥ порога, контекст + триггер
+      const S=_protoFit()||{};
+      const cand=Object.entries(PROTOCOLS)
+        .filter(([k,v])=>v.auto&&(S[k]||0)>=AP_MINFIT&&v.auto.ctx(m.f))
+        .sort((a,b)=>(S[b[0]]||0)-(S[a[0]]||0));
+      for(const [k,v] of cand){
+        let plan=null; try{plan=v.auto.trig(m);}catch(e){}
+        if(plan){_apOpen(k,plan,m,S[k]);break;}
+      }
+      _apRender(m);
+    }catch(e){console.warn('autopilot:',e&&e.message);}
+  }
+  function _apOpen(proto,plan,m,fit){
+    const dir=plan.side==='long'?1:-1;
+    _ap.pos={proto,side:plan.side,entry:m.px,stop:m.px*(1-dir*plan.stopBps/1e4),tp:m.px*(1+dir*plan.tpBps/1e4),t0:Date.now(),seg:_apSegKey(m.f),ref:plan.ref||null,fit};
+  }
+  function _apManage(m){
+    const p=_ap.pos, dir=p.side==='long'?1:-1;
+    let reason=null;
+    if(dir>0?m.px<=p.stop:m.px>=p.stop)reason='stop';
+    else if(dir>0?m.px>=p.tp:m.px<=p.tp)reason='tp';
+    else if(Date.now()-p.t0>AP_MAXHOLD)reason='time';
+    else{const a=(PROTOCOLS[p.proto]||{}).auto;if(a&&a.cancel){let c=false;try{c=a.cancel(m,p);}catch(e){}if(c)reason='cancel';}}
+    if(reason)_apClose(m.px,reason);
+  }
+  function _apClose(px,reason){
+    const p=_ap.pos; if(!p)return;
+    const dir=p.side==='long'?1:-1;
+    const bps=+(((px-p.entry)/p.entry*1e4)*dir-AP_FEE).toFixed(1);
+    const rec={t:Date.now(),proto:p.proto,side:p.side,entry:+p.entry.toFixed(6),exit:+px.toFixed(6),bps,seg:p.seg,reason,hold:Math.round((Date.now()-p.t0)/1e3)};
+    _ap.log.push(rec); if(_ap.log.length>300)_ap.log=_ap.log.slice(-300);
+    const sg=_ap.seg[p.seg]=_ap.seg[p.seg]||{};
+    const st=sg[p.proto]=sg[p.proto]||{n:0,w:0,sum:0};
+    st.n++; if(bps>0)st.w++; st.sum=+(st.sum+bps).toFixed(1);
+    try{localStorage.setItem(AP_LOGKEY,JSON.stringify(_ap.log));localStorage.setItem(AP_SEGKEY,JSON.stringify(_ap.seg));}catch(e){}
+    _ap.today.n++; if(bps>0)_ap.today.w++; _ap.today.sum=+(_ap.today.sum+bps).toFixed(1);
+    _ap.pos=null; _ap.cdUntil=Date.now()+AP_COOLDOWN;
+  }
+  function _apToggle(){
+    const b=document.getElementById('apBtn'), p=document.getElementById('apPanel');
+    _ap.on=!_ap.on;
+    if(!_ap.on){ if(_ap.pos&&_dlHist.length)_apClose(_dlHist[_dlHist.length-1],'manual'); _ap.pos=null;
+      if(p)p.style.display='none'; if(b){b.textContent='▶ автопилот · демо';b.classList.remove('on');} return; }
+    _ap.today={n:0,w:0,sum:0}; _ap.walls={}; _ap.dHist=[]; _ap.tHist=[];
+    if(b){b.textContent='⏹ стоп автопилота';b.classList.add('on');}
+    if(p){p.style.display='block';p.innerHTML='<span class="gs-note">сканирую поток…</span>';}
+  }
+  function _apRender(m){
+    const p=document.getElementById('apPanel'); if(!p||!_ap.on)return;
+    const S=_protoFit()||{};
+    const lead=Object.keys(PROTOCOLS).reduce((a,b)=>(S[a]||0)>=(S[b]||0)?a:b);
+    const cls=v=>v>=0?'gs-up':'gs-dn', sg=v=>(v>=0?'+':'')+v.toFixed(1);
+    let posHtml='<span class="gs-note">позиции нет — сканирую · cooldown '+Math.max(0,Math.ceil((_ap.cdUntil-Date.now())/1e3))+'с</span>';
+    if(_ap.pos){
+      const dir=_ap.pos.side==='long'?1:-1;
+      const fl=((m.px-_ap.pos.entry)/_ap.pos.entry*1e4)*dir-AP_FEE;
+      posHtml='<b>'+_ap.pos.proto+'</b> '+(_ap.pos.side==='long'?'LONG':'SHORT')+' @ '+_ap.pos.entry.toFixed(_dlDec)+' · флоут <b class="'+cls(fl)+'">'+sg(fl)+' bps</b> · '+Math.round((Date.now()-_ap.pos.t0)/1e3)+'с · фит входа '+_ap.pos.fit+'%';
+    }
+    const last=_ap.log.slice(-5).reverse().map(r=>'<span class="'+cls(r.bps)+'">'+sg(r.bps)+'</span>').join(' · ');
+    const wr=_ap.today.n?Math.round(_ap.today.w/_ap.today.n*100):null;
+    p.innerHTML='<b>АВТОПИЛОТ</b> · сегмент <b>'+_apSegKey(m.f)+'</b> · лидер '+lead+' '+(S[lead]||0)+'%'
+      +'<br>'+posHtml
+      +'<br>сегодня: <b>'+_ap.today.n+'</b> сд · WR '+(wr==null?'—':wr+'%')+' · <b class="'+cls(_ap.today.sum)+'">'+sg(_ap.today.sum)+' bps</b>'+(last?' · последние: '+last:'')
+      +'<br><span class="gs-note">виртуально · комиссия '+AP_FEE+' bps в PnL · модель · демо — реальные ордера не открывает</span>';
   }
 
   // ── Дрилл: 5-минутная сессия с итоговой карточкой фактов ──
