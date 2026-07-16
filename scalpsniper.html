@@ -598,6 +598,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .gs-panel b{color:var(--text)}
   .gs-up{color:var(--green)} .gs-dn{color:var(--danger)}
   .gs-note{color:var(--text-faint);font-size:9.5px}
+  /* лента процессинга движка + фон рынка */
+  .proc-feed{max-height:200px;overflow-y:auto;border:1px solid var(--line-soft);border-radius:8px;padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.65;color:var(--text-dim);margin-bottom:10px}
+  .proc-row{display:flex;gap:8px;align-items:flex-start}
+  .proc-t{color:var(--text-faint);flex-shrink:0}
+  .pr-up{color:var(--green)} .pr-dn{color:var(--danger)} .pr-warn{color:var(--warn)}
+  .news-row{font-size:10px;color:var(--text-dim);margin-top:3px;line-height:1.5}
   /* ===== close zone button (session) ===== */
   .zone-close{background:none;border:1px solid var(--green-dim);color:var(--green);cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;padding:5px 10px;border-radius:5px;white-space:nowrap;letter-spacing:.5px}
   .zone-close:hover{background:rgba(63,185,80,.12);border-color:var(--green)}
@@ -1107,7 +1113,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <button class="on" data-ph="prep" onclick="setPhase('prep')">① ПОДГОТОВКА</button>
       <button data-ph="live" onclick="setPhase('live')">② СЕССИЯ</button>
       <button data-ph="journal" onclick="setPhase('journal')">③ ЖУРНАЛ</button>
-      <button class="ph-demo" data-ph="demo" onclick="setPhase('demo')">ДЕМО</button>
+      <button class="ph-demo" data-ph="demo" onclick="setPhase('demo')">ТРЕНАЖЕР</button>
     </div>
     <div class="hdr-zone-pill" id="hdrZonePill">● <span id="hdrZoneNum"></span> · <span id="hdrZoneKind"></span></div>
   </div>
@@ -1379,12 +1385,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <!-- ===== DEMO LAB PHASE (изолированный тренажёр) ===== -->
   <div id="demoPhase" class="hide demo-phase">
     <div class="dl-head">
-      <span class="dl-badge">DEMO</span>
-      <span class="dl-title">Demo Lab · тренажёр</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Тренажёр чтения потока: стакан и лента реальные, сделки виртуальные · свайп/тап ↑↓ — твоя гипотеза, исход замеряется через 15с и 30с в bps против спреда · автопилот — движок-диспетчер: сетка в рейндже, направленные стратегии в тренде, всё виртуально</span></span>
+      <span class="dl-title">ТРЕНАЖЕР SCALPSNIPER</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Тренажёр чтения потока: стакан и лента реальные, сделки виртуальные · свайп/тап ↑↓ — твоя гипотеза, исход замеряется через 15с и 30с в bps против спреда · автопилот — движок-диспетчер: сетка в рейндже, направленные стратегии в тренде, всё виртуально</span></span>
       <span class="ticker-input-wrap demo-tkwrap" id="demoTkWrap"><input id="demoTicker" class="sess-tk" autocomplete="off" placeholder="BTC/USDT" onfocus="_openDemoDD()" oninput="_filterDemoDD()" onchange="_pickDemoInput()" title="Сменить инструмент стакана"><button type="button" class="ticker-dd-toggle" id="demoDDToggle" onclick="_toggleDemoDD(event)" aria-label="Список тикеров">▾</button><div class="ticker-dd" id="demoTickerDD"></div></span>
       <span class="dl-rate" id="dlRate">—</span>
     </div>
-    <div class="dl-prob-lbl">Распределение — гипотеза модели · демо</div>
+    <div class="dl-prob-lbl">Распределение — гипотеза модели</div>
     <div class="dl-prob" id="dlProb">
       <div class="dl-prob-seg up" id="dlProbUp" style="width:50%">↑ 50%</div>
       <div class="dl-prob-seg dn" id="dlProbDn" style="width:30%">↓ 30%</div>
@@ -1395,18 +1400,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="dl-pchart-wrap"><canvas id="dlPriceChart"></canvas></div>
     <div class="dl-canvas-lbl">Стакан <span id="dlSym">—</span> · <span id="dlSrc">подключение…</span> · <span id="dlUps">0</span> упд/с</div>
     <div class="dl-canvas-wrap"><canvas id="dlBook"></canvas></div>
-    <div class="dld-bar"><button type="button" class="dld-btn" id="apBtn" onclick="_apToggle()">▶ автопилот · демо</button><span class="dld-card" id="apCard"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Единый движок-диспетчер, всё ВИРТУАЛЬНО: сам определяет сегмент рынка и выбирает исполнение · РЕЙНДЖ → разворачивает сетку (спрей: buy ниже / sell выше, профит = шаг за шагом) · ТРЕНД/ПОТОК → сворачивает сетку по рынку и торгует направленными триггерами стратегий из реестра (стены с возрастом, съедание, дельта-развороты, фиб-откаты, кластеры ликвидаций) · комиссия 5 bps в PnL, исходы копятся по сегментам · реальные ордера НЕ открывает</span></span></div>
+    <div class="dld-bar"><button type="button" class="dld-btn" id="apBtn" onclick="_apToggle()">▶ автопилот</button><span class="dld-card" id="apCard"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Единый движок-диспетчер, всё ВИРТУАЛЬНО: сам определяет сегмент рынка и выбирает исполнение · РЕЙНДЖ → разворачивает сетку (спрей: buy ниже / sell выше, профит = шаг за шагом) · ТРЕНД/ПОТОК → сворачивает сетку по рынку и торгует направленными триггерами стратегий из реестра (стены с возрастом, съедание, дельта-развороты, фиб-откаты, кластеры ликвидаций) · комиссия 5 bps в PnL, исходы копятся по сегментам · реальные ордера НЕ открывает</span></span></div>
     <div id="apPanel" class="gs-panel" style="display:none"></div>
     <div id="gsPanel" class="gs-panel" style="display:none"></div>
+    <div id="mktBg" class="gs-panel" style="display:none"></div>
+    <div class="dl-canvas-lbl" style="margin-top:8px">ПРОЦЕССИНГ ДВИЖКА <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Живой лог решений: режимы диспетчера, входы/выходы стратегий, итоги сетки, сдвиги толпы/китов, новостные триггеры · наблюдение, не сигналы</span></span></div>
+    <div id="procFeed" class="proc-feed"><span class="gs-note">событий пока нет — запусти автопилот</span></div>
     <div class="dl-swipes">
-      <div class="dl-swipe up" id="dlLong">↑ свайп / тап — демо-лонг</div>
-      <div class="dl-swipe dn" id="dlShort">↓ свайп / тап — демо-шорт</div>
+      <div class="dl-swipe up" id="dlLong">↑ свайп / тап — вирт-лонг</div>
+      <div class="dl-swipe dn" id="dlShort">↓ свайп / тап — вирт-шорт</div>
     </div>
-    <div class="dl-trades" id="dlTrades">демо-сделок: 0</div>
+    <div class="dl-trades" id="dlTrades">вирт-сделок: 0</div>
     <div class="dl-feedback" id="dlFeedback"></div>
     <div class="dl-outcomes" id="dlOutcomes"></div>
     <div class="dl-readscore" id="dlReadScore"></div>
-    <div class="dl-foot">DEMO · реальный стакан и лента Binance, сделки виртуальные · аналитика, не торговая рекомендация · реальные ордера не выставляются. Бар и режим — гипотеза модели; контр-тренд помечается, но не блокируется — решаешь ты.</div>
+    <div class="dl-foot">ТРЕНАЖЕР · реальный стакан и лента Binance, сделки виртуальные · аналитика, не торговая рекомендация · реальные ордера не выставляются. Бар и режим — гипотеза модели; контр-тренд помечается, но не блокируется — решаешь ты.</div>
   </div>
   <div class="disclaimer">
     <b>ScalpSniper.</b> Терминал структурирует твои наблюдения, хранит план по зонам и считает риск по уровням, которые вводишь <b>ты</b>. Разбор скриншотов происходит в чате — описание структуры, без готовых сделок. Скорость снайпера — в <b>заранее принятом решении</b>, а не в анализе в моменте: размечай зоны до сессии, в сессии — один точный выстрел. Решение о входе, стопе и цели всегда за тобой. Это аналитика, не торговая рекомендация.
@@ -1416,7 +1424,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <!-- ===== OPEN DEMO POSITION MODAL ===== -->
 <div class="modal-overlay hide" id="posModal" onclick="if(event.target===this)closePosModal()">
   <div class="modal-box">
-    <div class="modal-head">Открыть демо-позицию</div>
+    <div class="modal-head">Открыть вирт-позицию</div>
     <div class="ob-row">
       <button type="button" class="ob pos-side-btn" id="psLong" onclick="setPosSide('long')">▲ LONG</button>
       <button type="button" class="ob pos-side-btn" id="psShort" onclick="setPosSide('short')">▼ SHORT</button>
@@ -1443,7 +1451,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <div class="help-step"><span class="hs-n">②</span><span><b>Сессия</b> — цена live сама тикает. Тап по строке лестницы — детали зоны. Касание зоны — плашка: тап по цене/стопу копирует для ордера, объём уже посчитан от риска. Вне зон — ждать, это инструкция.</span></div>
       <div class="help-step"><span class="hs-n">📈</span><span><b>График</b> — колесо/пинч зум, зажми и тяни — прокрутка, двойной тап — сброс. Потяни бейдж зоны у правой шкалы — перенос уровня. Слои (тренд/объём/CVD/развороты/ликв) включаются кнопками.</span></div>
       <div class="help-step"><span class="hs-n">③</span><span><b>Журнал</b> — закрывай каждую зону: исход + грейд A/B/C (про процесс, не результат). Раз в неделю: CSV-импорт с биржи и взгляд на Discipline Score.</span></div>
-      <div class="help-step"><span class="hs-n">◎</span><span><b>Демо</b> — тренажёр чтения стакана без риска: свайп — гипотеза, исход замеряется через 15/30с. Автопилот — движок-диспетчер: в рейндже разворачивает сетку, в тренде торгует направленными стратегиями из реестра; всё виртуально, исходы копятся по сегментам рынка.</span></div>
+      <div class="help-step"><span class="hs-n">◎</span><span><b>Тренажер</b> — чтение стакана без риска: свайп — гипотеза, исход замеряется через 15/30с. Автопилот — движок-диспетчер: в рейндже разворачивает сетку, в тренде торгует направленными стратегиями из реестра; всё виртуально, исходы копятся по сегментам рынка.</span></div>
     </div>
     <div class="help-motto">решения приняты до сессии — в моменте только исполнение</div>
     <div class="modal-btns">
@@ -1737,7 +1745,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // ДЕМО — изолированная фаза во всю ширину: прячем боевой грид, показываем тренажёр
     const _grid=document.getElementById('terminalGrid'); if(_grid)_grid.classList.toggle('hide',p==='demo');
     const _demo=document.getElementById('demoPhase'); if(_demo)_demo.classList.toggle('hide',p!=='demo');
-    document.getElementById('modeBadge').textContent = p==='prep'?'PREP':p==='live'?'LIVE':p==='demo'?'DEMO':'LOG';
+    document.getElementById('modeBadge').textContent = p==='prep'?'PREP':p==='live'?'LIVE':p==='demo'?'SIM':'LOG';
     // в Сессии/Журнале сворачиваем инструменты ввода — список зон выходит на первый план; в Подготовке раскрыты
     const zt=document.getElementById('zoneTools'); if(zt)zt.classList.toggle('open',p==='prep');
     if(p==='prep')renderReadinessScore();
@@ -1746,7 +1754,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       : p==='live'
       ? 'Фаза сессии — реагируешь, не анализируешь. Вводишь текущую цену, панель подсвечивает активную зону и твой готовый план. Думать поздно, исполняй размеченное.'
       : 'Журнал — разбор после сессии. Сделки и отработка зон, факт vs план, винрейт по типам и протоколам, бэкап и синхронизация. Ищи паттерн, не оправдание.';
-    if(p==='demo')document.getElementById('phaseDesc').textContent='ДЕМО — реальный стакан и поток сделок Binance по выбранному тикеру. Модель считает гипотезу, демо-сделки виртуальные. Решения и реальный вход — за тобой.';
+    if(p==='demo')document.getElementById('phaseDesc').textContent='ТРЕНАЖЕР — реальный стакан и поток сделок Binance по выбранному тикеру. Модель считает гипотезу, сделки виртуальные. Решения и реальный вход — за тобой.';
     if(p==='demo'){ if(typeof _demoStart==='function')_demoStart(); } else { if(typeof _demoStop==='function')_demoStop(); }
     if(p==='live'){ if(typeof _mxWsStart==='function')_mxWsStart(); } else { if(typeof _mxWsStop==='function')_mxWsStop(); }
     if(p==='live'){
@@ -2079,7 +2087,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         lastGroup=grp;
       }
       const isExp=_expandedZones.has(i)||isActive;
-      const posBtn=(!isDone&&!isExpired)?`<button class="zc-topos" onclick="event.stopPropagation();openPosFromZone(${i})" title="Открыть демо-позицию из этой зоны">→ В позицию</button>`:'';
+      const posBtn=(!isDone&&!isExpired)?`<button class="zc-topos" onclick="event.stopPropagation();openPosFromZone(${i})" title="Открыть вирт-позицию из этой зоны">→ В позицию</button>`:'';
       const VGLY={worked:'✓',failed:'✗',notreached:'·'};
       const vBadge=z.verdict?`<span class="zv-badge zv-${z.verdict}${z.autoVerdict?' zv-auto':''}" title="Отработка зоны${z.autoVerdict?' — авто по свечам':' — вручную'}">${VGLY[z.verdict]}</span>`:'';
       const vSel=v=>z.verdict===v?' sel':'';
@@ -2290,7 +2298,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         const entry={
           id:Date.now(), ts:new Date().toISOString(), ticker:tk,
           tf:document.getElementById('tf').value, protocol:selProto,
-          zPx:p.entry, zKind:p.kind||'stand', zNote:(p.side==='long'?'LONG':'SHORT')+' демо-позиция ('+tk+')', zStop:p.stop||null,
+          zPx:p.entry, zKind:p.kind||'stand', zNote:(p.side==='long'?'LONG':'SHORT')+' вирт-позиция ('+tk+')', zStop:p.stop||null,
           outcome:pendingOutcome, side:p.side,
           entryPx:isTradeP?(parseFloat(document.getElementById('jEntryPx').value)||p.entry):null,
           notional:isTradeP?(parseFloat(document.getElementById('jNotional').value)||p.units*p.entry):null,
@@ -2378,7 +2386,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <div class="pos-levels">${p.stop?'SL '+p.stop:'SL —'} · ${p.target?'TP '+p.target:'TP —'}${cur?'':' · '+tk}</div>
       </div>`;
     });
-    html+=`<button class="pos-open-btn" onclick="openPosForm()">▶ ${positions.length?'Добавить позицию':'Открыть демо-позицию'}</button>`;
+    html+=`<button class="pos-open-btn" onclick="openPosForm()">▶ ${positions.length?'Добавить позицию':'Открыть вирт-позицию'}</button>`;
     el.innerHTML=html;
     positions.forEach(p=>{ const px=_pxFor((p.ticker||'BTC/USDT').toUpperCase()); const pnl=_pnlOf(p,px); if(pnl==null)return; const prev=_prevPnlById[p.id];
       if(prev!=null&&Math.abs(pnl-prev)>0.001){ const pe=el.querySelector('.pos-pnl[data-id="'+p.id+'"]'); if(pe){const up=pnl>prev; pe.classList.add(up?'flash-up':'flash-down'); pe.insertAdjacentHTML('beforeend',`<span class="pos-tick ${up?'up':'down'}">${up?'▲':'▼'}</span>`);} }
@@ -4844,7 +4852,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const _se=document.getElementById('dlSym'); if(_se)_se.textContent=_sym;
       const _dt=document.getElementById('demoTicker'); if(_dt&&document.activeElement!==_dt)_dt.value=_raw;
     }catch(err){ const r=document.getElementById('dlRate'); if(r)r.textContent='worker N/A'; }
-    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dldRenderHist(); _dldRenderBtn(); _dlSetRegime(_dlRegime,true);
+    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dldRenderHist(); _dldRenderBtn(); _dlSetRegime(_dlRegime,true); _bgStart();
     _dlLastSec=performance.now(); _dlFrames=0; _dlEngLast=0;
     const loop=ts=>{ if(!_dlRunning)return; _dlDraw(); _dlDrawPrice(); _dlFrames++;
       if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); }
@@ -4856,8 +4864,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _dlRAF=requestAnimationFrame(loop);
   }
   function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; _dlSrc='—'; _dlMsgCount=0; _dlHist=[];
-    if(_ap.on)_apToggle(); // автопилот (и его сетка) гаснут вместе с демо
+    if(_ap.on)_apToggle(); // автопилот (и его сетка) гаснут вместе с тренажёром
     _gsStop(); // страховка на случай осиротевшей сетки
+    if(typeof _bgStop==='function')_bgStop();
     if(_dlDrill){ _dlDrill=null; _dldRenderBtn(); const c=document.getElementById('dldCard'); if(c){c.textContent='дрилл прерван (выход из демо)';c.className='dld-card';} } }
   window.addEventListener('resize',()=>{ if(_dlRunning){_dlSetupCanvas();_dlSetupPriceCanvas();} });
 
@@ -4907,8 +4916,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function _dlRenderTrades(side,px,warn){
     const L=_dlJournal.filter(t=>t.side==='long').length, S=_dlJournal.length-L;
-    const t=document.getElementById('dlTrades'); if(t)t.textContent='демо-сделок: '+_dlJournal.length+' ('+L+' лонг / '+S+' шорт)';
-    if(side){ _dlFbT=Date.now(); const f=document.getElementById('dlFeedback'); if(f){ f.textContent=(side==='long'?'▲ демо-лонг':'▼ демо-шорт')+(px!=null?' @ '+px:'')+(warn?' · '+warn:''); f.className='dl-feedback show '+(warn?'warn':(side==='long'?'up':'dn')); } }
+    const t=document.getElementById('dlTrades'); if(t)t.textContent='вирт-сделок: '+_dlJournal.length+' ('+L+' лонг / '+S+' шорт)';
+    if(side){ _dlFbT=Date.now(); const f=document.getElementById('dlFeedback'); if(f){ f.textContent=(side==='long'?'▲ вирт-лонг':'▼ вирт-шорт')+(px!=null?' @ '+px:'')+(warn?' · '+warn:''); f.className='dl-feedback show '+(warn?'warn':(side==='long'?'up':'dn')); } }
   }
   function _dlBindSwipes(){
     const el=document.querySelector('.dl-canvas-wrap');
@@ -5040,7 +5049,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     p.style.display='block';
     p.innerHTML='<b>СЕТКА</b> '+_gs.levels.length+' ур × '+stepBps+' bps · '+_gs.lo.toFixed(dec)+'–'+_gs.hi.toFixed(dec)+' · <b>'+modeTxt+'</b> · '+mm+':'+ss
       +'<br>филлы <b>'+_gs.fills+'</b> · пары <b>'+_gs.pairs+'</b> · реализовано <b class="'+cls(_gs.realized)+'">'+sg(_gs.realized)+' bps</b> · инвентарь <b>'+_gs.inv.length+'</b> ур (<span class="'+cls(fl)+'">'+sg(fl)+'</span>) · итог <b class="'+cls(net)+'">'+sg(net)+'</b> · перестроек '+_gs.rebuilds
-      +'<br><span class="gs-note">'+(_gs.inv.length>=3?'⚠ копит инвентарь против движения — так сетку убивает тренд, и так её вычисляют':'собирает шаг в рейндже — штатный режим сеточника')+' · модель · демо</span>';
+      +'<br><span class="gs-note">'+(_gs.inv.length>=3?'⚠ копит инвентарь против движения — так сетку убивает тренд, и так её вычисляют':'собирает шаг в рейндже — штатный режим сеточника')+' · модель · тренажёр</span>';
   }
 
   // ═══════════ АВТОПИЛОТ (демо) — стратегии из реестра сами открывают ВИРТУАЛЬНЫЕ сделки ═══════════
@@ -5110,8 +5119,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const now=Date.now();
       if(_ap.gridOn!==rangeMode && now-(_ap.modeSince||0)>60e3 && !_ap.pos){ // гистерезис 60с, не дёргаем при открытой позиции
         _ap.modeSince=now; _ap.gridOn=rangeMode;
-        if(rangeMode){ _gsStart(); }
-        else{ const st=_gsStop(); if(st&&st.fills>0)_apLogGrid(st,m); }
+        if(rangeMode){ _gsStart(); if(typeof _proc==='function')_proc('режим → СЕТКА: сегмент '+_apSegKey(m.f)+' — разворачиваю спрей'); }
+        else{ const st=_gsStop(); if(st&&st.fills>0)_apLogGrid(st,m);
+          if(typeof _proc==='function')_proc('режим → НАПРАВЛЕННЫЙ: сегмент '+_apSegKey(m.f)+(st&&st.fills>0?' — сетка свёрнута: '+(st.net>=0?'+':'')+st.net+' bps ('+st.fills+' филлов)':''),st&&st.net<0?'pr-dn':''); }
       }
       if(_ap.gridOn){ if(!_gs)_gsStart(); _apRender(m); return; } // сетка торгует, направленные молчат
       if(_ap.pos){_apManage(m);_apRender(m);return;}
@@ -5141,6 +5151,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _apOpen(proto,plan,m,fit){
     const dir=plan.side==='long'?1:-1;
     _ap.pos={proto,side:plan.side,entry:m.px,stop:m.px*(1-dir*plan.stopBps/1e4),tp:m.px*(1+dir*plan.tpBps/1e4),t0:Date.now(),seg:_apSegKey(m.f),ref:plan.ref||null,fit};
+    if(typeof _proc==='function')_proc('вход: <b>'+proto+'</b> '+(plan.side==='long'?'LONG':'SHORT')+' @ '+m.px.toFixed(_dlDec)+' · стоп '+plan.stopBps+' / тейк '+plan.tpBps+' bps · фит '+fit+'%');
   }
   function _apManage(m){
     const p=_ap.pos, dir=p.side==='long'?1:-1;
@@ -5163,6 +5174,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{localStorage.setItem(AP_LOGKEY,JSON.stringify(_ap.log));localStorage.setItem(AP_SEGKEY,JSON.stringify(_ap.seg));}catch(e){}
     _ap.today.n++; if(bps>0)_ap.today.w++; _ap.today.sum=+(_ap.today.sum+bps).toFixed(1);
     _ap.pos=null; _ap.cdUntil=Date.now()+AP_COOLDOWN;
+    if(typeof _proc==='function')_proc('выход: '+p.proto+' ('+({tp:'тейк',stop:'стоп',time:'время',cancel:'отмена стратегии',manual:'вручную'}[reason]||reason)+') <b>'+(bps>=0?'+':'')+bps+' bps</b> за '+rec.hold+'с',bps>=0?'pr-up':'pr-dn');
   }
   function _apToggle(){
     const b=document.getElementById('apBtn'), p=document.getElementById('apPanel');
@@ -5171,10 +5183,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(_ap.pos&&_dlHist.length)_apClose(_dlHist[_dlHist.length-1],'manual'); _ap.pos=null;
       const st=_gsStop(); if(st&&st.fills>0&&_dlSnap){const m=_apMicro();if(m)_apLogGrid(st,m);} // сетка закрывается вместе с движком
       _ap.gridOn=false; _ap.modeSince=0;
-      if(p)p.style.display='none'; if(b){b.textContent='▶ автопилот · демо';b.classList.remove('on');} return; }
+      if(typeof _proc==='function')_proc('автопилот остановлен · сегодня '+_ap.today.n+' сд · '+(_ap.today.sum>=0?'+':'')+_ap.today.sum+' bps');
+      if(p)p.style.display='none'; if(b){b.textContent='▶ автопилот';b.classList.remove('on');} return; }
     _ap.today={n:0,w:0,sum:0}; _ap.walls={}; _ap.dHist=[]; _ap.tHist=[]; _ap.gridOn=false; _ap.modeSince=0;
     if(b){b.textContent='⏹ стоп автопилота';b.classList.add('on');}
     if(p){p.style.display='block';p.innerHTML='<span class="gs-note">сканирую поток…</span>';}
+    if(typeof _proc==='function')_proc('автопилот запущен — сканирую сегмент рынка');
   }
   function _apRender(m){
     const p=document.getElementById('apPanel'); if(!p||!_ap.on)return;
@@ -5197,8 +5211,65 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     p.innerHTML='<b>АВТОПИЛОТ</b> · режим <b>'+mode+'</b> · сегмент <b>'+_apSegKey(m.f)+'</b> · лидер '+lead+' '+(S[lead]||0)+'%'
       +'<br>'+posHtml
       +'<br>сегодня: <b>'+_ap.today.n+'</b> сд · WR '+(wr==null?'—':wr+'%')+' · <b class="'+cls(_ap.today.sum)+'">'+sg(_ap.today.sum)+' bps</b>'+(last?' · последние: '+last:'')
-      +'<br><span class="gs-note">виртуально · комиссия '+AP_FEE+' bps в PnL · модель · демо — реальные ордера не открывает</span>';
+      +'<br><span class="gs-note">виртуально · комиссия '+AP_FEE+' bps в PnL · модель · тренажёр — реальные ордера не открывает</span>';
   }
+
+  // ═══════════ ФОН РЫНКА: толпа vs киты + новостные триггеры · ЛЕНТА ПРОЦЕССИНГА ═══════════
+  // Толпа = лонг-% аккаунтов Binance Futures; киты = лонг-% ПОЗИЦИЙ топ-трейдеров.
+  // Новости: CryptoCompare public API (CORS открыт). CryptoPanic — через серверный коллектор (след. этап).
+  let _bgTimer=null,_newsTimer=null,_bgLast={crowd:null,whales:null,div:null},_bgNews=[],_newsSeen={},_procArr=[];
+  function _proc(txt,cls){
+    _procArr.unshift({t:Date.now(),txt,cls:cls||''}); if(_procArr.length>40)_procArr.pop();
+    const el=document.getElementById('procFeed'); if(!el)return;
+    el.innerHTML=_procArr.map(e=>'<div class="proc-row '+e.cls+'"><span class="proc-t">'+new Date(e.t).toLocaleTimeString('ru-RU')+'</span><span>'+e.txt+'</span></div>').join('');
+  }
+  async function _bgTick(){
+    try{
+      const sym=document.getElementById('dlSym')?.textContent||'BTCUSDT';
+      const j=async u=>{const r=await fetch(u,{cache:'no-store'});if(!r.ok)throw 0;return r.json();};
+      const [g,t]=await Promise.all([
+        j('https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol='+sym+'&period=5m&limit=1'),
+        j('https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol='+sym+'&period=5m&limit=1')]);
+      const crowd=+(+g[0].longAccount*100).toFixed(1), whales=+(+t[0].longAccount*100).toFixed(1);
+      const div=+(whales-crowd).toFixed(1);
+      if(_bgLast.div!=null&&Math.abs(div-_bgLast.div)>=5)
+        _proc('сдвиг китов: дивергенция '+(div>0?'+':'')+div+'пп (толпа '+crowd+'% лонг · киты '+whales+'%)','pr-warn');
+      _bgLast={crowd,whales,div};
+      _bgRender();
+    }catch(e){}
+  }
+  function _bgRender(){
+    const el=document.getElementById('mktBg'); if(!el)return;
+    const b=_bgLast; if(b.crowd==null){el.style.display='none';return;}
+    el.style.display='block';
+    const divTxt=b.div>3?'киты лонговее толпы':b.div<-3?'киты шортовее толпы':'киты с толпой';
+    const newsHtml=_bgNews.map(n=>'<div class="news-row">'+(n.tone>0?'<span class="gs-up">🔺</span>':n.tone<0?'<span class="gs-dn">🔻</span>':'·')+' '+escapeHtml(n.title.slice(0,90))+' <span class="gs-note">('+escapeHtml(n.src)+' · '+n.ago+'м)</span></div>').join('');
+    el.innerHTML='<b>ФОН РЫНКА</b> · толпа лонг <b>'+b.crowd+'%</b> · киты лонг <b>'+b.whales+'%</b> · дивергенция <b class="'+(Math.abs(b.div)>3?'pr-warn':'')+'">'+(b.div>0?'+':'')+b.div+'пп</b> — '+divTxt
+      +(newsHtml?'<div style="margin-top:6px">'+newsHtml+'</div>':'')
+      +'<br><span class="gs-note">толпа = лонг-% аккаунтов · киты = лонг-% позиций топ-трейдеров (Binance Futures, 5м) · тон новости 🔺/🔻 — по ключевым словам · наблюдение, не сигнал</span>';
+  }
+  const _NEG=/hack|exploit|ban|lawsuit|sues|liquidat|crash|dump|outage|halt|bankrupt|charges|fraud/i;
+  const _POS=/etf|approv|listing|partnership|adoption|rally|record high|integrat|launch|upgrade|accumulat/i;
+  async function _newsTick(){
+    try{
+      const r=await fetch('https://min-api.cryptocompare.com/data/v2/news/?lang=EN',{cache:'no-store'});
+      if(!r.ok)return; const d=await r.json();
+      const base=(document.getElementById('dlSym')?.textContent||'BTCUSDT').replace('USDT','');
+      const scored=(d.Data||[]).slice(0,40).map(n=>({title:n.title||'',src:(n.source_info&&n.source_info.name)||n.source||'',ts:(n.published_on||0)*1000,cat:String(n.categories||''),tone:_NEG.test(n.title)?-1:_POS.test(n.title)?1:0}));
+      const mine=scored.filter(n=>n.cat.includes(base)||n.title.toUpperCase().includes(base));
+      const rest=scored.filter(n=>!mine.includes(n));
+      _bgNews=[...mine.slice(0,3),...rest.slice(0,Math.max(1,4-Math.min(3,mine.length)))].map(n=>({...n,ago:Math.max(1,Math.round((Date.now()-n.ts)/6e4))}));
+      _bgNews.forEach(n=>{
+        const k=n.title.slice(0,60);
+        if(!_newsSeen[k]&&n.tone!==0&&(n.cat.includes(base)||n.title.toUpperCase().includes(base)))
+          _proc((n.tone>0?'🔺':'🔻')+' новость '+base+': '+escapeHtml(n.title.slice(0,80)),n.tone>0?'pr-up':'pr-dn');
+        _newsSeen[k]=1;
+      });
+      _bgRender();
+    }catch(e){}
+  }
+  function _bgStart(){ _bgTick(); _newsTick(); if(!_bgTimer)_bgTimer=setInterval(_bgTick,60e3); if(!_newsTimer)_newsTimer=setInterval(_newsTick,300e3); }
+  function _bgStop(){ if(_bgTimer){clearInterval(_bgTimer);_bgTimer=null;} if(_newsTimer){clearInterval(_newsTimer);_newsTimer=null;} }
 
   // ── Дрилл: 5-минутная сессия с итоговой карточкой фактов ──
   const DLD_KEY='msa_demo_drills_v1';
@@ -5249,20 +5320,4 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
   function toggleCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; const open=w.classList.toggle('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded',open?'true':'false'); try{localStorage.setItem('msa_calc_open_v1',open?'1':'0');}catch(e){} }
   function _restoreCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; let o='0'; try{o=localStorage.getItem('msa_calc_open_v1')||'0';}catch(e){} if(o==='1'){w.classList.add('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded','true');} }
-  load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); triggerPriceFetch(); _fetchTopTickers(); renderPosition(); _restoreCalc(); _sessPcRestore(); _themeInit(); _muteInit();
-  // авто-расчёт зон при входе: если разметка тикера отсутствует или старше 10 мин — quickAnalyze сам (без кнопки)
-  setTimeout(()=>{ try{ const fr=(typeof _getZonesFresh==='function')?_getZonesFresh():null;
-    if((!fr||Date.now()-fr>10*60*1000)&&typeof quickAnalyze==='function'&&!_quickBusy)quickAnalyze(); }catch(e){} },2500);
-  try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
-  renderZones();recalc();
-  if(typeof autoEvalZones==='function')setTimeout(()=>autoEvalZones({force:true}),1500);
-
-  // ── PWA: установка как приложение + офлайн-кэш ──
-  if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
-  let _deferredPrompt=null;
-  window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); _deferredPrompt=e; const b=document.getElementById('pwaInstall'); if(b)b.style.display=''; });
-  function _pwaInstall(){ if(!_deferredPrompt)return; _deferredPrompt.prompt(); _deferredPrompt.userChoice.finally(()=>{ _deferredPrompt=null; const b=document.getElementById('pwaInstall'); if(b)b.style.display='none'; }); }
-  window.addEventListener('appinstalled',()=>{ const b=document.getElementById('pwaInstall'); if(b)b.style.display='none'; });
-</script>
-</body>
-</html>
+  load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); triggerPriceFetch(); _fetchTopTickers(); renderPosition(); _restoreCalc(); _sessPcRestore(); _themeInit(); 
