@@ -1166,7 +1166,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div id="protoChecks" class="proto-checks"></div>
     <div class="actions prep-sticky-bar">
       <span id="readinessBadge" class="rs-inline-badge">—</span>
-      <button class="btn primary" style="flex:2" id="quickBtn" onclick="quickAnalyze()">⚡ Обновить зоны (без скринов)</button>
+      <button class="btn primary" style="flex:2" id="quickBtn" onclick="quickAnalyze()">⚡ Обновить зоны</button>
       <button class="btn" onclick="resetPrep()">Сброс</button>
     </div>
     <div id="quickStatus" class="quick-status"></div>
@@ -1274,6 +1274,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="section-title">Профиль трейдера <span class="tag">авто-анализ</span></div>
     <div id="coachBlock" class="coach-block"><div class="ci-empty">Нет данных. Закрой первые 5 зон — профиль появится автоматически.</div></div>
     <div class="section-title">Аналитика <span class="tag">из журнала</span></div>
+    <div class="eq-wrap" id="eqWrap" style="display:none;margin-bottom:10px;border:1px solid var(--line-soft);border-radius:8px;padding:6px 4px 2px"><canvas id="eqCurve" style="display:block;width:100%;height:130px"></canvas></div>
+    <div class="j-row" id="jRMetrics" style="margin-bottom:10px"></div>
     <div class="analytics-wrap" id="journalAnalytics"></div>
     <div class="grade-stats-grid" id="gradeStats"></div>
     <div class="section-title">Replay сессии <span class="tag">зоны + сделки на свечах</span></div>
@@ -2994,11 +2996,40 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           return `<div class="tk-row"><span><span class="zone-kind ${kd.cls}" style="font-size:9px">${kd.lbl}</span> ${x.ticker}</span><span class="tk-wr" style="color:${wr>=55?'var(--green)':wr>=40?'var(--warn)':'var(--danger)'}">${wr}% <span style="font-size:10px;color:var(--text-faint)">(${x.t})</span></span></div>`;
         }).join('')
       : '<div style="font-size:11px;color:var(--text-faint)">нет данных (нужно 2+ сделки)</div>';
+    // --- by day of week ---
+    const DOWL=['вс','пн','вт','ср','чт','пт','сб'];
+    const byDow={};
+    trades.forEach(e=>{const d=new Date(e.ts).getDay();(byDow[d]=byDow[d]||{w:0,t:0}).t++;if(e.outcome==='win')byDow[d].w++;});
+    const dows=Object.keys(byDow).map(Number).sort((a,b)=>((a+6)%7)-((b+6)%7));
+    let dowHtml='<div style="font-size:11px;color:var(--text-faint)">нет данных</div>';
+    if(dows.length){
+      const mx=Math.max(...dows.map(d=>byDow[d].t));
+      dowHtml='<div class="hour-chart">'+dows.map(d=>{
+        const x=byDow[d],wr=x.w/x.t,cls=wr>=0.6?'hb-good':wr>=0.45?'hb-mid':'hb-bad',ht=Math.max(8,Math.round(x.t/mx*48));
+        return `<div style="display:flex;flex-direction:column;align-items:center;flex:1"><div class="hb ${cls}" style="height:${ht}px" title="${DOWL[d]} — ${Math.round(wr*100)}% (${x.t} сд.)"></div><div class="hb-lbl">${DOWL[d]}</div></div>`;
+      }).join('')+'</div>';
+    }
     const el=document.getElementById('journalAnalytics');
     if(el)el.innerHTML=`
       <div class="an-card"><div class="an-title">Винрейт по часам</div>${hourHtml}</div>
+      <div class="an-card"><div class="an-title">Винрейт по дням недели</div>${dowHtml}</div>
       <div class="an-card"><div class="an-title">Лучший тип зоны</div>${tkHtml}</div>`;
-    // --- A/B/C grade stats ---
+    // --- R-метрики: живучесть системы, не только винрейт ---
+    const rm=_rMetrics(trades);
+    const rEl=document.getElementById('jRMetrics');
+    if(rEl){
+      if(!rm){rEl.innerHTML='';}
+      else{
+        const f2=v=>v==null?'—':v.toFixed(2);
+        rEl.innerHTML=
+          `<div class="jstat"><div class="jsl">Профит-фактор</div><div class="jsv ${rm.pf==null?'dim':rm.pf>=1.5?'green':rm.pf>=1?'warn':'danger'}">${f2(rm.pf)}</div><div class="jsub">Σ win / Σ loss</div></div>`+
+          `<div class="jstat"><div class="jsl">Ср. win / loss</div><div class="jsv dim">${rm.aw.toFixed(1)} / ${rm.al.toFixed(1)}</div><div class="jsub">R:R факт ${rm.rr!=null?rm.rr.toFixed(2):'—'}</div></div>`+
+          `<div class="jstat"><div class="jsl">Макс серия −</div><div class="jsv ${rm.maxStreak>=3?'danger':'dim'}">${rm.maxStreak}</div><div class="jsub">убыточных подряд</div></div>`+
+          `<div class="jstat"><div class="jsl">Просадка</div><div class="jsv ${rm.dd>0?'warn':'dim'}">${rm.dd.toFixed(1)}</div><div class="jsub">USDT от пика · факт</div></div>`;
+      }
+    }
+    _drawEqCurve();
+    // --- A/B/C grade stats: винрейт + деньги (дисциплина→P&L) ---
     const gradeEl=document.getElementById('gradeStats');
     if(gradeEl){
       const grades=['A','B','C'];
@@ -3006,9 +3037,50 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         const gt=trades.filter(e=>e.grade===g);
         const gw=gt.filter(e=>e.outcome==='win');
         const pct=gt.length?Math.round(gw.length/gt.length*100):null;
-        return `<div class="jstat"><div class="jsl">Grade ${g}</div><div class="jsv ${pct===null?'dim':pct>=55?'green':pct>=40?'warn':'danger'}">${pct===null?'—':pct+'%'}</div><div class="jsub">${gt.length} сделок</div></div>`;
+        const gp=gt.filter(e=>e.pnl!=null).reduce((s,e)=>s+e.pnl,0);
+        return `<div class="jstat"><div class="jsl">Grade ${g}</div><div class="jsv ${pct===null?'dim':pct>=55?'green':pct>=40?'warn':'danger'}">${pct===null?'—':pct+'%'}</div><div class="jsub">${gt.length} сделок · ${gt.length?(gp>=0?'+':'')+gp.toFixed(1)+' USDT':'—'}</div></div>`;
       }).join('');
     }
+  }
+  // R-метрики: профит-фактор, средние win/loss, серия убытков, фактическая просадка
+  function _rMetrics(trades){
+    const t=trades.filter(e=>e.pnl!=null);
+    if(!t.length)return null;
+    const wins=t.filter(e=>e.pnl>0),losses=t.filter(e=>e.pnl<0);
+    const sw=wins.reduce((s,e)=>s+e.pnl,0), sl=Math.abs(losses.reduce((s,e)=>s+e.pnl,0));
+    const pf=sl>0?sw/sl:null;
+    const aw=wins.length?sw/wins.length:0, al=losses.length?sl/losses.length:0;
+    let streak=0,maxStreak=0,cum=0,peak=0,dd=0;
+    t.slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts)).forEach(e=>{
+      if(e.pnl<0){streak++;if(streak>maxStreak)maxStreak=streak;}else streak=0;
+      cum+=e.pnl;if(cum>peak)peak=cum;if(peak-cum>dd)dd=peak-cum;
+    });
+    return {pf,aw,al,rr:al>0?aw/al:null,maxStreak,dd,n:t.length};
+  }
+  // кривая депозита: кумулятивный P&L по сделкам журнала, точки — сделки
+  function _drawEqCurve(){
+    const cv=document.getElementById('eqCurve'), wrap=document.getElementById('eqWrap');
+    if(!cv||!wrap)return;
+    const tr=journal.filter(e=>e.outcome!=='skip'&&e.pnl!=null).slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+    if(tr.length<2){wrap.style.display='none';return;}
+    wrap.style.display='block';
+    const dpr=window.devicePixelRatio||1, W=wrap.clientWidth-10||320, H=130;
+    cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+    const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
+    let cum=0; const pts=[0]; tr.forEach(t=>{cum+=t.pnl;pts.push(cum);});
+    const lo=Math.min(0,...pts), hi=Math.max(0,...pts), rng=(hi-lo)||1;
+    const x=i=>8+(W-16)*i/(pts.length-1), y=v=>H-16-((v-lo)/rng)*(H-30);
+    ctx.strokeStyle='rgba(128,128,128,.35)'; ctx.setLineDash([3,4]);
+    ctx.beginPath(); ctx.moveTo(8,y(0)); ctx.lineTo(W-8,y(0)); ctx.stroke(); ctx.setLineDash([]);
+    const up=pts[pts.length-1]>=0, col=up?'#3fb950':'#f0454a';
+    ctx.strokeStyle=col; ctx.lineWidth=2; ctx.lineJoin='round';
+    ctx.beginPath(); pts.forEach((v,i)=>{i?ctx.lineTo(x(i),y(v)):ctx.moveTo(x(0),y(v));}); ctx.stroke();
+    const g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,up?'rgba(63,185,80,.16)':'rgba(240,69,74,.16)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.lineTo(x(pts.length-1),H-16); ctx.lineTo(8,H-16); ctx.closePath(); ctx.fillStyle=g; ctx.fill();
+    tr.forEach((t,i)=>{ctx.fillStyle=t.pnl>=0?'#3fb950':'#f0454a';ctx.beginPath();ctx.arc(x(i+1),y(pts[i+1]),2.2,0,7);ctx.fill();});
+    ctx.font='9.5px JetBrains Mono, monospace'; ctx.fillStyle='#96a1aa';
+    ctx.fillText('КРИВАЯ ДЕПОЗИТА · '+(pts[pts.length-1]>=0?'+':'')+pts[pts.length-1].toFixed(1)+' USDT · '+tr.length+' сделок · только записи с P&L',10,11);
   }
 
 
