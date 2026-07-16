@@ -5320,4 +5320,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
   function toggleCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; const open=w.classList.toggle('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded',open?'true':'false'); try{localStorage.setItem('msa_calc_open_v1',open?'1':'0');}catch(e){} }
   function _restoreCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; let o='0'; try{o=localStorage.getItem('msa_calc_open_v1')||'0';}catch(e){} if(o==='1'){w.classList.add('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded','true');} }
-  load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); triggerPriceFetch(); _fetchTopTickers(); renderPosition(); _restoreCalc(); _sessPcRestore(); _themeInit(); 
+  load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); triggerPriceFetch(); _fetchTopTickers(); renderPosition(); _restoreCalc(); _sessPcRestore(); _themeInit(); _muteInit();
+  // авто-расчёт зон при входе: если разметка тикера отсутствует или старше 10 мин — quickAnalyze сам (без кнопки)
+  setTimeout(()=>{ try{ const fr=(typeof _getZonesFresh==='function')?_getZonesFresh():null;
+    if((!fr||Date.now()-fr>10*60*1000)&&typeof quickAnalyze==='function'&&!_quickBusy)quickAnalyze(); }catch(e){} },2500);
+  try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
+  renderZones();recalc();
+  if(typeof autoEvalZones==='function')setTimeout(()=>autoEvalZones({force:true}),1500);
+
+  // ── PWA: установка как приложение + офлайн-кэш ──
+  if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
+  let _deferredPrompt=null;
+  window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); _deferredPrompt=e; const b=document.getElementById('pwaInstall'); if(b)b.style.display=''; });
+  function _pwaInstall(){ if(!_deferredPrompt)return; _deferredPrompt.prompt(); _deferredPrompt.userChoice.finally(()=>{ _deferredPrompt=null; const b=document.getElementById('pwaInstall'); if(b)b.style.display='none'; }); }
+  window.addEventListener('appinstalled',()=>{ const b=document.getElementById('pwaInstall'); if(b)b.style.display='none'; });
+</script>
+</body>
+</html>
