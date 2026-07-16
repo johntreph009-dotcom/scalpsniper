@@ -1380,7 +1380,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div id="demoPhase" class="hide demo-phase">
     <div class="dl-head">
       <span class="dl-badge">DEMO</span>
-      <span class="dl-title">Demo Lab · тренажёр</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Тренажёр чтения потока: стакан и лента реальные, сделки виртуальные · свайп/тап ↑↓ — твоя гипотеза, исход замеряется через 15с и 30с в bps против спреда · спрей-дрилл — модель сеточного бота на живом потоке: учись видеть его следы и слабости</span></span>
+      <span class="dl-title">Demo Lab · тренажёр</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Тренажёр чтения потока: стакан и лента реальные, сделки виртуальные · свайп/тап ↑↓ — твоя гипотеза, исход замеряется через 15с и 30с в bps против спреда · автопилот — движок-диспетчер: сетка в рейндже, направленные стратегии в тренде, всё виртуально</span></span>
       <span class="ticker-input-wrap demo-tkwrap" id="demoTkWrap"><input id="demoTicker" class="sess-tk" autocomplete="off" placeholder="BTC/USDT" onfocus="_openDemoDD()" oninput="_filterDemoDD()" onchange="_pickDemoInput()" title="Сменить инструмент стакана"><button type="button" class="ticker-dd-toggle" id="demoDDToggle" onclick="_toggleDemoDD(event)" aria-label="Список тикеров">▾</button><div class="ticker-dd" id="demoTickerDD"></div></span>
       <span class="dl-rate" id="dlRate">—</span>
     </div>
@@ -1395,10 +1395,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="dl-pchart-wrap"><canvas id="dlPriceChart"></canvas></div>
     <div class="dl-canvas-lbl">Стакан <span id="dlSym">—</span> · <span id="dlSrc">подключение…</span> · <span id="dlUps">0</span> упд/с</div>
     <div class="dl-canvas-wrap"><canvas id="dlBook"></canvas></div>
-    <div class="dld-bar"><button type="button" class="dld-btn" id="gsBtn" onclick="_gsToggle()">▶ спрей-дрилл · сетка</button><span class="dld-card" id="gsCard"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Демо сеточного бота: вокруг цены раскидывается сетка buy ниже / sell выше по диапазону потока, с наклоном по тренду дня и дельте · каждый филл ставит парный тейк на шаг · при уходе цены сетка перестраивается · зарабатывает шаг в рейндже, копит инвентарь в тренде · следы ботов в стакане: ровные интервалы одинаковых лимиток, возраст стен ‹1м, филлы с равным шагом · виртуально, модель</span></span></div>
-    <div id="gsPanel" class="gs-panel" style="display:none"></div>
-    <div class="dld-bar"><button type="button" class="dld-btn" id="apBtn" onclick="_apToggle()">▶ автопилот · демо</button><span class="dld-card" id="apCard"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Стратегии из реестра сами открывают ВИРТУАЛЬНЫЕ сделки: на каждом тике потока считается фит всех стратегий, у лидера ≥55% проверяется контекст и триггер (стены с возрастом, съедание, дельта-развороты, фиб-откаты, кластеры ликвидаций) · одна сделка за раз, стоп/тейк/отмена по правилам стратегии, комиссия 5 bps в PnL · исходы копятся по сегментам рынка — так стратегии доказывают, где они живут · реальные ордера НЕ открывает</span></span></div>
+    <div class="dld-bar"><button type="button" class="dld-btn" id="apBtn" onclick="_apToggle()">▶ автопилот · демо</button><span class="dld-card" id="apCard"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Единый движок-диспетчер, всё ВИРТУАЛЬНО: сам определяет сегмент рынка и выбирает исполнение · РЕЙНДЖ → разворачивает сетку (спрей: buy ниже / sell выше, профит = шаг за шагом) · ТРЕНД/ПОТОК → сворачивает сетку по рынку и торгует направленными триггерами стратегий из реестра (стены с возрастом, съедание, дельта-развороты, фиб-откаты, кластеры ликвидаций) · комиссия 5 bps в PnL, исходы копятся по сегментам · реальные ордера НЕ открывает</span></span></div>
     <div id="apPanel" class="gs-panel" style="display:none"></div>
+    <div id="gsPanel" class="gs-panel" style="display:none"></div>
     <div class="dl-swipes">
       <div class="dl-swipe up" id="dlLong">↑ свайп / тап — демо-лонг</div>
       <div class="dl-swipe dn" id="dlShort">↓ свайп / тап — демо-шорт</div>
@@ -1444,7 +1443,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <div class="help-step"><span class="hs-n">②</span><span><b>Сессия</b> — цена live сама тикает. Тап по строке лестницы — детали зоны. Касание зоны — плашка: тап по цене/стопу копирует для ордера, объём уже посчитан от риска. Вне зон — ждать, это инструкция.</span></div>
       <div class="help-step"><span class="hs-n">📈</span><span><b>График</b> — колесо/пинч зум, зажми и тяни — прокрутка, двойной тап — сброс. Потяни бейдж зоны у правой шкалы — перенос уровня. Слои (тренд/объём/CVD/развороты/ликв) включаются кнопками.</span></div>
       <div class="help-step"><span class="hs-n">③</span><span><b>Журнал</b> — закрывай каждую зону: исход + грейд A/B/C (про процесс, не результат). Раз в неделю: CSV-импорт с биржи и взгляд на Discipline Score.</span></div>
-      <div class="help-step"><span class="hs-n">◎</span><span><b>Демо</b> — тренажёр чтения стакана без риска: свайп — гипотеза, исход замеряется через 15/30с. Спрей-дрилл — живая модель сеточного бота: видно, как грид собирает рейндж и тонет в тренде.</span></div>
+      <div class="help-step"><span class="hs-n">◎</span><span><b>Демо</b> — тренажёр чтения стакана без риска: свайп — гипотеза, исход замеряется через 15/30с. Автопилот — движок-диспетчер: в рейндже разворачивает сетку, в тренде торгует направленными стратегиями из реестра; всё виртуально, исходы копятся по сегментам рынка.</span></div>
     </div>
     <div class="help-motto">решения приняты до сессии — в моменте только исполнение</div>
     <div class="modal-btns">
@@ -4857,8 +4856,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _dlRAF=requestAnimationFrame(loop);
   }
   function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; _dlSrc='—'; _dlMsgCount=0; _dlHist=[];
-    if(_gs){ _gs=null; if(_gsTimer){clearInterval(_gsTimer);_gsTimer=null;} const gp=document.getElementById('gsPanel'); if(gp)gp.style.display='none'; const gb=document.getElementById('gsBtn'); if(gb){gb.textContent='▶ спрей-дрилл · сетка';gb.classList.remove('on');} }
-    if(_ap.on)_apToggle(); // автопилот гаснет вместе с демо
+    if(_ap.on)_apToggle(); // автопилот (и его сетка) гаснут вместе с демо
+    _gsStop(); // страховка на случай осиротевшей сетки
     if(_dlDrill){ _dlDrill=null; _dldRenderBtn(); const c=document.getElementById('dldCard'); if(c){c.textContent='дрилл прерван (выход из демо)';c.className='dld-card';} } }
   window.addEventListener('resize',()=>{ if(_dlRunning){_dlSetupCanvas();_dlSetupPriceCanvas();} });
 
@@ -4984,15 +4983,24 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     for(let i=1;i<=nS;i++)levels.push({px:px+step*i,side:'sell',open:true});
     return {center:px,step,lo:px-step*(nB+0.5),hi:px+step*(nS+0.5),levels,bias,inv:[],fills:0,pairs:0,realized:0,rebuilds:0,t0:Date.now(),lastRb:Date.now(),lastPx:px};
   }
-  function _gsToggle(){
-    const b=document.getElementById('gsBtn'), c=document.getElementById('gsCard'), p=document.getElementById('gsPanel');
-    if(_gs){ _gs=null; if(_gsTimer){clearInterval(_gsTimer);_gsTimer=null;} if(p)p.style.display='none'; if(c)c.textContent='';
-      if(b){b.textContent='▶ спрей-дрилл · сетка';b.classList.remove('on');} return; }
-    const g=_gsBuild(_dlHist[_dlHist.length-1]);
-    if(!g){ if(c)c.textContent='жду поток (~15с данных)…'; return; }
-    _gs=g; if(c)c.textContent='';
+  // сетка управляется автопилотом-диспетчером (режим РЕЙНДЖ); ручного тумблера больше нет
+  function _gsStart(){
+    if(_gs)return;
+    const g=_gsBuild(_dlHist[_dlHist.length-1]); if(!g)return;
+    _gs=g;
     if(_gsTimer)clearInterval(_gsTimer); _gsTimer=setInterval(_gsTick,250);
-    if(b){b.textContent='⏹ стоп сетки';b.classList.add('on');}
+    const p=document.getElementById('gsPanel'); if(p)p.style.display='block';
+  }
+  // остановка с ЧЕСТНЫМ закрытием: инвентарь по рынку, комиссия 5 bps за каждую ногу/пару
+  function _gsStop(){
+    if(!_gs)return null;
+    const px=(_dlHist.length?_dlHist[_dlHist.length-1]:_gs.lastPx)||_gs.center;
+    const fl=_gs.inv.reduce((s,x)=>s+((px-x.entry)/x.entry*1e4)*(x.side==='long'?1:-1),0);
+    const net=+(_gs.realized+fl-5*_gs.pairs-5*_gs.inv.length).toFixed(1);
+    const st={net,fills:_gs.fills,pairs:_gs.pairs,inv:_gs.inv.length,rebuilds:_gs.rebuilds,dur:Math.round((Date.now()-_gs.t0)/1e3)};
+    _gs=null; if(_gsTimer){clearInterval(_gsTimer);_gsTimer=null;}
+    const p=document.getElementById('gsPanel'); if(p)p.style.display='none';
+    return st;
   }
   function _gsTick(){
     if(!_gs)return; const hh=_dlHist, px=hh[hh.length-1]; if(!px)return;
@@ -5097,8 +5105,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!_ap.on)return;
     try{
       const m=_apMicro(); if(!m)return;
+      // ── диспетчер режимов: РЕЙНДЖ → сетка · ТРЕНД/ПОТОК → направленные стратегии ──
+      const rangeMode=(m.f.dir==='range'||m.f.str<=1)&&m.f.rv!=='high'&&!m.f.anom;
+      const now=Date.now();
+      if(_ap.gridOn!==rangeMode && now-(_ap.modeSince||0)>60e3 && !_ap.pos){ // гистерезис 60с, не дёргаем при открытой позиции
+        _ap.modeSince=now; _ap.gridOn=rangeMode;
+        if(rangeMode){ _gsStart(); }
+        else{ const st=_gsStop(); if(st&&st.fills>0)_apLogGrid(st,m); }
+      }
+      if(_ap.gridOn){ if(!_gs)_gsStart(); _apRender(m); return; } // сетка торгует, направленные молчат
       if(_ap.pos){_apManage(m);_apRender(m);return;}
-      if(Date.now()<_ap.cdUntil){_apRender(m);return;}
+      if(now<_ap.cdUntil){_apRender(m);return;}
       // фиты по всем стратегиям, лидер ≥ порога, контекст + триггер
       const S=_protoFit()||{};
       const cand=Object.entries(PROTOCOLS)
@@ -5110,6 +5127,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       }
       _apRender(m);
     }catch(e){console.warn('autopilot:',e&&e.message);}
+  }
+  // итог сеточной фазы → общий счёт и сегмент-статистика под ключом GRID
+  function _apLogGrid(st,m){
+    const rec={t:Date.now(),proto:'GRID',side:'—',entry:0,exit:0,bps:st.net,seg:_apSegKey(m.f),reason:'mode',hold:st.dur,fills:st.fills,pairs:st.pairs};
+    _ap.log.push(rec); if(_ap.log.length>300)_ap.log=_ap.log.slice(-300);
+    const sg=_ap.seg[rec.seg]=_ap.seg[rec.seg]||{};
+    const s=sg.GRID=sg.GRID||{n:0,w:0,sum:0};
+    s.n++; if(st.net>0)s.w++; s.sum=+(s.sum+st.net).toFixed(1);
+    try{localStorage.setItem(AP_LOGKEY,JSON.stringify(_ap.log));localStorage.setItem(AP_SEGKEY,JSON.stringify(_ap.seg));}catch(e){}
+    _ap.today.n++; if(st.net>0)_ap.today.w++; _ap.today.sum=+(_ap.today.sum+st.net).toFixed(1);
   }
   function _apOpen(proto,plan,m,fit){
     const dir=plan.side==='long'?1:-1;
@@ -5140,9 +5167,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _apToggle(){
     const b=document.getElementById('apBtn'), p=document.getElementById('apPanel');
     _ap.on=!_ap.on;
-    if(!_ap.on){ if(_ap.pos&&_dlHist.length)_apClose(_dlHist[_dlHist.length-1],'manual'); _ap.pos=null;
+    if(!_ap.on){
+      if(_ap.pos&&_dlHist.length)_apClose(_dlHist[_dlHist.length-1],'manual'); _ap.pos=null;
+      const st=_gsStop(); if(st&&st.fills>0&&_dlSnap){const m=_apMicro();if(m)_apLogGrid(st,m);} // сетка закрывается вместе с движком
+      _ap.gridOn=false; _ap.modeSince=0;
       if(p)p.style.display='none'; if(b){b.textContent='▶ автопилот · демо';b.classList.remove('on');} return; }
-    _ap.today={n:0,w:0,sum:0}; _ap.walls={}; _ap.dHist=[]; _ap.tHist=[];
+    _ap.today={n:0,w:0,sum:0}; _ap.walls={}; _ap.dHist=[]; _ap.tHist=[]; _ap.gridOn=false; _ap.modeSince=0;
     if(b){b.textContent='⏹ стоп автопилота';b.classList.add('on');}
     if(p){p.style.display='block';p.innerHTML='<span class="gs-note">сканирую поток…</span>';}
   }
@@ -5152,14 +5182,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const lead=Object.keys(PROTOCOLS).reduce((a,b)=>(S[a]||0)>=(S[b]||0)?a:b);
     const cls=v=>v>=0?'gs-up':'gs-dn', sg=v=>(v>=0?'+':'')+v.toFixed(1);
     let posHtml='<span class="gs-note">позиции нет — сканирую · cooldown '+Math.max(0,Math.ceil((_ap.cdUntil-Date.now())/1e3))+'с</span>';
-    if(_ap.pos){
+    if(_ap.gridOn&&_gs){
+      const fl=_gs.inv.reduce((s,x)=>s+((m.px-x.entry)/x.entry*1e4)*(x.side==='long'?1:-1),0);
+      const net=_gs.realized+fl-5*_gs.pairs-5*_gs.inv.length;
+      posHtml='сетка: пары <b>'+_gs.pairs+'</b> · инвентарь <b>'+_gs.inv.length+'</b> · нетто <b class="'+cls(net)+'">'+sg(net)+' bps</b> <span class="gs-note">(с комиссией, детали ниже)</span>';
+    }else if(_ap.pos){
       const dir=_ap.pos.side==='long'?1:-1;
       const fl=((m.px-_ap.pos.entry)/_ap.pos.entry*1e4)*dir-AP_FEE;
       posHtml='<b>'+_ap.pos.proto+'</b> '+(_ap.pos.side==='long'?'LONG':'SHORT')+' @ '+_ap.pos.entry.toFixed(_dlDec)+' · флоут <b class="'+cls(fl)+'">'+sg(fl)+' bps</b> · '+Math.round((Date.now()-_ap.pos.t0)/1e3)+'с · фит входа '+_ap.pos.fit+'%';
     }
     const last=_ap.log.slice(-5).reverse().map(r=>'<span class="'+cls(r.bps)+'">'+sg(r.bps)+'</span>').join(' · ');
     const wr=_ap.today.n?Math.round(_ap.today.w/_ap.today.n*100):null;
-    p.innerHTML='<b>АВТОПИЛОТ</b> · сегмент <b>'+_apSegKey(m.f)+'</b> · лидер '+lead+' '+(S[lead]||0)+'%'
+    const mode=_ap.gridOn?'СЕТКА (рейндж)':'НАПРАВЛЕННЫЙ (тренд/поток)';
+    p.innerHTML='<b>АВТОПИЛОТ</b> · режим <b>'+mode+'</b> · сегмент <b>'+_apSegKey(m.f)+'</b> · лидер '+lead+' '+(S[lead]||0)+'%'
       +'<br>'+posHtml
       +'<br>сегодня: <b>'+_ap.today.n+'</b> сд · WR '+(wr==null?'—':wr+'%')+' · <b class="'+cls(_ap.today.sum)+'">'+sg(_ap.today.sum)+' bps</b>'+(last?' · последние: '+last:'')
       +'<br><span class="gs-note">виртуально · комиссия '+AP_FEE+' bps в PnL · модель · демо — реальные ордера не открывает</span>';
