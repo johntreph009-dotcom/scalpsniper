@@ -1141,24 +1141,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <input id="maxTrades" type="number" placeholder="5" oninput="saveRules()">
       </div>
     </div>
-    <div class="section-title">Наблюдения <span class="tag">твоё чтение рынка</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Посмотри на рынок глазами ДО сессии и запиши 1-2 строки по каждому источнику · «↗ источник» открывает нужное окно по тикеру · заполненные поля поднимают Readiness Score · это дисциплина чтения, не формальность</span></span></div>
-    <div class="shots">
-      <div class="shot obs-open" id="shot_dom">
-        <div class="st"><span style="display:flex;align-items:center;gap:6px">Стакан <span style="color:var(--text-faint);font-weight:400;font-size:10px">DOM / стены</span></span><span class="st-acts"><button class="src-link" type="button" onclick="openSource('dom')" title="Открыть стакан биржи по тикеру">↗ источник</button></span></div>
-        <textarea id="obs_dom" class="obs-ta" oninput="renderReadinessScore()" placeholder="Крупные лимитки, размер, уровень, дисбаланс bid/ask..."></textarea>
-      </div>
-      <div class="shot obs-open" id="shot_tape">
-        <div class="st"><span style="display:flex;align-items:center;gap:6px">Лента <span style="color:var(--text-faint);font-weight:400;font-size:10px">tape / дельта</span></span></div>
-        <textarea id="obs_tape" class="obs-ta" oninput="renderReadinessScore()" placeholder="Агрессор, дельта, абсорбция, переход в инициацию..."></textarea>
-      </div>
-      <div class="shot obs-open" id="shot_liq">
-        <div class="st"><span style="display:flex;align-items:center;gap:6px">Ликвидации <span style="color:var(--text-faint);font-weight:400;font-size:10px">карта кластеров</span></span><span class="st-acts"><button class="src-link" type="button" onclick="openSource('liq')" title="Открыть карту ликвидаций по символу">↗ источник</button></span></div>
-        <textarea id="obs_liq" class="obs-ta" oninput="renderReadinessScore()" placeholder="Кластеры сверху/снизу, сметённые пулы, вакуум..."></textarea>
-      </div>
-      <div class="shot obs-open" id="shot_chart">
-        <div class="st"><span style="display:flex;align-items:center;gap:6px">График / VPVR <span style="color:var(--text-faint);font-weight:400;font-size:10px">структура</span></span><span class="st-acts"><button class="src-link" type="button" onclick="openSource('chart')" title="Открыть график TradingView по символу">↗ источник</button></span></div>
-        <textarea id="obs_chart" class="obs-ta" oninput="renderReadinessScore()" placeholder="POC, VAH, VAL, LVN, фибы, волна, MLMI..."></textarea>
-      </div>
+    <!-- блок «Наблюдения» удалён 2026-07-16 по решению трейдера: данные тянет «⚡ Обновить зоны»,
+         источники под рукой: openSource() остаётся для будущих ссылок -->
+    <div class="src-row" style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 2px">
+      <button class="src-link" type="button" onclick="openSource('dom')" title="Открыть стакан биржи по тикеру">↗ стакан</button>
+      <button class="src-link" type="button" onclick="openSource('liq')" title="Открыть карту ликвидаций по символу">↗ ликвидации</button>
+      <button class="src-link" type="button" onclick="openSource('chart')" title="Открыть график TradingView по символу">↗ график</button>
     </div>
     <div class="section-title">Стратегия для матчинга<span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Выбери протокол ДО сессии · В момент сделки думать поздно · Протокол определяет чеклист условий входа ниже</span></span></div>
     <div class="protos" id="protos"><!-- карточки рендерятся из реестра PROTOCOLS --></div>
@@ -1450,7 +1438,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div class="modal-box help-box">
     <div class="modal-head">Как работать</div>
     <div class="help-steps">
-      <div class="help-step"><span class="hs-n">①</span><span><b>Подготовка</b> — тикер дня, наблюдения по 4 источникам, протокол под рынок → «⚡ Обновить зоны» или вставка разбора из чата → у каждой боевой зоны стоп → байас и лимиты дня. Цель: готовность ≥70%.</span></div>
+      <div class="help-step"><span class="hs-n">①</span><span><b>Подготовка</b> — тикер дня, взгляд на стакан/ликвидации/график (кнопки ↗), протокол под рынок → «⚡ Обновить зоны» или вставка разбора из чата → у каждой боевой зоны стоп → байас и лимиты дня. Цель: готовность ≥70%.</span></div>
       <div class="help-step"><span class="hs-n">②</span><span><b>Сессия</b> — цена live сама тикает. Тап по строке лестницы — детали зоны. Касание зоны — плашка: тап по цене/стопу копирует для ордера, объём уже посчитан от риска. Вне зон — ждать, это инструкция.</span></div>
       <div class="help-step"><span class="hs-n">📈</span><span><b>График</b> — колесо/пинч зум, зажми и тяни — прокрутка, двойной тап — сброс. Потяни бейдж зоны у правой шкалы — перенос уровня. Слои (тренд/объём/CVD/развороты/ликв) включаются кнопками.</span></div>
       <div class="help-step"><span class="hs-n">③</span><span><b>Журнал</b> — закрывай каждую зону: исход + грейд A/B/C (про процесс, не результат). Раз в неделю: CSV-импорт с биржи и взгляд на Discipline Score.</span></div>
@@ -2259,7 +2247,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // скрин-контур (buildRequest/AI-анализ картинок) удалён 2026-07-15: зоны строит «⚡ Обновить зоны»,
   // глубокий разбор — вставкой pipe-блока из чата в «Ввод зон»
   function resetPrep(){
-    ['ticker','price','obs_dom','obs_tape','obs_liq','obs_chart'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    ['ticker','price'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   }
   // ---- close zone modal ----
   function openClose(i){
@@ -3225,23 +3213,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function calcReadinessScore(){
     let sc=0;const bd=[];
     const act=zones.filter(z=>!z.closed&&!z.expired);
-    const zSc=act.length>=3?25:act.length>=2?16:act.length===1?8:0;
-    sc+=zSc;bd.push({l:'Зоны',v:zSc,m:25});
+    // веса без «Наблюдений» (блок удалён): зоны 30 · стопы 18 · байас 18 · лимиты 12 · протокол 22 = 100
+    const zSc=act.length>=3?30:act.length>=2?20:act.length===1?10:0;
+    sc+=zSc;bd.push({l:'Зоны',v:zSc,m:30});
     const withSt=act.filter(z=>z.stop).length;
-    const stSc=act.length?Math.round(withSt/act.length*15):0;
-    sc+=stSc;bd.push({l:'Стопы',v:stSc,m:15});
+    const stSc=act.length?Math.round(withSt/act.length*18):0;
+    sc+=stSc;bd.push({l:'Стопы',v:stSc,m:18});
     const bias=document.getElementById('bias')?.value?.trim();
-    const bSc=bias?15:0;sc+=bSc;bd.push({l:'Байас',v:bSc,m:15});
+    const bSc=bias?18:0;sc+=bSc;bd.push({l:'Байас',v:bSc,m:18});
     const mL=document.getElementById('maxLoss')?.value;
     const mT=document.getElementById('maxTrades')?.value;
-    const limSc=(mL&&mT)?10:(mL||mT)?5:0;sc+=limSc;bd.push({l:'Лимиты',v:limSc,m:10});
+    const limSc=(mL&&mT)?12:(mL||mT)?6:0;sc+=limSc;bd.push({l:'Лимиты',v:limSc,m:12});
     const chks=PROTO_CHECKS[selProto]||[];
     const st=protoCheckState[selProto]||[];
-    const chSc=chks.length?Math.round(st.filter(Boolean).length/chks.length*20):0;
-    sc+=chSc;bd.push({l:'Протокол',v:chSc,m:20});
-    const obs=['obs_dom','obs_tape','obs_liq','obs_chart'].filter(id=>document.getElementById(id)?.value?.trim()).length;
-    const obSc=Math.min(15,[0,4,8,12,15][obs]);
-    sc+=obSc;bd.push({l:'Наблюд.',v:obSc,m:15});
+    const chSc=chks.length?Math.round(st.filter(Boolean).length/chks.length*22):0;
+    sc+=chSc;bd.push({l:'Протокол',v:chSc,m:22});
     return{score:Math.min(100,sc),bd};
   }
 
