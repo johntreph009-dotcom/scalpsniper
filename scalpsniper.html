@@ -63,6 +63,8 @@
     #phaseNav button,.phase button{padding:12px 5px;font-size:9.5px;letter-spacing:.2px;min-width:0;flex:1 1 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     #hdrZonePill{max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8px;padding:3px 5px;flex-shrink:0}
     .hdr-tgl{padding:3px 6px;font-size:11px}
+    /* iOS зумит страницу при фокусе инпутов с font-size<16px — тикер-поля держим на 16px */
+    #demoTicker,#sessTicker,#ticker{font-size:16px}
   }
   /* PWA (standalone/fullscreen): страница рисуется ПОД статусбаром телефона, а env(safe-area) местами = 0.
      Жёсткий фолбэк: контент и липкая шапка всегда ниже статусбара (часы/батарея ~44-59px на iPhone),
@@ -604,6 +606,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .proc-t{color:var(--text-faint);flex-shrink:0}
   .pr-up{color:var(--green)} .pr-dn{color:var(--danger)} .pr-warn{color:var(--warn)}
   .news-row{font-size:10px;color:var(--text-dim);margin-top:3px;line-height:1.5}
+  /* CF Context Engine: баннер тревоги + подсветка кнопок входа */
+  .cf-banner{display:none;margin:8px 0;padding:9px 12px;border:1px solid var(--danger);border-radius:8px;background:rgba(240,69,74,.08);color:var(--danger);font-size:11px;font-weight:700;line-height:1.5}
+  .cf-warn{outline:1px solid var(--warn)!important;box-shadow:0 0 10px rgba(210,153,34,.3)!important}
   /* ===== close zone button (session) ===== */
   .zone-close{background:none;border:1px solid var(--green-dim);color:var(--green);cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;padding:5px 10px;border-radius:5px;white-space:nowrap;letter-spacing:.5px}
   .zone-close:hover{background:rgba(63,185,80,.12);border-color:var(--green)}
@@ -5248,8 +5253,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       +(newsHtml?'<div style="margin-top:6px">'+newsHtml+'</div>':'')
       +'<br><span class="gs-note">толпа = лонг-% аккаунтов · киты = лонг-% позиций топ-трейдеров (Binance Futures, 5м) · тон новости 🔺/🔻 — по ключевым словам · наблюдение, не сигнал</span>';
   }
-  const _NEG=/hack|exploit|ban|lawsuit|sues|liquidat|crash|dump|outage|halt|bankrupt|charges|fraud/i;
-  const _POS=/etf|approv|listing|partnership|adoption|rally|record high|integrat|launch|upgrade|accumulat/i;
+  const _NEG=/hack|exploit|ban|lawsuit|sues|liquidat|crash|dump|outage|halt|bankrupt|charges|fraud|взлом|запрет|иск|ликвидац|обвал|падени|банкрот|мошенн|санкци|блокир|атак/i;
+  const _POS=/etf|approv|listing|partnership|adoption|rally|record high|integrat|launch|upgrade|accumulat|одобр|листинг|партн[её]рств|рост|рекорд|запуск|интеграц|внедрен|принял/i;
   async function _newsTick(){
     try{
       // новости через наш Cloudflare-воркер (CryptoPanic RSS + резерв), CORS открыт для терминала
@@ -5271,6 +5276,44 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function _bgStart(){ _bgTick(); _newsTick(); if(!_bgTimer)_bgTimer=setInterval(_bgTick,60e3); if(!_newsTimer)_newsTimer=setInterval(_newsTick,300e3); }
   function _bgStop(){ if(_bgTimer){clearInterval(_bgTimer);_bgTimer=null;} if(_newsTimer){clearInterval(_newsTimer);_newsTimer=null;} }
+
+  // ═══════════ CF CONTEXT ENGINE (клиент) — опрос воркера раз в 60с ═══════════
+  // Сервер считает векторы CryptoFamily (тренд/сжатие/ликвидность/overhead) и мэтчит их
+  // в директиву риска. Клиент только отображает: бейджи, баннер, подсветка входов. Наблюдение, не блокировка.
+  let _cfCtx=null,_cfLastAlarm=null;
+  async function pollContextEngine(){
+    try{
+      const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'BTCUSDT';
+      const r=await fetch('https://scalpsniper-ai-proxy.johntreph009.workers.dev/api/context?symbol='+sym,{cache:'no-store'});
+      if(!r.ok)return;
+      _cfCtx=await r.json(); _renderCfCtx();
+    }catch(e){}
+  }
+  function _renderCfCtx(){
+    const c=_cfCtx; if(!c||!c.trend)return;
+    let box=document.getElementById('cfCtx');
+    if(!box){ const host=document.getElementById('sessionCtx'); if(host){ box=document.createElement('div'); box.id='cfCtx'; box.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-top:6px'; host.appendChild(box); } }
+    if(box){
+      const tCls=c.trend.state==='bullish'?'ok':c.trend.state==='bearish'?'danger':'warn';
+      box.innerHTML=
+        '<span class="gchip '+tCls+'">CF тренд: '+c.trend.state+' · RSI '+c.trend.rsi+'</span>'+
+        '<span class="gchip '+(c.squeeze.active?'warn':'ok')+'">сжатие '+(c.squeeze.active?'ДА':'нет')+' ('+c.squeeze.gapPct+'%)</span>'+
+        '<span class="gchip '+(c.liquidity.fadingRobots?'warn':'ok')+'">роботы '+(c.liquidity.fadingRobots?'затухают':'в рынке')+'</span>'+
+        '<span class="gchip '+(c.overhead.index>4?'danger':c.overhead.index>2.5?'warn':'ok')+'">overhead '+c.overhead.index+(c.overhead.mock?'*':'')+'</span>'+
+        '<span style="flex-basis:100%;font-size:9.5px;color:var(--text-faint)">'+escapeHtml(c.directive||'')+' · CF-модель'+(c.overhead.mock?' · *overhead на мок-балансе':'')+' · наблюдение</span>';
+    }
+    // баннер тревоги над плашкой активной зоны + подсветка кнопок входа (дисциплина, не запрет)
+    let bn=document.getElementById('cfBanner');
+    if(!bn){ const lc=document.getElementById('liveCard'); if(lc&&lc.parentNode){ bn=document.createElement('div'); bn.id='cfBanner'; bn.className='cf-banner'; lc.parentNode.insertBefore(bn,lc); } }
+    const danger=c.alarm_level==='CRITICAL', high=c.alarm_level==='HIGH', caution=danger||high||c.squeeze.active;
+    if(bn){ bn.style.display=(danger||high)?'block':'none'; bn.textContent=(danger?'⛔ CRITICAL: ':'⚠ HIGH: ')+(c.directive||''); }
+    ['dlLong','dlShort','lcPosBtn'].forEach(id=>{ const el=document.getElementById(id); if(el)el.classList.toggle('cf-warn',caution); });
+    if(c.alarm_level!==_cfLastAlarm){
+      if(typeof _proc==='function'&&(high||danger))_proc('CF-контекст: '+c.alarm_level+' · '+c.scenario+' — '+c.directive,danger?'pr-dn':'pr-warn');
+      _cfLastAlarm=c.alarm_level;
+    }
+  }
+  pollContextEngine(); setInterval(pollContextEngine,60e3);
 
   // ── Дрилл: 5-минутная сессия с итоговой карточкой фактов ──
   const DLD_KEY='msa_demo_drills_v1';
