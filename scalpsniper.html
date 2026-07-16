@@ -1111,7 +1111,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     </div>
     <div class="hdr-zone-pill" id="hdrZonePill">● <span id="hdrZoneNum"></span> · <span id="hdrZoneKind"></span></div>
   </div>
-  <p class="phase-desc" id="phaseDesc">До сессии — читаешь рынок, размечаешь зоны: ⚡ быстрые зоны из стакана, разбор по скринам или ручной ввод. В сессии — только исполнение.</p>
+  <p class="phase-desc" id="phaseDesc">До сессии — читаешь рынок, размечаешь зоны: ⚡ быстрые зоны из стакана, разбор из чата или ручной ввод. В сессии — только исполнение.</p>
 
 <div class="terminal-grid" id="terminalGrid">
   <div class="t-main">
@@ -1141,63 +1141,35 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <input id="maxTrades" type="number" placeholder="5" oninput="saveRules()">
       </div>
     </div>
-    <div class="settings-row">
-      <button class="settings-caret" id="settingsCaret" onclick="toggleSettings()">⚙ Настройки ▸</button>
-      <div class="settings-drawer hide" id="settingsDrawer">
-        <div class="api-key-inner">
-          <span class="dim-lbl" style="white-space:nowrap">Claude API</span>
-          <input id="apiKeyInput" type="password" placeholder="sk-ant-api03-..." oninput="saveApiKey()" autocomplete="off">
-          <span class="api-key-hint" id="apiKeyHint">автоанализ скриншотов</span>
-        </div>
-      </div>
-    </div>
-    <div class="section-title">Наблюдения <span class="tag">AI заполняет автоматически</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Ctrl+V вставляет скрин из буфера в первый свободный слот · ✏ — ввод вручную · AI заполняет textarea сразу после загрузки каждого скрина</span></span></div>
+    <div class="section-title">Наблюдения <span class="tag">твоё чтение рынка</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Посмотри на рынок глазами ДО сессии и запиши 1-2 строки по каждому источнику · «↗ источник» открывает нужное окно по тикеру · заполненные поля поднимают Readiness Score · это дисциплина чтения, не формальность</span></span></div>
     <div class="shots">
-      <div class="shot" id="shot_dom">
-        <div class="st"><span style="display:flex;align-items:center;gap:6px">Стакан MEXC <span style="color:var(--text-faint);font-weight:400;font-size:10px">DOM / стены</span></span><span class="st-acts"><button class="src-link" type="button" onclick="openSource('dom')" title="Открыть стакан MEXC Futures по тикеру">↗ источник</button><button class="obs-toggle" onclick="toggleObs('dom')" title="Ввести вручную">✏</button></span></div>
-        <div class="shot-upload" id="su_dom"><label><input type="file" accept="image/*" onchange="loadShot(this,'dom')">+ скриншот</label></div>
-        <div class="shot-preview" id="sp_dom"><img id="img_dom" alt="DOM"><button class="shot-clear" onclick="clearShot('dom')">✕ убрать</button></div>
+      <div class="shot obs-open" id="shot_dom">
+        <div class="st"><span style="display:flex;align-items:center;gap:6px">Стакан <span style="color:var(--text-faint);font-weight:400;font-size:10px">DOM / стены</span></span><span class="st-acts"><button class="src-link" type="button" onclick="openSource('dom')" title="Открыть стакан биржи по тикеру">↗ источник</button></span></div>
         <textarea id="obs_dom" class="obs-ta" oninput="renderReadinessScore()" placeholder="Крупные лимитки, размер, уровень, дисбаланс bid/ask..."></textarea>
       </div>
-      <div class="shot" id="shot_tape">
-        <div class="st"><span style="display:flex;align-items:center;gap:6px">Лента CScalp <span style="color:var(--text-faint);font-weight:400;font-size:10px">tape / дельта</span></span><button class="obs-toggle" onclick="toggleObs('tape')" title="Ввести вручную">✏</button></div>
-        <div class="shot-upload" id="su_tape"><label><input type="file" accept="image/*" onchange="loadShot(this,'tape')">+ скриншот</label></div>
-        <div class="shot-preview" id="sp_tape"><img id="img_tape" alt="Tape"><button class="shot-clear" onclick="clearShot('tape')">✕ убрать</button></div>
+      <div class="shot obs-open" id="shot_tape">
+        <div class="st"><span style="display:flex;align-items:center;gap:6px">Лента <span style="color:var(--text-faint);font-weight:400;font-size:10px">tape / дельта</span></span></div>
         <textarea id="obs_tape" class="obs-ta" oninput="renderReadinessScore()" placeholder="Агрессор, дельта, абсорбция, переход в инициацию..."></textarea>
       </div>
-      <div class="shot" id="shot_liq">
-        <div class="st"><span style="display:flex;align-items:center;gap:6px">Coinglass <span style="color:var(--text-faint);font-weight:400;font-size:10px">карта ликвидаций</span></span><span class="st-acts"><button class="src-link" type="button" onclick="openSource('liq')" title="Открыть карту ликвидаций Coinglass по символу">↗ источник</button><button class="obs-toggle" onclick="toggleObs('liq')" title="Ввести вручную">✏</button></span></div>
-        <div class="shot-upload" id="su_liq"><label><input type="file" accept="image/*" onchange="loadShot(this,'liq')">+ скриншот</label></div>
-        <div class="shot-preview" id="sp_liq"><img id="img_liq" alt="Coinglass"><button class="shot-clear" onclick="clearShot('liq')">✕ убрать</button></div>
+      <div class="shot obs-open" id="shot_liq">
+        <div class="st"><span style="display:flex;align-items:center;gap:6px">Ликвидации <span style="color:var(--text-faint);font-weight:400;font-size:10px">карта кластеров</span></span><span class="st-acts"><button class="src-link" type="button" onclick="openSource('liq')" title="Открыть карту ликвидаций по символу">↗ источник</button></span></div>
         <textarea id="obs_liq" class="obs-ta" oninput="renderReadinessScore()" placeholder="Кластеры сверху/снизу, сметённые пулы, вакуум..."></textarea>
       </div>
-      <div class="shot" id="shot_chart">
-        <div class="st"><span style="display:flex;align-items:center;gap:6px">График / VPVR <span style="color:var(--text-faint);font-weight:400;font-size:10px">структура</span></span><span class="st-acts"><button class="src-link" type="button" onclick="openSource('chart')" title="Открыть график TradingView по символу">↗ источник</button><button class="obs-toggle" onclick="toggleObs('chart')" title="Ввести вручную">✏</button></span></div>
-        <div class="shot-upload" id="su_chart"><label><input type="file" accept="image/*" onchange="loadShot(this,'chart')">+ скриншот</label></div>
-        <div class="shot-preview" id="sp_chart"><img id="img_chart" alt="Chart"><button class="shot-clear" onclick="clearShot('chart')">✕ убрать</button></div>
+      <div class="shot obs-open" id="shot_chart">
+        <div class="st"><span style="display:flex;align-items:center;gap:6px">График / VPVR <span style="color:var(--text-faint);font-weight:400;font-size:10px">структура</span></span><span class="st-acts"><button class="src-link" type="button" onclick="openSource('chart')" title="Открыть график TradingView по символу">↗ источник</button></span></div>
         <textarea id="obs_chart" class="obs-ta" oninput="renderReadinessScore()" placeholder="POC, VAH, VAL, LVN, фибы, волна, MLMI..."></textarea>
       </div>
     </div>
     <div class="section-title">Стратегия для матчинга<span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Выбери протокол ДО сессии · В момент сделки думать поздно · Протокол определяет чеклист условий входа ниже</span></span></div>
-    <div class="protos" id="protos">
-      <div class="proto sel" data-p="VALENTINI"><div class="pn">Valentini</div><div class="pd">failed auction / fade</div><div class="pfit" id="pfit_VALENTINI">—</div></div>
-      <div class="proto" data-p="SQUEEZE"><div class="pn">Squeeze</div><div class="pd">wall break</div><div class="pfit" id="pfit_SQUEEZE">—</div></div>
-      <div class="proto" data-p="SHOTGUN"><div class="pn">Shotgun</div><div class="pd">liq basket</div><div class="pfit" id="pfit_SHOTGUN">—</div></div>
-      <div class="proto" data-p="ELLIOTT_CLUSTER"><div class="pn">Elliott Clu</div><div class="pd">fib pullback</div><div class="pfit" id="pfit_ELLIOTT_CLUSTER">—</div></div>
-    </div>
+    <div class="protos" id="protos"><!-- карточки рендерятся из реестра PROTOCOLS --></div>
     <div class="pfit-note">фит % — соответствие текущих условий (тренд · поток · объём · OI) каждому протоколу, считается по всем одновременно · наблюдение, выбор за тобой</div>
     <div id="protoChecks" class="proto-checks"></div>
     <div class="actions prep-sticky-bar">
       <span id="readinessBadge" class="rs-inline-badge">—</span>
       <button class="btn primary" style="flex:2" id="quickBtn" onclick="quickAnalyze()">⚡ Обновить зоны (без скринов)</button>
-      <button class="btn" onclick="buildRequest()" title="Текстовый запрос для разбора по скриншотам">Запрос по скринам ↗</button>
       <button class="btn" onclick="resetPrep()">Сброс</button>
     </div>
     <div id="quickStatus" class="quick-status"></div>
-    <div class="output hide" id="outBox">
-      <div class="output-head"><div class="ot" id="otHead">Запрос на разбор · AI подберёт зоны-кандидаты</div><button class="copy-btn" onclick="copyOut()">Копировать</button></div>
-      <pre id="outPre"></pre>
-    </div>
   </div>
   <!-- ===== LIVE PHASE ===== -->
   <div id="livePhase" class="hide">
@@ -1368,7 +1340,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div class="zt-body">
   <!-- paste zones from analysis -->
   <div class="paste-box" id="pasteBox">
-    <span class="mini-label" style="margin:0 0 8px">Вставить глубокий разбор по скринам <span class="tag" style="text-transform:none">когда нужен анализ скриншотов</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Быстрые зоны из стакана — кнопка «↻ Обновить» выше. Этот блок — для глубокого разбора по скринам: «Запрос по скринам» → AI выдаёт готовый блок зон → вставляй сюда целиком. Формат: цена | тип | план | стоп | протокол · один ряд = одна зона · стоп и протокол опциональны</span></span></span>
+    <span class="mini-label" style="margin:0 0 8px">Вставить разбор из чата <span class="tag" style="text-transform:none">глубокий анализ структуры</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Быстрые зоны из стакана — кнопка «↻ Обновить» выше. Этот блок — для глубокого разбора: попроси в чате Claude разбор структуры с блоком зон, вставь ответ сюда целиком. Формат: цена | тип | план | стоп | протокол · один ряд = одна зона · стоп и протокол опциональны · блок АНАЛИЗ подтянется автоматически</span></span></span>
     <textarea id="pasteIn" placeholder="103200 | fade | отбой от POC, абсорбция в ленте | 103050 | VALENTINI&#10;103480 | break | пробой стенки 2.1М | 103560 | SQUEEZE&#10;102900 | watch | реакция на нижний кластер |  | SHOTGUN"></textarea>
     <div class="paste-row">
       <button class="paste-btn" onclick="parseZones()">Разобрать в зоны ↓</button>
@@ -1476,7 +1448,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div class="modal-box help-box">
     <div class="modal-head">Как работать</div>
     <div class="help-steps">
-      <div class="help-step"><span class="hs-n">①</span><span><b>Подготовка</b> — тикер дня, скрины/наблюдения (Ctrl+V), протокол под рынок → «⚡ Обновить зоны» или разбор по скринам → у каждой боевой зоны стоп → байас и лимиты дня. Цель: готовность ≥70%.</span></div>
+      <div class="help-step"><span class="hs-n">①</span><span><b>Подготовка</b> — тикер дня, наблюдения по 4 источникам, протокол под рынок → «⚡ Обновить зоны» или вставка разбора из чата → у каждой боевой зоны стоп → байас и лимиты дня. Цель: готовность ≥70%.</span></div>
       <div class="help-step"><span class="hs-n">②</span><span><b>Сессия</b> — цена live сама тикает. Тап по строке лестницы — детали зоны. Касание зоны — плашка: тап по цене/стопу копирует для ордера, объём уже посчитан от риска. Вне зон — ждать, это инструкция.</span></div>
       <div class="help-step"><span class="hs-n">📈</span><span><b>График</b> — колесо/пинч зум, зажми и тяни — прокрутка, двойной тап — сброс. Потяни бейдж зоны у правой шкалы — перенос уровня. Слои (тренд/объём/CVD/развороты/ликв) включаются кнопками.</span></div>
       <div class="help-step"><span class="hs-n">③</span><span><b>Журнал</b> — закрывай каждую зону: исход + грейд A/B/C (про процесс, не результат). Раз в неделю: CSV-импорт с биржи и взгляд на Discipline Score.</span></div>
@@ -1779,7 +1751,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const zt=document.getElementById('zoneTools'); if(zt)zt.classList.toggle('open',p==='prep');
     if(p==='prep')renderReadinessScore();
     document.getElementById('phaseDesc').textContent = p==='prep'
-      ? 'До сессии — читаешь рынок, размечаешь зоны: ⚡ быстрые зоны из стакана, разбор по скринам или ручной ввод. В сессии — только исполнение.'
+      ? 'До сессии — читаешь рынок, размечаешь зоны: ⚡ быстрые зоны из стакана, разбор из чата или ручной ввод. В сессии — только исполнение.'
       : p==='live'
       ? 'Фаза сессии — реагируешь, не анализируешь. Вводишь текущую цену, панель подсвечивает активную зону и твой готовый план. Думать поздно, исполняй размеченное.'
       : 'Журнал — разбор после сессии. Сделки и отработка зон, факт vs план, винрейт по типам и протоколам, бэкап и синхронизация. Ищи паттерн, не оправдание.';
@@ -1942,7 +1914,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const k=raw.toLowerCase().replace(/[\s—–-]+/g,'');
     return KIND_ALIASES[k] || (KIND[raw.toLowerCase()]?raw.toLowerCase():'watch');
   }
-  const PROTO_ALIASES={valentini:'VALENTINI',val:'VALENTINI',fade:'VALENTINI',squeeze:'SQUEEZE',sqz:'SQUEEZE',wallbreak:'SQUEEZE',shotgun:'SHOTGUN',shot:'SHOTGUN',liq:'SHOTGUN',liqbasket:'SHOTGUN',elliott:'ELLIOTT_CLUSTER',elliottcluster:'ELLIOTT_CLUSTER',elliot:'ELLIOTT_CLUSTER',fib:'ELLIOTT_CLUSTER',cluster:'ELLIOTT_CLUSTER'};
+  // PROTO_ALIASES теперь выводится из реестра PROTOCOLS (см. ниже по файлу)
   function normProto(raw){
     if(!raw)return null;
     const k=raw.toLowerCase().replace(/[\s_—–-]+/g,'');
@@ -2282,40 +2254,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(r)document.getElementById('depRisk').value=r;
     renderZones();
   });
-  // ---- build request ----
-  function buildRequest(){
-    const g=id=>document.getElementById(id).value.trim();
-    const L=['ScalpSniper — Precision Trading Terminal — разбор структуры. Приложил скриншоты ниже.','',
-      'Тикер: '+(g('ticker')||'—'),'Таймфрейм: '+document.getElementById('tf').value,
-      'Текущая цена: '+(g('price')||'—'),'Плечо: '+(g('lev')||'1')+'×',
-      'Стратегия для матчинга: '+selProto,'','Мои наблюдения по скриншотам:'];
-    if(g('obs_dom'))L.push('• Стакан MEXC: '+g('obs_dom'));
-    if(g('obs_tape'))L.push('• Лента CScalp: '+g('obs_tape'));
-    if(g('obs_liq'))L.push('• Coinglass: '+g('obs_liq'));
-    if(g('obs_chart'))L.push('• График/VPVR: '+g('obs_chart'));
-    L.push('','Дай структурный разбор: market_structure, volume_analysis, order_book_state, liquidation_map, фибы/POC, strategy_match для '+selProto+'. Конкретные цены входа, стопа и тейка НЕ выдавай — финальные уровни и решение всегда задаю я. Зоны-кандидаты передай только в pipe-блоке ниже, без готовых директив.');
-    L.push('',
-      'В КОНЦЕ разбора добавь блок зон-кандидатов в этом формате (по строке на зону, чтобы я вставил их одним куском):',
-      'ЗОНЫ:',
-      'цена | тип | план | стоп',
-      'где тип = fade / break / watch / stand, стоп опционален. Это наблюдения-кандидаты — финальное решение и уровни я подтверждаю сам.');
-    document.getElementById('outPre').textContent=L.join('\n');
-    // if API key + images → auto-fill zone candidates
-    const _ak=localStorage.getItem(AKEY)||'';
-    const _imgs=_ak?['dom','tape','liq','chart'].map(f=>{const el=document.getElementById('img_'+f);return(el&&el.src&&el.src.startsWith('data:'))?{field:f,src:el.src}:null;}).filter(Boolean):[];
-    const _oh=document.getElementById('otHead');
-    if(_oh)_oh.textContent=(_ak&&_imgs.length>0)
-      ?'AI уже разбирает скрины — зоны подставятся сами · ниже копия запроса'
-      :'Скопируй запрос в чат Claude · зоны вернутся pipe-блоком → «Ввод зон»';
-    document.getElementById('outBox').classList.remove('hide');
-    document.getElementById('outBox').scrollIntoView({behavior:'smooth',block:'nearest'});
-    if(_imgs.length>0)analyzeAllShots(_imgs,_ak);
-  }
-  function copyOut(){navigator.clipboard.writeText(document.getElementById('outPre').textContent).then(()=>{const b=event.target,o=b.textContent;b.textContent='Скопировано';setTimeout(()=>b.textContent=o,1400)});}
+  // скрин-контур (buildRequest/AI-анализ картинок) удалён 2026-07-15: зоны строит «⚡ Обновить зоны»,
+  // глубокий разбор — вставкой pipe-блока из чата в «Ввод зон»
   function resetPrep(){
-    ['ticker','price','obs_dom','obs_tape','obs_liq','obs_chart'].forEach(id=>document.getElementById(id).value='');
-    ['dom','tape','liq','chart'].forEach(f=>clearShot(f));
-    document.getElementById('outBox').classList.add('hide');
+    ['ticker','price','obs_dom','obs_tape','obs_liq','obs_chart'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   }
   // ---- close zone modal ----
   function openClose(i){
@@ -2570,7 +2512,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     saveJournal(); renderJournal();
   }
   // ---- render journal ----
-  const PROTO_LABELS={VALENTINI:'Valentini',SQUEEZE:'Squeeze',SHOTGUN:'Shotgun',ELLIOTT_CLUSTER:'Elliott Clu'};
+  // PROTO_LABELS теперь выводится из реестра PROTOCOLS
   const KIND_LABELS={fade:'FADE',break:'BREAK',watch:'WATCH',stand:'STAND'};
   const KIND_COLS={fade:'var(--fade)',break:'var(--green)',watch:'var(--info)',stand:'var(--text-dim)'};
   function wrPct(wins,total){return total?Math.round(wins/total*100):null;}
@@ -2629,8 +2571,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <div class="jsub">${kt.length} сделок · ${kw.length} побед</div>
       </div>`;
     }).join('');
-    // protocol stats
-    const protos=['VALENTINI','SQUEEZE','SHOTGUN','ELLIOTT_CLUSTER'];
+    // protocol stats — список из реестра
+    const protos=Object.keys(PROTOCOLS);
     document.getElementById('jProtoStats').innerHTML=protos.map(p=>{
       const pt=trades.filter(e=>e.protocol===p);
       const pw=pt.filter(e=>e.outcome==='win');
@@ -2830,31 +2772,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         '<button class="je-del" onclick="delZoneReview('+r.id+')" title="Удалить из журнала">×</button>'+
       '</div>';
     }).join('');
-  }
-  // ---- screenshot zones ----
-  function loadShot(input, field){
-    const file=input.files[0]; if(!file)return;
-    const reader=new FileReader();
-    reader.onload=e=>{
-      const dataUrl=e.target.result;
-      document.getElementById('img_'+field).src=dataUrl;
-      document.getElementById('sp_'+field).classList.add('visible');
-      document.getElementById('su_'+field).classList.add('loaded');
-      document.getElementById('shot_'+field).classList.add('has-img');
-      const apiKey=localStorage.getItem(AKEY)||'';
-      if(apiKey)analyzeShot(dataUrl,field,apiKey);
-    };
-    reader.readAsDataURL(file);
-  }
-  function clearShot(field){
-    const img=document.getElementById('img_'+field);
-    img.src='';
-    document.getElementById('sp_'+field).classList.remove('visible');
-    document.getElementById('su_'+field).classList.remove('loaded');
-    const shot=document.getElementById('shot_'+field);
-    shot.classList.remove('has-img','obs-open');
-    const ta=document.getElementById('obs_'+field);
-    if(ta&&!ta.value.trim())ta.classList.remove('filled');
   }
   // ---- paste price from clipboard ----
   function pastePrice(){
@@ -3096,32 +3013,60 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
 
   // ── protocol checklists (Dispatcher Logic) ──
-  const PROTO_CHECKS={
-    VALENTINI:[
-      'Крупная лимитка / стена поглощает агрессора в стакане',
-      'Дельта разворачивается (покупки → продажи или обратно)',
-      'POC / VAH / VAL рядом с уровнем входа',
-      'Нет пробоя структурного уровня выше/ниже'
-    ],
-    SQUEEZE:[
-      'Стенка ≥ 1М USDT в стакане на уровне пробоя',
-      'Нарастающая дельта со стороны пробоя',
-      'Объём агрессора превышает / съедает стенку',
-      'Нет крупной контрстенки сразу за уровнем'
-    ],
-    SHOTGUN:[
-      'Кластер ликвидаций на Coinglass — несколько зон рядом',
-      'Цена у границы кластера, не внутри',
-      'Funding rate / OI подтверждают направление сноса',
-      'Нет структурного разворота против направления'
-    ],
-    ELLIOTT_CLUSTER:[
-      'Волна размечена (0→1→2 чётко видны)',
-      'Откат в зоне Fib 38.2–61.8%',
-      'VPVR: LVN (Low Volume Node) в зоне отката',
-      'Дельта показывает абсорбцию в зоне'
-    ]
+  // ═══════════ РЕЕСТР СТРАТЕГИЙ — единственный источник правды ═══════════
+  // Добавление новой стратегии = одна запись здесь. Всё остальное (карточки,
+  // чеклисты, фит-радар, парсер зон, винрейт в журнале) подтягивается само.
+  //   name    — подпись на карточке; sub — короткое описание сути
+  //   aliases — синонимы для парсера вставки зон (нижний регистр, без пробелов)
+  //   base    — стартовый балл фита (приоритет по умолчанию)
+  //   fit(f)  — добавка к фиту из контекста рынка; f={dir,str,rv,cvdDir,oiDir,anom,fnd}:
+  //             dir тренд дня up/down/range · str сила 0-3 · rv low/norm/high
+  //             cvdDir buy/sell/flat · oiDir up/down/flat · anom всплеск · fnd norm/elev/extreme
+  //   checks  — чеклист условий входа (видит подготовка, readiness и плашка активной зоны)
+  const PROTOCOLS={
+    VALENTINI:{name:'Valentini',sub:'failed auction / fade',aliases:['valentini','val','fade'],base:30,
+      checks:[
+        'Крупная лимитка / стена поглощает агрессора в стакане',
+        'Дельта разворачивается (покупки → продажи или обратно)',
+        'POC / VAH / VAL рядом с уровнем входа',
+        'Нет пробоя структурного уровня выше/ниже'
+      ],
+      fit:f=>{let s=0;if(f.dir==='range'||f.str<=1)s+=30;if(f.rv==='low'||f.rv==='norm')s+=15;if(f.cvdDir==='flat')s+=15;if(f.anom)s-=20;return s;}},
+    SQUEEZE:{name:'Squeeze',sub:'wall break',aliases:['squeeze','sqz','wallbreak'],base:30,
+      checks:[
+        'Стенка ≥ 1М USDT в стакане на уровне пробоя',
+        'Нарастающая дельта со стороны пробоя',
+        'Объём агрессора превышает / съедает стенку',
+        'Нет крупной контрстенки сразу за уровнем'
+      ],
+      fit:f=>{let s=0;if(f.str>=2)s+=25;if((f.dir==='up'&&f.cvdDir==='buy')||(f.dir==='down'&&f.cvdDir==='sell'))s+=20;if(f.rv==='high')s+=15;else if(f.rv==='norm')s+=8;if(f.oiDir==='up')s+=10;return s;}},
+    SHOTGUN:{name:'Shotgun',sub:'liq basket',aliases:['shotgun','shot','liq','liqbasket'],base:20,
+      checks:[
+        'Кластер ликвидаций — несколько зон рядом',
+        'Цена у границы кластера, не внутри',
+        'Funding rate / OI подтверждают направление сноса',
+        'Нет структурного разворота против направления'
+      ],
+      fit:f=>{let s=0;if(f.anom)s+=35;if(f.rv==='high')s+=20;if(f.fnd==='elev')s+=12;else if(f.fnd==='extreme')s+=20;return s;}},
+    ELLIOTT_CLUSTER:{name:'Elliott Clu',sub:'fib pullback',aliases:['elliott','elliottcluster','elliot','fib','cluster'],base:20,
+      checks:[
+        'Волна размечена (0→1→2 чётко видны)',
+        'Откат в зоне Fib 38.2–61.8%',
+        'VPVR: LVN (Low Volume Node) в зоне отката',
+        'Дельта показывает абсорбцию в зоне'
+      ],
+      fit:f=>{let s=0;if(f.str>=2)s+=20;if((f.dir==='up'&&f.cvdDir==='sell')||(f.dir==='down'&&f.cvdDir==='buy'))s+=25;if(f.cvdDir==='flat'&&f.str>=2)s+=10;return s;}}
   };
+  // производные структуры — НЕ редактировать, всё берётся из PROTOCOLS
+  const PROTO_CHECKS=Object.fromEntries(Object.entries(PROTOCOLS).map(([k,v])=>[k,v.checks]));
+  const PROTO_LABELS=Object.fromEntries(Object.entries(PROTOCOLS).map(([k,v])=>[k,v.name]));
+  const PROTO_ALIASES={};Object.entries(PROTOCOLS).forEach(([k,v])=>(v.aliases||[]).forEach(a=>PROTO_ALIASES[a]=k));
+  function _renderProtoCards(){
+    const el=document.getElementById('protos'); if(!el)return;
+    el.innerHTML=Object.entries(PROTOCOLS).map(([k,v])=>
+      `<div class="proto${k===selProto?' sel':''}" data-p="${k}"><div class="pn">${v.name}</div><div class="pd">${v.sub}</div><div class="pfit" id="pfit_${k}">—</div></div>`).join('');
+  }
+  _renderProtoCards();
   const protoCheckState={};
 
   function renderProtoChecks(){
@@ -3358,72 +3303,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
 
 
-  // ── 6. Claude API auto-analysis ──
-  const AKEY='msa_apikey_v1';
-  function toggleSettings(){
-    const drawer=document.getElementById('settingsDrawer');
-    const caret=document.getElementById('settingsCaret');
-    const isOpen=!drawer.classList.contains('hide');
-    drawer.classList.toggle('hide',isOpen);
-    caret.textContent=isOpen?'⚙ Настройки ▸':'⚙ Настройки ▾';
-    caret.classList.toggle('open',!isOpen);
-  }
-  function toggleObs(field){
-    document.getElementById('shot_'+field).classList.toggle('obs-open');
-  }
-  function saveApiKey(){
-    const v=document.getElementById('apiKeyInput').value.trim();
-    localStorage.setItem(AKEY,v);
-    const hint=document.getElementById('apiKeyHint');
-    hint.textContent=v?'✓ ключ сохранён · автоанализ включён':'автоанализ скриншотов';
-    hint.className='api-key-hint'+(v?' ok':'');
-  }
-  function loadApiKey(){
-    const k=localStorage.getItem(AKEY)||'';
-    if(k){
-      document.getElementById('apiKeyInput').value=k;
-      const hint=document.getElementById('apiKeyHint');
-      hint.textContent='✓ ключ сохранён · автоанализ включён';
-      hint.className='api-key-hint ok';
-    }
-  }
-  async function analyzeShot(dataUrl,field,apiKey){
-    const ta=document.getElementById('obs_'+field);
-    const prev=ta.value;
-    ta.value='⏳ Анализирую скриншот...';
-    ta.disabled=true;
-    const prompts={
-      dom:'Скрин стакана (DOM) для разметки скальп-зон. Тон телеграфный — рубленые фразы, без вводных слов и воды. Только видимое; нечитаемое — «?», числа не выдумывай. Каждую стену давай: ЦЕНА | РАЗМЕР(M) | расстояние ±x.x% от текущей цены. Без торговых директив. Строки с ярлыками, без вступления:\nСтены ask: <цена | размерM | +x.x%; ...>\nСтены bid: <цена | размерM | −x.x%; ...>\nДисбаланс: <bid/ask, одно слово>\nУ цены: <спред, плотность>\nСпуфинг: <да/нет/?>\nВывод: <стена под пробой →SQUEEZE / плотность под отбой →VALENTINI>',
-      tape:'Скрин ленты+дельты для разметки скальп-зон. Тон телеграфный, без воды. Только видимое; нечитаемое — «?», числа не выдумывай. Без директив. Строки с ярлыками:\nАгрессор: <buy/sell>\nДельта: <накопление/слив/дивергенция с ценой>\nПоглощение: <уровень или нет>\nХарактер: <инициация/реакция>\nКрупные принты: <уровни>\nВывод: <абсорбция →VALENTINI / продавленная инициация →SQUEEZE>',
-      liq:'Скрин карты ликвидаций Coinglass для разметки скальп-зон. Тон телеграфный, без воды. Только видимое; нечитаемое — «?». Без директив. Каждый кластер: УРОВЕНЬ | расстояние ±x.x% от цены. Строки с ярлыками:\nКластеры сверху: <уровень | +x.x%; ...>\nКластеры снизу: <уровень | −x.x%; ...>\nСметено: <уровни или нет>\nВакуум: <между какими уровнями>\nМагнит: <уровень, куда тянет>\nВывод: <корзина близких кластеров →SHOTGUN>',
-      chart:'Скрин графика+VPVR для разметки скальп-зон. Тон телеграфный, без воды. Только видимое; нечитаемое — «?». Без директив. Уровни — с расстоянием ±x.x% от цены. Строки с ярлыками:\nPOC: <цена | ±x.x%>\nVAH / VAL: <цены>\nLVN (проскок): <уровни>\nHVN (сопротивление): <уровни>\nСтруктура: <тренд/коррекция/диапазон; фибо-уровни если видны>\nВывод: <фибо-откат к кластеру →ELLIOTT_CLUSTER>'
-    };
-    try{
-      const b64=await _resizeToB64(dataUrl);
-      const resp=await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:260,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},{type:'text',text:prompts[field]||prompts.dom}]}]})
-      });
-      if(!resp.ok)throw new Error('API '+resp.status);
-      const data=await resp.json();
-      ta.value=(data.content&&data.content[0]&&data.content[0].text)||prev;
-    }catch(err){
-      ta.value=prev;
-      console.warn('ScalpSniper analyzeShot:',err);
-    }finally{ta.disabled=false;}
-  }
-  async function _resizeToB64(dataUrl,MAX=1024){
-    const img=new Image();img.src=dataUrl;
-    await new Promise(r=>{img.onload=r;img.onerror=r});
-    const sc=Math.min(1,MAX/Math.max(img.width||MAX,img.height||MAX));
-    const cvs=document.createElement('canvas');
-    cvs.width=Math.round((img.width||MAX)*sc);
-    cvs.height=Math.round((img.height||MAX)*sc);
-    cvs.getContext('2d').drawImage(img,0,0,cvs.width,cvs.height);
-    return cvs.toDataURL('image/jpeg',.85).split(',')[1];
-  }
-  const _FL={dom:'Стакан MEXC (DOM)',tape:'Лента CScalp (tape)',liq:'Coinglass (ликвидации)',chart:'График/VPVR'};
+  // ── Claude API-автоанализ скринов удалён (2026-07-15) — зоны строит «⚡ Обновить зоны»,
+  //    глубокий разбор — вставкой pipe-блока из чата. _renderSituation ниже остаётся: его кормит парсер вставки.
   // показать блок «Анализ ситуации» из AI-синтеза + извлечь приоритетный протокол
   function _renderSituation(txt){
     const box=document.getElementById('aiSituation');
@@ -3445,72 +3326,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     box.innerHTML='<div class="ai-sit-head">📊 Анализ ситуации'+(prioLbl?' · приоритет <b>'+prioLbl+'</b>':'')+'</div>'+modeHtml+(sit?'<div class="ai-sit-body">'+escapeHtml(sit)+'</div>':'')+scenHtml;
     box.style.display='block';
   }
-  async function analyzeAllShots(imgs,apiKey){
-    const pasteIn=document.getElementById('pasteIn');
-    const pbLabel=document.getElementById('pbParsedLabel');
-    const prevVal=pasteIn.value;
-    pasteIn.value='⏳ AI анализирует скриншоты…';
-    pasteIn.disabled=true;
-    pbLabel.textContent='';
-    try{
-      const ticker=document.getElementById('ticker').value.trim()||'?';
-      const tf=document.getElementById('tf').value||'5m';
-      const price=document.getElementById('price').value||'?';
-      const lev=document.getElementById('lev').value||'1';
-      const imgContent=await Promise.all(imgs.map(async({field,src})=>{
-        const b64=await _resizeToB64(src);
-        return [{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},{type:'text',text:`[${_FL[field]||field}]`}];
-      }));
-      const flat=imgContent.flat();
-      flat.push({type:'text',text:`Контекст: ${ticker} · ${tf} · плечо ×${lev} · текущая цена ~${price}\n\nНа основе наблюдений со всех скринов выдели 3-6 КАНДИДАТНЫХ структурных уровня для скальп-сессии (НЕ директивы — трейдер проверяет и подтверждает). Тон телеграфный, рубленый, без воды. Ответ СТРОГО в двух блоках:\n\nЗОНЫ:\nцена | тип | план | стоп | протокол\n...\n\nАНАЛИЗ:\nПриоритет: <один протокол: VALENTINI/SQUEEZE/SHOTGUN/ELLIOTT_CLUSTER>\nРежим: <направленный фильтр (только лонг/только шорт) | двусторонний флэт | вне рынка> (подсказка трейдеру, НЕ блокировка)\nСитуация: <2-3 рубленых предложения: где цена относительно стен/кластеров, что ждать. Без команд входа/стопа/тейка.>\nСценарии:\n• Базовый (высокая/средняя/низкая): <модель> — слом при <уровень>, цели <зоны>\n• Альтернативный (выс/ср/низ): <модель> — слом при <уровень>, цели <зоны>\n• Шум (если уместно): <боковик/распил>\n\nПравила:\n- тип: fade/break/watch/stand.\n- «план» — КОНКРЕТНОЕ наблюдение-триггер с привязкой к структуре и числу: что именно ждать в зоне (напр. «съедание ask-стенки 78M лентой» / «отбой от bid-стенки 69M + liq-кластер»). 4-7 слов, без воды, без команды входа.\n- протокол зоны — подбери по структуре.\n- стоп опционален: нет — пустое поле, но сохрани все разделители «|».\n- Приоритет — самый уместный протокол под текущую ситуацию.\n- Вероятность сценариев — КАЧЕСТВЕННАЯ (высокая/средняя/низкая), НЕ проценты. Слом и цели сценариев — наблюдения, не директивы. Режим — подсказка трейдеру, не аппаратная блокировка.\n- Никакого текста вне этих двух блоков.`});
-      const resp=await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:700,messages:[{role:'user',content:flat}]})
-      });
-      if(!resp.ok)throw new Error('API '+resp.status);
-      const data=await resp.json();
-      const text=(data.content&&data.content[0]&&data.content[0].text)||'';
-      const zoneM=text.match(/ЗОНЫ:\s*([\s\S]*?)(?:\nАНАЛИЗ:|$)/i);
-      const anaM=text.match(/АНАЛИЗ:\s*([\s\S]+)/i);
-      pasteIn.value=(zoneM?zoneM[1]:text).trim();
-      _renderSituation(anaM?anaM[1].trim():'');
-      if(_aiPriorityProto)selectProto(_aiPriorityProto);
-      pbLabel.textContent='↑ AI подобрал зоны — проверь и нажми «Разобрать»';
-    }catch(err){
-      pasteIn.value=prevVal||'';
-      pbLabel.textContent='Ошибка AI — введи зоны вручную';
-      console.warn('ScalpSniper analyzeAllShots:',err);
-    }finally{pasteIn.disabled=false;}
-  }
-
-  // ── Ctrl+V paste screenshot into first empty slot ──
-  document.addEventListener('paste',e=>{
-    if(document.getElementById('prepPhase').classList.contains('hide'))return;
-    const items=e.clipboardData&&e.clipboardData.items;
-    if(!items)return;
-    for(const item of items){
-      if(item.type.startsWith('image/')){
-        const file=item.getAsFile();if(!file)break;
-        const fields=['dom','tape','liq','chart'];
-        const f=fields.find(f=>{const el=document.getElementById('img_'+f);return !el||!el.src||!el.src.startsWith('data:');});
-        if(!f)break;
-        const reader=new FileReader();
-        reader.onload=ev=>{
-          const dataUrl=ev.target.result;
-          document.getElementById('img_'+f).src=dataUrl;
-          document.getElementById('sp_'+f).classList.add('visible');
-          document.getElementById('su_'+f).classList.add('loaded');
-          document.getElementById('shot_'+f).classList.add('has-img');
-          const apiKey=localStorage.getItem(AKEY)||'';
-          if(apiKey)analyzeShot(dataUrl,f,apiKey);
-        };
-        reader.readAsDataURL(file);
-        e.preventDefault();break;
-      }
-    }
-  });
-
   // ── Mini chart module ──
   let _klines=[],_klSym='',_klTf='',_chartTimer=null,_zoneHitAreas=[],_chartClickBound=false;
   let _chartLayers=(()=>{try{return Object.assign({trend:true,vol:true,cvd:true,piv:true,liq:true},JSON.parse(localStorage.getItem('msa_chart_layers_v1')||'{}'));}catch(e){return {trend:true,vol:true,cvd:true,piv:true,liq:true};}})();
@@ -4333,33 +4148,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const tr=((_dayTrendCache[sym]||{}).val)||null;
     const cx=(((_dayCtxCache||{})[sym]||{}).val)||null;
     if(!tr||!cx)return null;
-    const S={VALENTINI:30,SQUEEZE:30,SHOTGUN:20,ELLIOTT_CLUSTER:20};
-    const str=tr.strength||0, dir=tr.dir;
-    const rv=(cx.rvol||{}).lvl, cvdDir=(cx.cvd||{}).dir, oiDir=(cx.oi||{}).dir, anom=!!cx.anomaly, fnd=(cx.funding||{}).state;
-    // VALENTINI — отбой/fade: рейндж или слабый тренд, спокойный поток, без аномалий
-    if(dir==='range'||str<=1)S.VALENTINI+=30;
-    if(rv==='low'||rv==='norm')S.VALENTINI+=15;
-    if(cvdDir==='flat')S.VALENTINI+=15;
-    if(anom)S.VALENTINI-=20;
-    // SQUEEZE — пробой стенки: тренд + поток в его сторону + объём/OI
-    if(str>=2)S.SQUEEZE+=25;
-    if((dir==='up'&&cvdDir==='buy')||(dir==='down'&&cvdDir==='sell'))S.SQUEEZE+=20;
-    if(rv==='high')S.SQUEEZE+=15; else if(rv==='norm')S.SQUEEZE+=8;
-    if(oiDir==='up')S.SQUEEZE+=10;
-    // SHOTGUN — корзина ликвидаций: всплеск активности, перекос фандинга
-    if(anom)S.SHOTGUN+=35;
-    if(rv==='high')S.SHOTGUN+=20;
-    if(fnd==='elev')S.SHOTGUN+=12; else if(fnd==='extreme')S.SHOTGUN+=20;
-    // ELLIOTT_CLUSTER — фиб-откат: тренд жив, поток временно против (откат) или пауза
-    if(str>=2)S.ELLIOTT_CLUSTER+=20;
-    if((dir==='up'&&cvdDir==='sell')||(dir==='down'&&cvdDir==='buy'))S.ELLIOTT_CLUSTER+=25;
-    if(cvdDir==='flat'&&str>=2)S.ELLIOTT_CLUSTER+=10;
-    Object.keys(S).forEach(k=>S[k]=Math.max(5,Math.min(95,S[k])));
+    // контекст рынка → fit() каждой стратегии из реестра PROTOCOLS
+    const f={dir:tr.dir,str:tr.strength||0,rv:(cx.rvol||{}).lvl,cvdDir:(cx.cvd||{}).dir,oiDir:(cx.oi||{}).dir,anom:!!cx.anomaly,fnd:(cx.funding||{}).state};
+    const S={};
+    Object.entries(PROTOCOLS).forEach(([k,v])=>{
+      let s=(v.base||20); try{s+=v.fit?v.fit(f):0;}catch(e){}
+      S[k]=Math.max(5,Math.min(95,s));
+    });
     return S;
   }
   function _renderProtoFit(){
     const S=_protoFit();
-    const keys=['VALENTINI','SQUEEZE','SHOTGUN','ELLIOTT_CLUSTER'];
+    const keys=Object.keys(PROTOCOLS);
     if(!S){ keys.forEach(k=>{const el=document.getElementById('pfit_'+k); if(el)el.textContent='—';}); return; }
     const top=keys.reduce((a,b)=>S[a]>=S[b]?a:b);
     keys.forEach(k=>{
@@ -5174,7 +4974,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
   function toggleCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; const open=w.classList.toggle('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded',open?'true':'false'); try{localStorage.setItem('msa_calc_open_v1',open?'1':'0');}catch(e){} }
   function _restoreCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; let o='0'; try{o=localStorage.getItem('msa_calc_open_v1')||'0';}catch(e){} if(o==='1'){w.classList.add('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded','true');} }
-  load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); loadApiKey(); triggerPriceFetch(); _fetchTopTickers(); renderPosition(); _restoreCalc(); _sessPcRestore(); _themeInit(); _muteInit();
+  load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); triggerPriceFetch(); _fetchTopTickers(); renderPosition(); _restoreCalc(); _sessPcRestore(); _themeInit(); _muteInit();
   // авто-расчёт зон при входе: если разметка тикера отсутствует или старше 10 мин — quickAnalyze сам (без кнопки)
   setTimeout(()=>{ try{ const fr=(typeof _getZonesFresh==='function')?_getZonesFresh():null;
     if((!fr||Date.now()-fr>10*60*1000)&&typeof quickAnalyze==='function'&&!_quickBusy)quickAnalyze(); }catch(e){} },2500);
