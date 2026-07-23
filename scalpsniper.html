@@ -569,7 +569,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .t-side .hint-tip{left:auto;right:0}
   .hint-tip::after{content:'';position:absolute;top:100%;left:10px;border:5px solid transparent;border-top-color:var(--panel-2)}
   .hint-wrap:hover .hint-tip,.hint-wrap.open .hint-tip{opacity:1}
-  @media(max-width:500px){.hint-tip{left:auto;right:0;max-width:min(220px,calc(100vw - 24px))}.hint-tip::after{left:auto;right:10px}.ticker-dd{max-width:calc(100vw - 18px);min-width:0}.sess-tkwrap .ticker-dd,.demo-tkwrap .ticker-dd{left:auto;right:0;width:min(86vw,300px)}.tdd-sort{padding:7px 10px;font-size:9px}.ticker-dd-item{padding:9px 10px}}
+  @media(max-width:500px){.hint-tip{left:auto;right:0;max-width:min(220px,calc(100vw - 24px))}.hint-tip::after{left:auto;right:10px}
+  /* мобильный пикер тикера: центрированная плавающая карточка + затемнение фона (CSS-only), не обрезается */
+  .ticker-dd,.sess-tkwrap .ticker-dd,.demo-tkwrap .ticker-dd{position:fixed;left:50%;top:50%;right:auto;transform:translate(-50%,-50%);width:min(92vw,340px);max-width:92vw;min-width:0;max-height:72vh;box-shadow:0 18px 50px rgba(0,0,0,.7),0 0 0 100vmax rgba(0,0,0,.5);z-index:300}
+  .tdd-sort{padding:7px 10px;font-size:9px}.ticker-dd-item{padding:10px 11px}}
   /* умная сторона тултипа — ставится JS при открытии по позиции иконки */
   .hint-wrap.tip-l .hint-tip{left:0;right:auto}
   .hint-wrap.tip-l .hint-tip::after{left:10px;right:auto}
