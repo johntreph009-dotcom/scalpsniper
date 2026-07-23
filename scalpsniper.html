@@ -610,6 +610,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .cf-banner{display:none;margin:8px 0;padding:9px 12px;border:1px solid var(--danger);border-radius:8px;background:rgba(240,69,74,.08);color:var(--danger);font-size:11px;font-weight:700;line-height:1.5}
   .cf-warn{outline:1px solid var(--warn)!important;box-shadow:0 0 10px rgba(210,153,34,.3)!important}
   .day-lock{outline:2px solid var(--danger)!important;box-shadow:0 0 12px rgba(240,69,74,.45)!important;opacity:.85}
+  .pos-risk{font-size:11px;font-family:'JetBrains Mono',monospace;margin:2px 0 10px;line-height:1.4;color:var(--text-dim);min-height:14px}
+  .pos-risk.ok{color:var(--green)} .pos-risk.warn{color:var(--warn)} .pos-risk.danger{color:var(--danger);font-weight:700}
   /* ===== close zone button (session) ===== */
   .zone-close{background:none;border:1px solid var(--green-dim);color:var(--green);cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;padding:5px 10px;border-radius:5px;white-space:nowrap;letter-spacing:.5px}
   .zone-close:hover{background:rgba(63,185,80,.12);border-color:var(--green)}
@@ -1436,11 +1438,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <button type="button" class="ob pos-side-btn" id="psShort" onclick="setPosSide('short')">▼ SHORT</button>
     </div>
     <div class="modal-fields">
-      <div><span class="mini-label">Вход</span><input id="p_entry" type="number" placeholder="63700"></div>
-      <div><span class="mini-label">Размер (ед.)</span><input id="p_units" type="number" step="0.0001" placeholder="0.3101"></div>
-      <div><span class="mini-label">Стоп (опц.)</span><input id="p_stop" type="number" placeholder="64080"></div>
+      <div><span class="mini-label">Вход</span><input id="p_entry" type="number" placeholder="63700" oninput="_posRiskCalc()"></div>
+      <div><span class="mini-label">Размер (ед.)</span><input id="p_units" type="number" step="0.0001" placeholder="0.3101" oninput="_posRiskCalc()"></div>
+      <div><span class="mini-label">Стоп (опц.)</span><input id="p_stop" type="number" placeholder="64080" oninput="_posRiskCalc()"></div>
       <div><span class="mini-label">Тейк (опц.)</span><input id="p_target" type="number" placeholder="63500"></div>
     </div>
+    <div class="pos-risk" id="posRisk"></div>
     <div class="modal-err" id="posErr">Выбери сторону и укажи вход</div>
     <div class="modal-btns">
       <button class="mok" onclick="confirmOpenPos()">Открыть позицию</button>
@@ -2490,19 +2493,50 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     document.getElementById('p_units').value=ps?ps.units.toFixed(4):'';
     pos_kindHint=z?z.kind:'fade';
     document.getElementById('posErr').style.display='none';
+    _posRiskCalc();
     document.getElementById('posModal').classList.remove('hide');
   }
   function closePosModal(){ document.getElementById('posModal').classList.add('hide'); }
-  function confirmOpenPos(){
-    const entry=parseFloat(document.getElementById('p_entry').value);
-    if(!pendingPosSide||!entry){document.getElementById('posErr').style.display='block';return;}
-    let units=parseFloat(document.getElementById('p_units').value);
-    const stop=parseFloat(document.getElementById('p_stop').value)||null;
-    const target=parseFloat(document.getElementById('p_target').value)||null;
-    if(!units||!isFinite(units)){
-      const dep=parseFloat(document.getElementById('deposit').value), risk=parseFloat(document.getElementById('depRisk').value);
-      units=(dep&&risk&&stop)?((dep*risk/100)/Math.abs(entry-stop)):0;
+  // ── Оверлеверidж-гард: риск сделки в % депозита + маржа vs правило «свободная маржа ≥ 50%» ──
+  function _posRiskCalc(){
+    const el=document.getElementById('posRisk'); if(!el)return {over:false,reasons:[]};
+    const dep=_pf(document.getElementById('deposit')?.value);
+    const planRisk=_pf(document.getElementById('depRisk')?.value)||1;
+    const lev=_pf(document.getElementById('lev')?.value)||0;
+    const entry=_pf(document.getElementById('p_entry')?.value);
+    let units=_pf(document.getElementById('p_units')?.value);
+    const stop=_pf(document.getElementById('p_stop')?.value);
+    if(!dep||!entry||!units||!isFinite(units)){ el.textContent=''; el.className='pos-risk'; return {over:false,reasons:[]}; }
+    const parts=[], reasons=[]; let cls='ok';
+    if(stop&&isFinite(stop)&&Math.abs(entry-stop)>0){
+      const riskPct=units*Math.abs(entry-stop)/dep*100;
+      parts.push('риск сделки '+riskPct.toFixed(2)+'% депо');
+      if(riskPct>Math.max(planRisk*1.5,planRisk+0.5)){ cls='danger'; reasons.push('риск '+riskPct.toFixed(1)+'% превышает план '+planRisk+'%'); }
+      else if(riskPct>planRisk*1.1){ cls='warn'; }
+    } else { parts.push('стоп не задан — риск не ограничен'); cls='warn'; }
+    if(lev>0){
+      const marginPct=(units*entry/lev)/dep*100;
+      parts.push('маржа '+marginPct.toFixed(0)+'% депо');
+      if(marginPct>50){ cls='danger'; reasons.push('маржа '+marginPct.toFixed(0)+'% депозита — свободной маржи < 50%'); }
+      else if(marginPct>35&&cls!=='danger'){ cls='warn'; }
     }
+    el.className='pos-risk '+cls;
+    el.textContent=(cls==='danger'?'⛔ ':cls==='warn'?'⚠ ':'✓ ')+parts.join(' · ');
+    return {over:cls==='danger', reasons};
+  }
+  function confirmOpenPos(){
+    const entry=_pf(document.getElementById('p_entry').value);
+    if(!pendingPosSide||!entry){document.getElementById('posErr').style.display='block';return;}
+    let units=_pf(document.getElementById('p_units').value);
+    const stop=_pf(document.getElementById('p_stop').value)||null;
+    const target=_pf(document.getElementById('p_target').value)||null;
+    if(!units||!isFinite(units)){
+      const dep=_pf(document.getElementById('deposit').value), risk=_pf(document.getElementById('depRisk').value);
+      units=(dep&&risk&&stop)?((dep*risk/100)/Math.abs(entry-stop)):0;
+      if(units&&isFinite(units))document.getElementById('p_units').value=+units.toFixed(4);
+    }
+    const rk=_posRiskCalc();
+    if(rk.over&&!confirm('Позиция превышает риск-каркас:\n· '+rk.reasons.join('\n· ')+'\n\nПравило: риск ≤ плана, свободная маржа ≥ 50%. Всё равно открыть?'))return;
     positions.push({id:String(Date.now()), side:pendingPosSide, entry:+entry, units:+units, stop:stop, target:target, kind:pos_kindHint||'fade', ticker:_tkKey(), openedAt:Date.now()}); _posAlertFlags={};
     savePos(); closePosModal(); renderPosition(); if(typeof _chartRedraw==='function')_chartRedraw();
   }
