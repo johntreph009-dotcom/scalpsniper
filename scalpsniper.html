@@ -5411,11 +5411,31 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'BTCUSDT';
       const r=await fetch('https://scalpsniper-ai-proxy.johntreph009.workers.dev/api/context?symbol='+sym,{cache:'no-store'});
       if(!r.ok)return;
-      _cfCtx=await r.json(); _renderCfCtx();
+      _cfCtx=await r.json(); await _cgStableFloat(); _renderCfCtx();
     }catch(e){}
+  }
+  // ── Тир 3: реальный стейбл-флоат для Overhead. CoinGecko блокирует egress CF-воркера (как Binance),
+  //    но из браузера достаётся свободно → считаем overhead на клиенте: OI(воркер) / живой стейбл-флоат × 110. ──
+  let _cgStable=null; // {usd,t}
+  async function _cgStableFloat(){
+    if(document.hidden)return _cgStable;
+    try{ const raw=localStorage.getItem('msa_stablefloat_v1'); if(raw){ const o=JSON.parse(raw); if(o&&o.usd>0&&Date.now()-o.t<6*3600e3){ _cgStable=o; return _cgStable; } } }catch(e){}
+    try{
+      const cg=await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=tether,usd-coin,dai,first-digital-usd,ethena-usde,usds,paypal-usd,true-usd&order=market_cap_desc&per_page=20&page=1',{cache:'no-store'}).then(r=>r.json());
+      const total=Array.isArray(cg)?cg.reduce((s,x)=>s+(+(x.market_cap)||0),0):0;
+      if(total>5e10){ _cgStable={usd:total,t:Date.now()}; try{localStorage.setItem('msa_stablefloat_v1',JSON.stringify(_cgStable));}catch(e){} }
+    }catch(e){}
+    return _cgStable;
+  }
+  // overhead с реальным знаменателем, если стейбл-флоат уже получен; иначе — значение воркера (мок)
+  function _cfOverhead(c){
+    const o=(c&&c.overhead)||{};
+    if(_cgStable&&_cgStable.usd>0&&o.oiNotionalUsd>0) return {index:+(o.oiNotionalUsd/_cgStable.usd*110).toFixed(2), mock:false, real:true};
+    return {index:o.index, mock:o.mock, real:false};
   }
   function _renderCfCtx(){
     const c=_cfCtx; if(!c||!c.trend)return;
+    const ov=_cfOverhead(c);
     let box=document.getElementById('cfCtx');
     if(!box){ const host=document.getElementById('sessionCtx'); if(host){ box=document.createElement('div'); box.id='cfCtx'; box.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-top:6px'; host.appendChild(box); } }
     if(box){
@@ -5424,13 +5444,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         '<span class="gchip '+tCls+'">CF тренд: '+c.trend.state+' · RSI '+c.trend.rsi+'</span>'+
         '<span class="gchip '+(c.squeeze.active?'warn':'ok')+'">сжатие '+(c.squeeze.active?'ДА':'нет')+' ('+c.squeeze.gapPct+'%)</span>'+
         '<span class="gchip '+(c.liquidity.fadingRobots?'warn':'ok')+'">роботы '+(c.liquidity.fadingRobots?'затухают':'в рынке')+'</span>'+
-        '<span class="gchip '+(c.overhead.index>4?'danger':c.overhead.index>2.5?'warn':'ok')+'">overhead '+c.overhead.index+(c.overhead.mock?'*':'')+'</span>'+
-        '<span style="flex-basis:100%;font-size:9.5px;color:var(--text-faint)">'+escapeHtml(c.directive||'')+' · CF-модель'+(c.overhead.mock?' · *overhead на мок-балансе':'')+' · наблюдение</span>';
+        '<span class="gchip '+(ov.index>4?'danger':ov.index>2.5?'warn':'ok')+'">overhead '+ov.index+(ov.mock?'*':'')+'</span>'+
+        '<span style="flex-basis:100%;font-size:9.5px;color:var(--text-faint)">'+escapeHtml(c.directive||'')+' · CF-модель'+(ov.mock?' · *overhead на резервном знаменателе':' · overhead: OI / живой стейбл-флоат (CoinGecko)')+' · наблюдение</span>';
     }
     // баннер тревоги над плашкой активной зоны + подсветка кнопок входа (дисциплина, не запрет)
     let bn=document.getElementById('cfBanner');
     if(!bn){ const lc=document.getElementById('liveCard'); if(lc&&lc.parentNode){ bn=document.createElement('div'); bn.id='cfBanner'; bn.className='cf-banner'; lc.parentNode.insertBefore(bn,lc); } }
-    const danger=c.alarm_level==='CRITICAL', high=c.alarm_level==='HIGH', caution=danger||high||c.squeeze.active;
+    const danger=c.alarm_level==='CRITICAL'||ov.index>4, high=c.alarm_level==='HIGH', caution=danger||high||c.squeeze.active;
     if(bn){ bn.style.display=(danger||high)?'block':'none'; bn.textContent=(danger?'⛔ CRITICAL: ':'⚠ HIGH: ')+(c.directive||''); }
     ['dlLong','dlShort','lcPosBtn','psLong','psShort'].forEach(id=>{ const el=document.getElementById(id); if(el)el.classList.toggle('cf-warn',caution); });
     if(c.alarm_level!==_cfLastAlarm){
