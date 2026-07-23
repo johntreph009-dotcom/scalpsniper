@@ -4506,6 +4506,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
   // ── Ticker dropdown (топ-30 по объёму) ──
   const _DEFAULT_TICKERS=['BTC','ETH','BNB','SOL','XRP','DOGE','ADA','TRX','AVAX','TON','SHIB','LINK','DOT','LTC','BCH','NEAR','APT','SUI','INJ','WLD','ARB','OP','ATOM','HBAR','PEPE','ONDO','FIL','ICP','VET','BONK'];
+  // тач-устройство: не фокусируем инпут при открытии списка кнопкой ▾, чтобы клавиатура не перекрывала список
+  const _isTouch=(window.matchMedia&&matchMedia('(pointer:coarse)').matches)||('ontouchstart' in window);
   let _tickerSyms=[];
   function _setTicker(sym){
     const el=document.getElementById('ticker');
@@ -4541,7 +4543,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function _openSessDD(){ const w=document.getElementById('sessTkWrap'); if(w){_renderSessDD(false);w.classList.add('open');} }
   function _closeSessDD(){ const w=document.getElementById('sessTkWrap'); if(w)w.classList.remove('open'); }
-  function _toggleSessDD(e){ e.preventDefault();e.stopPropagation(); const w=document.getElementById('sessTkWrap'); if(!w)return; if(w.classList.contains('open'))_closeSessDD(); else {_openSessDD();document.getElementById('sessTicker').focus();} }
+  function _toggleSessDD(e){ e.preventDefault();e.stopPropagation(); const w=document.getElementById('sessTkWrap'); if(!w)return; if(w.classList.contains('open'))_closeSessDD(); else {_openSessDD();if(!_isTouch)document.getElementById('sessTicker').focus();} }
   function _filterSessDD(){ _renderSessDD(true); _openSessDD(); }
   function _pickSess(s){ const el=document.getElementById('sessTicker'); el.value=s+'/USDT'; setSessionTicker(s+'/USDT'); _closeSessDD(); }
   document.addEventListener('click',e=>{ if(!e.target.closest('#sessTkWrap'))_closeSessDD(); });
@@ -4555,7 +4557,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function _openDemoDD(){ const w=document.getElementById('demoTkWrap'); if(w){_renderDemoDD(false);w.classList.add('open');} }
   function _closeDemoDD(){ const w=document.getElementById('demoTkWrap'); if(w)w.classList.remove('open'); }
-  function _toggleDemoDD(e){ e.preventDefault();e.stopPropagation(); const w=document.getElementById('demoTkWrap'); if(!w)return; if(w.classList.contains('open'))_closeDemoDD(); else {_openDemoDD();document.getElementById('demoTicker').focus();} }
+  function _toggleDemoDD(e){ e.preventDefault();e.stopPropagation(); const w=document.getElementById('demoTkWrap'); if(!w)return; if(w.classList.contains('open'))_closeDemoDD(); else {_openDemoDD();if(!_isTouch)document.getElementById('demoTicker').focus();} }
   function _filterDemoDD(){ _renderDemoDD(true); _openDemoDD(); }
   function _pickDemo(s){ _demoSetSym(s+'/USDT'); _closeDemoDD(); }
   function _pickDemoInput(){ const v=(document.getElementById('demoTicker').value||'').trim(); if(v)_demoSetSym(/\//.test(v)?v.toUpperCase():v.toUpperCase()+'/USDT'); }
@@ -4580,11 +4582,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _tdInner(syms,pick){
     const hasMeta=Object.keys(_tkMeta).length>0;
     let head='';
-    if(hasMeta){ const chip=(k,l)=>`<button type="button" class="tdd-sort${_tkSort===k?' on':''}" onmousedown="event.preventDefault();event.stopPropagation();_setTkSort('${k}')">${l}</button>`;
+    if(hasMeta){ const chip=(k,l)=>`<button type="button" class="tdd-sort${_tkSort===k?' on':''}" onpointerdown="event.preventDefault();event.stopPropagation();_setTkSort('${k}')">${l}</button>`;
       head=`<div class="ticker-dd-head"><span>топ дня</span><span class="tdd-sorts">${chip('rng','волат')}${chip('vol','объём')}${chip('chg','Δ%')}</span></div>`; }
     if(!syms.length)return head+'<div class="ticker-dd-empty">нет совпадений</div>';
     const list=hasMeta?_tdSort(syms):syms;
-    return head+list.map(s=>`<div class="ticker-dd-item" data-sym="${s}" onmousedown="event.preventDefault();${pick}('${s}')"><span class="tdd-sym">${s}/USDT</span>${_tdMetaHtml(_tkMeta[s])}</div>`).join('');
+    return head+list.map(s=>`<div class="ticker-dd-item" data-sym="${s}" onpointerdown="event.preventDefault();${pick}('${s}')"><span class="tdd-sym">${s}/USDT</span>${_tdMetaHtml(_tkMeta[s])}</div>`).join('');
   }
   function _renderTickerDD(syms){ const dd=document.getElementById('tickerDD'); if(!dd)return; dd.innerHTML=_tdInner(syms.length?syms:[],'_setTicker'); _markActiveChip(); }
   function _setTkSort(k){ _tkSort=k;
@@ -4603,7 +4605,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     e.preventDefault();e.stopPropagation();
     const w=document.getElementById('tickerWrap');if(!w)return;
     if(w.classList.contains('open')){_closeTickerDD();}
-    else{_renderTickerDD(_tickerSyms);_openTickerDD();document.getElementById('ticker').focus();}
+    else{_renderTickerDD(_tickerSyms);_openTickerDD();if(!_isTouch)document.getElementById('ticker').focus();}
   }
   document.addEventListener('click',e=>{ if(!e.target.closest('#tickerWrap'))_closeTickerDD(); });
   // Топ-30 инструментов дня — волатильность вперёд (диапазон high-low), с порогом ликвидности и плотностью сделок как вторичными.
