@@ -5411,7 +5411,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'BTCUSDT';
       const r=await fetch('https://scalpsniper-ai-proxy.johntreph009.workers.dev/api/context?symbol='+sym,{cache:'no-store'});
       if(!r.ok)return;
-      _cfCtx=await r.json(); await _cgStableFloat(); _renderCfCtx();
+      _cfCtx=await r.json(); await _cgStableFloat(); await _binOiFetch(sym); _renderCfCtx();
     }catch(e){}
   }
   // ── Тир 3: реальный стейбл-флоат для Overhead. CoinGecko блокирует egress CF-воркера (как Binance),
@@ -5428,9 +5428,26 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     return _cgStable;
   }
   // overhead с реальным знаменателем, если стейбл-флоат уже получен; иначе — значение воркера (мок)
+  // OI агрегируем: Bybit (из воркера) + Binance USDT-M (fapi достаётся из браузера). SCALE пересчитан под агрегат.
+  const _OVH_SCALE=38;   // калибровка июль-2026: агрегат BTC OI ~$10.4B / стейблы $279B → index ~1.4
+  let _binOiUsd=0,_binOiAt=0;
+  async function _binOiFetch(sym){
+    if(document.hidden)return _binOiUsd;
+    if(_binOiUsd>0&&Date.now()-_binOiAt<55e3)return _binOiUsd;
+    try{
+      const [oi,pr]=await Promise.all([
+        fetch('https://fapi.binance.com/fapi/v1/openInterest?symbol='+sym,{cache:'no-store'}).then(r=>r.json()),
+        fetch('https://fapi.binance.com/fapi/v1/premiumIndex?symbol='+sym,{cache:'no-store'}).then(r=>r.json())
+      ]);
+      const c=+(oi.openInterest||0),px=+(pr.markPrice||0);
+      _binOiUsd=(c>0&&px>0)?c*px:0; _binOiAt=Date.now();
+    }catch(e){ _binOiUsd=0; }
+    return _binOiUsd;
+  }
   function _cfOverhead(c){
     const o=(c&&c.overhead)||{};
-    if(_cgStable&&_cgStable.usd>0&&o.oiNotionalUsd>0) return {index:+(o.oiNotionalUsd/_cgStable.usd*110).toFixed(2), mock:false, real:true};
+    const oiTotal=((+o.oiNotionalUsd)||0)+(_binOiUsd||0);   // Bybit + Binance
+    if(_cgStable&&_cgStable.usd>0&&oiTotal>0) return {index:+(oiTotal/_cgStable.usd*_OVH_SCALE).toFixed(2), mock:false, real:true};
     return {index:o.index, mock:o.mock, real:false};
   }
   function _renderCfCtx(){
@@ -5444,13 +5461,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         '<span class="gchip '+tCls+'">CF тренд: '+c.trend.state+' · RSI '+c.trend.rsi+'</span>'+
         '<span class="gchip '+(c.squeeze.active?'warn':'ok')+'">сжатие '+(c.squeeze.active?'ДА':'нет')+' ('+c.squeeze.gapPct+'%)</span>'+
         '<span class="gchip '+(c.liquidity.fadingRobots?'warn':'ok')+'">роботы '+(c.liquidity.fadingRobots?'затухают':'в рынке')+'</span>'+
-        '<span class="gchip '+(ov.index>4?'danger':ov.index>2.5?'warn':'ok')+'">overhead '+ov.index+(ov.mock?'*':'')+'</span>'+
-        '<span style="flex-basis:100%;font-size:9.5px;color:var(--text-faint)">'+escapeHtml(c.directive||'')+' · CF-модель'+(ov.mock?' · *overhead на резервном знаменателе':' · overhead: OI / живой стейбл-флоат (CoinGecko)')+' · наблюдение</span>';
+        '<span class="gchip '+(ov.index>3.2?'danger':ov.index>2.2?'warn':'ok')+'">overhead '+ov.index+(ov.mock?'*':'')+'</span>'+
+        '<span style="flex-basis:100%;font-size:9.5px;color:var(--text-faint)">'+escapeHtml(c.directive||'')+' · CF-модель'+(ov.mock?' · *overhead на резервном знаменателе':' · overhead: OI(Bybit+Binance) / живой стейбл-флоат')+' · наблюдение</span>';
     }
     // баннер тревоги над плашкой активной зоны + подсветка кнопок входа (дисциплина, не запрет)
     let bn=document.getElementById('cfBanner');
     if(!bn){ const lc=document.getElementById('liveCard'); if(lc&&lc.parentNode){ bn=document.createElement('div'); bn.id='cfBanner'; bn.className='cf-banner'; lc.parentNode.insertBefore(bn,lc); } }
-    const danger=c.alarm_level==='CRITICAL'||ov.index>4, high=c.alarm_level==='HIGH', caution=danger||high||c.squeeze.active;
+    const danger=c.alarm_level==='CRITICAL'||ov.index>3.2, high=c.alarm_level==='HIGH', caution=danger||high||c.squeeze.active;
     if(bn){ bn.style.display=(danger||high)?'block':'none'; bn.textContent=(danger?'⛔ CRITICAL: ':'⚠ HIGH: ')+(c.directive||''); }
     ['dlLong','dlShort','lcPosBtn','psLong','psShort'].forEach(id=>{ const el=document.getElementById(id); if(el)el.classList.toggle('cf-warn',caution); });
     if(c.alarm_level!==_cfLastAlarm){
