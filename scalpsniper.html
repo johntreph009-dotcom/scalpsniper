@@ -637,6 +637,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .wh-buy .wh-side,.wh-buy .wh-n{color:#5DCAA5}.wh-sell .wh-side,.wh-sell .wh-n{color:#F09595}
   .wh-n{font-weight:700;margin-left:auto}.wh-px{color:var(--text-dim);min-width:58px;text-align:right}
   .wh-empty{color:var(--text-faint);font-size:9.5px;padding:6px 0}
+  .wh-liqline{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:9px;margin:-3px 0 7px}
+  .wh-liqline .wh-liq-long{color:#F09595}.wh-liqline .wh-liq-short{color:#5DCAA5}
+  .wh-liqtag{color:#ff7a18;border-color:#8a4a10}
+  .wh-row.wh-liq{background:rgba(255,122,24,.05)}
+  .wh-liq-long .wh-side,.wh-liq-long .wh-n{color:#F09595}.wh-liq-short .wh-side,.wh-liq-short .wh-n{color:#5DCAA5}
   /* ===== close zone button (session) ===== */
   .zone-close{background:none;border:1px solid var(--green-dim);color:var(--green);cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;padding:5px 10px;border-radius:5px;white-space:nowrap;letter-spacing:.5px}
   .zone-close:hover{background:rgba(63,185,80,.12);border-color:var(--green)}
@@ -3635,8 +3640,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       ws.onclose=()=>{ if(_whWsSpot===ws)_whWsSpot=null; }; _whWsSpot=ws;
     }catch(e){}
     try{ const ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');
-      ws.onopen=()=>{ try{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.'+sym]}));}catch(e){} };
-      ws.onmessage=e=>{ try{ const m=JSON.parse(e.data); if(m.topic&&m.data){ for(const t of m.data){ const p=+t.p,v=+t.v,notn=p*v; if(notn>=_whGetThresh())_whPush('perp',t.S==='Buy'?'buy':'sell',notn,p); } } }catch(x){} };
+      ws.onopen=()=>{ try{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.'+sym,'allLiquidation.'+sym]}));}catch(e){} };
+      ws.onmessage=e=>{ try{ const m=JSON.parse(e.data); if(!m.topic||!m.data)return;
+        if(m.topic.indexOf('publicTrade')===0){ for(const t of m.data){ const p=+t.p,v=+t.v,notn=p*v; if(notn>=_whGetThresh())_whPush('perp',t.S==='Buy'?'buy':'sell',notn,p); } }
+        else if(m.topic.indexOf('allLiquidation')===0){ for(const t of m.data){ const p=+t.p,v=+t.v,notn=p*v; if(notn>=_whGetThresh())_whPush('liq',t.S==='Sell'?'long':'short',notn,p); } }
+      }catch(x){} };
       ws.onclose=()=>{ if(_whWsPerp===ws)_whWsPerp=null; }; _whWsPerp=ws;
     }catch(e){}
     _whRender();
@@ -3644,7 +3652,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _whStop(){ [_whWsSpot,_whWsPerp].forEach(w=>{ if(w){try{w.onclose=null;w.close();}catch(e){}} }); _whWsSpot=null; _whWsPerp=null; _whSym=''; }
   function _whEnsure(){
     ['whaleSess','whaleDemo'].forEach(id=>{ const el=document.getElementById(id); if(!el||el.querySelector('.wh-tape-slot'))return;
-      el.innerHTML='<div class="wh-head">🐋 ЛЕНТА КИТОВ <span class="wh-sub">крупные сделки спот+перп · наблюдение, не сигнал</span></div>'
+      el.innerHTML='<div class="wh-head">🐋 ЛЕНТА КИТОВ <span class="wh-sub">крупные сделки спот+перп + 💥ликвидации · наблюдение, не сигнал</span></div>'
         +'<div class="wh-gauge-slot"></div>'
         +'<div class="wh-ctrl"><span class="wh-clbl">порог</span><input type="range" class="wh-slider" min="300" max="600" step="1" oninput="_whSliderIn(this.value)"><span class="wh-thval"></span><button type="button" class="wh-auto" onclick="_whAutoSet()">авто</button></div>'
         +'<div class="wh-tape wh-tape-slot"></div>';
@@ -3652,15 +3660,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const tv=el.querySelector('.wh-thval'); if(tv)tv.textContent=_whFmt(_whGetThresh());
     });
   }
-  function _whGauge(){ const cut=Date.now()-60000; let b=0,s=0,bn=0,sn=0; for(let i=_whFeed.length-1;i>=0;i--){ const e=_whFeed[i]; if(e.t<cut)break; if(e.side==='buy'){b+=e.n;bn++;}else{s+=e.n;sn++;} } return {b,s,bn,sn,tot:b+s}; }
+  function _whGauge(){ const cut=Date.now()-60000; let b=0,s=0,bn=0,sn=0,lL=0,lS=0,ln=0; for(let i=_whFeed.length-1;i>=0;i--){ const e=_whFeed[i]; if(e.t<cut)break; if(e.mkt==='liq'){ if(e.side==='long')lL+=e.n; else lS+=e.n; ln++; } else if(e.side==='buy'){b+=e.n;bn++;} else {s+=e.n;sn++;} } return {b,s,bn,sn,tot:b+s,lL,lS,ln}; }
   function _whRender(){
     _whEnsure();
     const g=_whGauge(), th=_whGetThresh(), pct=g.tot>0?Math.round(g.b/g.tot*100):50;
+    const liqHtml=(g.lL+g.lS>0)?('<div class="wh-liqline"><span class="wh-liq-long">💥 лонги '+_whFmt(g.lL)+'</span><span class="wh-mid">ликв 60с</span><span class="wh-liq-short">шорты '+_whFmt(g.lS)+' 💥</span></div>'):'';
     const gaugeHtml='<div class="wh-gbar"><span class="wh-gbuy" style="width:'+pct+'%"></span></div>'
-      +'<div class="wh-glbl"><span class="wh-buy">▲ '+_whFmt(g.b)+' ('+g.bn+')</span><span class="wh-mid">киты 60с</span><span class="wh-sell">▼ '+_whFmt(g.s)+' ('+g.sn+')</span></div>';
-    const rows=_whFeed.slice(-14).reverse().map(e=>{
-      const tm=new Date(e.t).toLocaleTimeString('ru-RU');
-      return '<div class="wh-row '+(e.side==='buy'?'wh-buy':'wh-sell')+'"><span class="wh-t">'+tm+'</span><span class="wh-mkt wh-'+e.mkt+'">'+(e.mkt==='spot'?'СПОТ':'ПЕРП')+'</span><span class="wh-side">'+(e.side==='buy'?'▲':'▼')+'</span><span class="wh-n">'+_whFmt(e.n)+'</span><span class="wh-px">'+(typeof _rpx==='function'?_rpx(e.px):e.px)+'</span></div>';
+      +'<div class="wh-glbl"><span class="wh-buy">▲ '+_whFmt(g.b)+' ('+g.bn+')</span><span class="wh-mid">киты 60с</span><span class="wh-sell">▼ '+_whFmt(g.s)+' ('+g.sn+')</span></div>'+liqHtml;
+    const rows=_whFeed.slice(-16).reverse().map(e=>{
+      const tm=new Date(e.t).toLocaleTimeString('ru-RU'), px=(typeof _rpx==='function'?_rpx(e.px):e.px);
+      if(e.mkt==='liq'){ const long=e.side==='long';
+        return '<div class="wh-row wh-liq '+(long?'wh-liq-long':'wh-liq-short')+'"><span class="wh-t">'+tm+'</span><span class="wh-mkt wh-liqtag">💥ЛИКВ</span><span class="wh-side">'+(long?'L':'S')+'</span><span class="wh-n">'+_whFmt(e.n)+'</span><span class="wh-px">'+px+'</span></div>';
+      }
+      return '<div class="wh-row '+(e.side==='buy'?'wh-buy':'wh-sell')+'"><span class="wh-t">'+tm+'</span><span class="wh-mkt wh-'+e.mkt+'">'+(e.mkt==='spot'?'СПОТ':'ПЕРП')+'</span><span class="wh-side">'+(e.side==='buy'?'▲':'▼')+'</span><span class="wh-n">'+_whFmt(e.n)+'</span><span class="wh-px">'+px+'</span></div>';
     }).join('') || '<div class="wh-empty">ждём крупных принтов ≥ '+_whFmt(th)+'…</div>';
     ['whaleSess','whaleDemo'].forEach(id=>{ const el=document.getElementById(id); if(!el)return; const gs=el.querySelector('.wh-gauge-slot'),ts=el.querySelector('.wh-tape-slot'),tv=el.querySelector('.wh-thval'); if(gs)gs.innerHTML=gaugeHtml; if(ts)ts.innerHTML=rows; if(tv)tv.textContent=_whFmt(th); });
   }
@@ -3775,8 +3787,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{ if(typeof _whFeed!=='undefined'&&_whFeed.length){ const nowT=Date.now();
       for(let i=_whFeed.length-1;i>=0;i--){ const e=_whFeed[i]; const age=nowT-e.t; if(age>30000)break;
         const y=Math.max(3,Math.min(H-3,toY(e.px))), x=W-6-(age/30000)*(W*0.42), r=Math.min(6,2+Math.log10(Math.max(1,e.n/10000))*1.5);
-        ctx.globalAlpha=Math.max(0.15,1-age/30000); ctx.fillStyle=e.side==='buy'?'#1D9E75':'#E24B4A';
-        ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+        ctx.globalAlpha=Math.max(0.15,1-age/30000);
+        if(e.mkt==='liq'){ ctx.strokeStyle='#ff7a18'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(x,y,r+1,0,7); ctx.stroke(); }
+        else { ctx.fillStyle=e.side==='buy'?'#1D9E75':'#E24B4A'; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); }
       } ctx.globalAlpha=1;
     } }catch(e){}
     const cur=hh[n-1], first=hh[0], pct=first?((cur-first)/first*100):0;
