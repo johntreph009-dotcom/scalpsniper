@@ -5346,7 +5346,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!bn){ const lc=document.getElementById('liveCard'); if(lc&&lc.parentNode){ bn=document.createElement('div'); bn.id='cfBanner'; bn.className='cf-banner'; lc.parentNode.insertBefore(bn,lc); } }
     const danger=c.alarm_level==='CRITICAL', high=c.alarm_level==='HIGH', caution=danger||high||c.squeeze.active;
     if(bn){ bn.style.display=(danger||high)?'block':'none'; bn.textContent=(danger?'⛔ CRITICAL: ':'⚠ HIGH: ')+(c.directive||''); }
-    ['dlLong','dlShort','lcPosBtn'].forEach(id=>{ const el=document.getElementById(id); if(el)el.classList.toggle('cf-warn',caution); });
+    ['dlLong','dlShort','lcPosBtn','psLong','psShort'].forEach(id=>{ const el=document.getElementById(id); if(el)el.classList.toggle('cf-warn',caution); });
     if(c.alarm_level!==_cfLastAlarm){
       if(typeof _proc==='function'&&(high||danger))_proc('CF-контекст: '+c.alarm_level+' · '+c.scenario+' — '+c.directive,danger?'pr-dn':'pr-warn');
       _cfLastAlarm=c.alarm_level;
