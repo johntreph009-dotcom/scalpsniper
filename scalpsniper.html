@@ -4061,6 +4061,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     document.querySelectorAll('.mc-tfbtn').forEach(b=>b.classList.toggle('active',b.dataset.tf===tf));
   }
   async function _chartRefresh(){
+    if(document.hidden)return;   // не перерисовываем график в фоне
     const raw=document.getElementById('ticker').value.trim();
     const tf=document.getElementById('tf').value||'5m';
     const st=document.getElementById('mcStatus');
@@ -4585,6 +4586,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     return {px, n:kept.length, total:pts.length, src:kept.map(p=>p[0]), drop:pts.filter(p=>!kept.includes(p)).map(p=>p[0])};
   }
   async function fetchLivePx(){
+    if(document.hidden)return;   // вкладка скрыта — не жжём сеть/батарею (3 запроса на композит); обновимся при возврате
     const raw=document.getElementById('ticker').value.trim();
     if(!raw){_setLiveInd('○','var(--text-faint)');return;}
     const sym=_symFromTicker(raw);
@@ -5349,6 +5351,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     el.innerHTML=_procArr.map(e=>'<div class="proc-row '+e.cls+'"><span class="proc-t">'+new Date(e.t).toLocaleTimeString('ru-RU')+'</span><span>'+e.txt+'</span></div>').join('');
   }
   async function _bgTick(){
+    if(document.hidden)return;
     try{
       const sym=document.getElementById('dlSym')?.textContent||'BTCUSDT';
       const j=async u=>{const r=await fetch(u,{cache:'no-store'});if(!r.ok)throw 0;return r.json();};
@@ -5376,6 +5379,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   const _NEG=/hack|exploit|ban|lawsuit|sues|liquidat|crash|dump|outage|halt|bankrupt|charges|fraud|взлом|запрет|иск|ликвидац|обвал|падени|банкрот|мошенн|санкци|блокир|атак/i;
   const _POS=/etf|approv|listing|partnership|adoption|rally|record high|integrat|launch|upgrade|accumulat|одобр|листинг|партн[её]рств|рост|рекорд|запуск|интеграц|внедрен|принял/i;
   async function _newsTick(){
+    if(document.hidden)return;
     try{
       // новости через наш Cloudflare-воркер (CryptoPanic RSS + резерв), CORS открыт для терминала
       const r=await fetch('https://scalpsniper-ai-proxy.johntreph009.workers.dev/api/news',{cache:'no-store'});
@@ -5402,6 +5406,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // в директиву риска. Клиент только отображает: бейджи, баннер, подсветка входов. Наблюдение, не блокировка.
   let _cfCtx=null,_cfLastAlarm=null;
   async function pollContextEngine(){
+    if(document.hidden)return;
     try{
       const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'BTCUSDT';
       const r=await fetch('https://scalpsniper-ai-proxy.johntreph009.workers.dev/api/context?symbol='+sym,{cache:'no-store'});
@@ -5434,6 +5439,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }
   }
   pollContextEngine(); setInterval(pollContextEngine,60e3);
+  // ── Тир 2: вернулись на вкладку → немедленный refresh (интервалы живы, но пропускали тики при document.hidden) ──
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden)return;
+    try{ if(typeof fetchLivePx==='function')fetchLivePx(); }catch(e){}
+    try{ if(typeof pollContextEngine==='function')pollContextEngine(); }catch(e){}
+    try{ if(typeof _bgTick==='function')_bgTick(); }catch(e){}
+    try{ if(typeof _chartRefresh==='function')_chartRefresh(); }catch(e){}
+  });
 
   // ── Дрилл: 5-минутная сессия с итоговой карточкой фактов ──
   const DLD_KEY='msa_demo_drills_v1';
