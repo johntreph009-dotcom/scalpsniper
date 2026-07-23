@@ -569,7 +569,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .t-side .hint-tip{left:auto;right:0}
   .hint-tip::after{content:'';position:absolute;top:100%;left:10px;border:5px solid transparent;border-top-color:var(--panel-2)}
   .hint-wrap:hover .hint-tip,.hint-wrap.open .hint-tip{opacity:1}
-  @media(max-width:500px){.hint-tip{left:auto;right:0;max-width:min(220px,calc(100vw - 24px))}.hint-tip::after{left:auto;right:10px}.ticker-dd{max-width:calc(100vw - 18px)}}
+  @media(max-width:500px){.hint-tip{left:auto;right:0;max-width:min(220px,calc(100vw - 24px))}.hint-tip::after{left:auto;right:10px}.ticker-dd{max-width:calc(100vw - 18px);min-width:0}.sess-tkwrap .ticker-dd,.demo-tkwrap .ticker-dd{left:auto;right:0;width:min(86vw,300px)}.tdd-sort{padding:7px 10px;font-size:9px}.ticker-dd-item{padding:9px 10px}}
   /* умная сторона тултипа — ставится JS при открытии по позиции иконки */
   .hint-wrap.tip-l .hint-tip{left:0;right:auto}
   .hint-wrap.tip-l .hint-tip::after{left:10px;right:auto}
@@ -2011,8 +2011,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     return -1;
   }
   function posSize(z){
-    const dep=parseFloat(document.getElementById('deposit').value);
-    const risk=parseFloat(document.getElementById('depRisk').value);
+    const dep=_pf(document.getElementById('deposit').value);
+    const risk=_pf(document.getElementById('depRisk').value);
     if(!dep||!risk||!z.stop||!z.px)return null;
     const perUnit=Math.abs(z.px-z.stop);
     if(perUnit<=0)return null;
@@ -2144,6 +2144,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     renderZones();recalc();renderReadinessScore();updateStreakBadge();
   }
   function escapeHtml(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+  // парс числа с русской запятой-разделителем («0,5» → 0.5); чистим пробелы-тысячи
+  function _pf(v){ if(v==null)return NaN; return parseFloat(String(v).trim().replace(/\s/g,'').replace(',','.')); }
   function updateLive(){
     updateStreakBadge();renderLadder();
     const lp=parseFloat(document.getElementById('livePrice').value);
@@ -2241,8 +2243,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   // ---- risk calc ----
   function recalc(){
-    const entry=parseFloat(document.getElementById('c_entry').value),stop=parseFloat(document.getElementById('c_stop').value),
-      lev=parseFloat(document.getElementById('lev').value)||1,wr=parseFloat(document.getElementById('c_wr').value),risk=parseFloat(document.getElementById('c_risk').value);
+    const entry=_pf(document.getElementById('c_entry').value),stop=_pf(document.getElementById('c_stop').value),
+      lev=_pf(document.getElementById('lev').value)||1,wr=_pf(document.getElementById('c_wr').value),risk=_pf(document.getElementById('c_risk').value);
     const mEl=document.getElementById('o_margin'),dEl=document.getElementById('o_dist'),rEl=document.getElementById('o_ror');
     if(entry>0&&stop>0){const dist=Math.abs(entry-stop)/entry*100,margin=dist*lev;
       dEl.textContent=dist.toFixed(3)+'%';mEl.textContent=margin.toFixed(2)+'%';mEl.className='sv '+(margin>20?'danger':margin>8?'warn':'green');}
@@ -3444,7 +3446,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(items.length)scenHtml='<div class="ai-scen">'+items.map(it=>'<div class="ai-scen-item">'+escapeHtml(it)+'</div>').join('')+'</div>';
     }
     const modeHtml=modeM?'<div class="ai-mode">режим-подсказка: <b>'+escapeHtml(modeM[1].trim())+'</b></div>':'';
-    box.innerHTML='<div class="ai-sit-head">📊 Анализ ситуации'+(prioLbl?' · приоритет <b>'+prioLbl+'</b>':'')+'</div>'+modeHtml+(sit?'<div class="ai-sit-body">'+escapeHtml(sit)+'</div>':'')+scenHtml;
+    box.innerHTML='<div class="ai-sit-head">📊 Анализ ситуации'+(prioLbl?' · приоритет <b>'+escapeHtml(prioLbl)+'</b>':'')+'</div>'+modeHtml+(sit?'<div class="ai-sit-body">'+escapeHtml(sit)+'</div>':'')+scenHtml;
     box.style.display='block';
   }
   // ── Mini chart module ──
@@ -4508,6 +4510,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   const _DEFAULT_TICKERS=['BTC','ETH','BNB','SOL','XRP','DOGE','ADA','TRX','AVAX','TON','SHIB','LINK','DOT','LTC','BCH','NEAR','APT','SUI','INJ','WLD','ARB','OP','ATOM','HBAR','PEPE','ONDO','FIL','ICP','VET','BONK'];
   // тач-устройство: не фокусируем инпут при открытии списка кнопкой ▾, чтобы клавиатура не перекрывала список
   const _isTouch=(window.matchMedia&&matchMedia('(pointer:coarse)').matches)||('ontouchstart' in window);
+  // на тач: тикер-поля readonly — тап открывает список без вызова клавиатуры (выбор из списка, не ввод)
+  if(_isTouch){
+    [['ticker',()=>_openTickerDD()],['sessTicker',()=>_openSessDD()],['demoTicker',()=>_openDemoDD()]].forEach(([id,open])=>{
+      const el=document.getElementById(id); if(el){ el.setAttribute('readonly',''); el.addEventListener('click',open); }
+    });
+  }
   let _tickerSyms=[];
   function _setTicker(sym){
     const el=document.getElementById('ticker');
