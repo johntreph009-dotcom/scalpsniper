@@ -609,6 +609,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   /* CF Context Engine: баннер тревоги + подсветка кнопок входа */
   .cf-banner{display:none;margin:8px 0;padding:9px 12px;border:1px solid var(--danger);border-radius:8px;background:rgba(240,69,74,.08);color:var(--danger);font-size:11px;font-weight:700;line-height:1.5}
   .cf-warn{outline:1px solid var(--warn)!important;box-shadow:0 0 10px rgba(210,153,34,.3)!important}
+  .day-lock{outline:2px solid var(--danger)!important;box-shadow:0 0 12px rgba(240,69,74,.45)!important;opacity:.85}
   /* ===== close zone button (session) ===== */
   .zone-close{background:none;border:1px solid var(--green-dim);color:var(--green);cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;padding:5px 10px;border-radius:5px;white-space:nowrap;letter-spacing:.5px}
   .zone-close:hover{background:rgba(63,185,80,.12);border-color:var(--green)}
@@ -1520,6 +1521,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   </div>
 </div>
 
+<div class="tilt-overlay hide" id="dayLockOverlay">
+  <div class="tilt-box">
+    <div class="tilt-ico">⛔</div>
+    <div class="tilt-msg" id="dayLockMsg">Дневной лимит достигнут</div>
+    <div class="tilt-sub" id="dayLockSub">Стоп на сегодня — план исполнен, риск закрыт. Рынок будет и завтра.</div>
+    <button class="mok" onclick="closeDayLock()" style="width:100%">Понятно, закончил на сегодня</button>
+    <button class="tilt-skip" onclick="skipDayLock()">Продолжить вопреки лимиту (не рекомендуется)</button>
+  </div>
+</div>
+
 <div id="posFloat" class="pos-float hide">
   <div class="pf-head" id="pfHead">
     <span class="pf-dot"></span>
@@ -1533,6 +1544,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <script>
   let selProto='VALENTINI', zones=[], phase='prep';
   let zStars=2, pendingGrade=null, consecutiveLosses=0, tiltInterval=null;
+  let _dayLockSkip=false, _dayLockKey='';
   const KEY='msa_zones_v2', JKEY='msa_journal_v1';
   let journal=[], closeZoneIdx=-1, pendingOutcome=null;
   // ---- persistence ----
@@ -2908,6 +2920,41 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       chips+=`<span class="gchip ${cls}">Сделок ${todayN} / ${maxTrd}</span>`;
     }
     guards.innerHTML=chips;
+    // ── активный дневной стоп: лимит убытка ИЛИ лимит сделок достигнут → интервенция ──
+    const lossHit=maxLoss>0 && todayPnl<=-maxLoss;
+    const trdHit=maxTrd>0 && todayN>=maxTrd;
+    _applyDayLock((lossHit||trdHit)&&!_dayLockSkip, {lossHit,trdHit,todayPnl,maxLoss,todayN,maxTrd});
+  }
+  // ── Дневной стоп-лимит: не индикатор, а интервенция (одноразовый оверлей + баннер + блок-подсветка входа) ──
+  function _applyDayLock(locked, info){
+    ['psLong','psShort','dlLong','dlShort','lcPosBtn'].forEach(id=>{ const el=document.getElementById(id); if(el)el.classList.toggle('day-lock',locked); });
+    let bn=document.getElementById('dayLockBanner');
+    if(locked){
+      if(!bn){ const lc=document.getElementById('liveCard'); if(lc&&lc.parentNode){ bn=document.createElement('div'); bn.id='dayLockBanner'; bn.className='cf-banner'; lc.parentNode.insertBefore(bn,lc); } }
+      if(bn){ bn.style.display='block'; bn.textContent=info.lossHit
+        ? '⛔ Лимит убытка дня: P&L '+info.todayPnl.toFixed(1)+' / −'+info.maxLoss+' — стоп на сегодня'
+        : '⛔ Лимит сделок дня: '+info.todayN+' / '+info.maxTrd+' — стоп на сегодня'; }
+      const key=info.lossHit?'loss':'trd';
+      if(key!==_dayLockKey){ _dayLockKey=key; _showDayLock(info); }
+    } else {
+      if(bn)bn.style.display='none';
+      _dayLockKey='';
+    }
+  }
+  function _showDayLock(info){
+    const ov=document.getElementById('dayLockOverlay'); if(!ov)return;
+    const msg=document.getElementById('dayLockMsg'), sub=document.getElementById('dayLockSub');
+    if(msg)msg.textContent=info.lossHit?'Дневной лимит убытка достигнут':'Лимит сделок на день достигнут';
+    if(sub)sub.textContent=info.lossHit
+      ? 'Стоп на сегодня. Дневной стоп существует, чтобы один плохой день не стёр неделю дисциплины.'
+      : 'План на день исполнен. Больше сделок — больше шума и тильта, а не прибыли.';
+    ov.classList.remove('hide');
+  }
+  function closeDayLock(){ const ov=document.getElementById('dayLockOverlay'); if(ov)ov.classList.add('hide'); }
+  function skipDayLock(){
+    if(!confirm('Продолжить после дневного лимита? Дневной стоп существует, чтобы один плохой день не стёр неделю дисциплины.'))return;
+    _dayLockSkip=true; closeDayLock();
+    if(typeof updateSessionCtx==='function')updateSessionCtx();
   }
 
   // ── grade ──
