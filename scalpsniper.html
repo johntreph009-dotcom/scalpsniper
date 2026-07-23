@@ -615,6 +615,28 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .day-lock{outline:2px solid var(--danger)!important;box-shadow:0 0 12px rgba(240,69,74,.45)!important;opacity:.85}
   .pos-risk{font-size:11px;font-family:'JetBrains Mono',monospace;margin:2px 0 10px;line-height:1.4;color:var(--text-dim);min-height:14px}
   .pos-risk.ok{color:var(--green)} .pos-risk.warn{color:var(--warn)} .pos-risk.danger{color:var(--danger);font-weight:700}
+  /* ── Лента китов ── */
+  .whale-panel{margin:8px 0;border:1px solid var(--line);border-radius:8px;background:rgba(255,122,24,.03);padding:8px 10px}
+  .wh-head{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;letter-spacing:.5px;color:var(--accent);display:flex;align-items:baseline;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+  .wh-sub{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:400;color:var(--text-faint);letter-spacing:0}
+  .wh-gbar{height:7px;border-radius:4px;background:rgba(226,75,74,.35);overflow:hidden;margin-bottom:3px}
+  .wh-gbuy{display:block;height:100%;background:#1D9E75;transition:width .3s}
+  .wh-glbl{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:9.5px;margin-bottom:7px}
+  .wh-glbl .wh-buy{color:#5DCAA5}.wh-glbl .wh-sell{color:#F09595}.wh-mid{color:var(--text-faint)}
+  .wh-ctrl{display:flex;align-items:center;gap:7px;margin-bottom:7px;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-dim)}
+  .wh-slider{flex:1;accent-color:var(--accent);height:3px;min-width:60px}
+  .wh-thval{color:var(--accent);min-width:44px;text-align:right;font-weight:700}
+  .wh-auto{background:transparent;border:1px solid var(--line);color:var(--text-dim);border-radius:4px;font-size:9px;padding:2px 7px;cursor:pointer;font-family:inherit}
+  .wh-auto:hover{border-color:var(--accent);color:var(--accent)}
+  .wh-tape{max-height:154px;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:10px}
+  .wh-row{display:flex;align-items:center;gap:6px;padding:2px 0;line-height:1.45;white-space:nowrap}
+  .wh-row .wh-t{color:var(--text-faint);font-size:9px}
+  .wh-mkt{font-size:8px;padding:0 4px;border-radius:3px;border:1px solid var(--line)}
+  .wh-spot{color:#85B7EB;border-color:#185FA5}.wh-perp{color:#C6A15B;border-color:#8a6d2e}
+  .wh-side{width:9px;text-align:center}
+  .wh-buy .wh-side,.wh-buy .wh-n{color:#5DCAA5}.wh-sell .wh-side,.wh-sell .wh-n{color:#F09595}
+  .wh-n{font-weight:700;margin-left:auto}.wh-px{color:var(--text-dim);min-width:58px;text-align:right}
+  .wh-empty{color:var(--text-faint);font-size:9.5px;padding:6px 0}
   /* ===== close zone button (session) ===== */
   .zone-close{background:none;border:1px solid var(--green-dim);color:var(--green);cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;padding:5px 10px;border-radius:5px;white-space:nowrap;letter-spacing:.5px}
   .zone-close:hover{background:rgba(63,185,80,.12);border-color:var(--green)}
@@ -1190,6 +1212,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <span id="streakBadge" class="streak-badge" style="display:none"></span>
     </div>
     <div class="sess-walls" id="sessWalls" title="Сводная карта ликвидности: ближайшие концентрации в книге (агрегация нескольких площадок в долях) и дистанции до них"></div>
+    <div class="whale-panel" id="whaleSess"></div>
     <div class="session-ctx" id="sessionCtx"><div class="sc-bias" id="scBias"></div><div class="sc-guards" id="scGuards"></div></div>
     <div class="sess-pchart">
       <div class="dl-price" onclick="_sessPcToggle()" style="cursor:pointer" title="Свернуть/развернуть график цены"><span class="dl-price-now" id="sessPxNow">—</span><span class="dl-price-chg" id="sessPxChg"></span><span class="dl-price-lbl">цена · live <span id="sessPcChev">▾</span></span></div>
@@ -1417,6 +1440,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div id="mktBg" class="gs-panel" style="display:none"></div>
     <div class="dl-canvas-lbl" style="margin-top:8px">ПРОЦЕССИНГ ДВИЖКА <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Живой лог решений: режимы диспетчера, входы/выходы стратегий, итоги сетки, сдвиги толпы/китов, новостные триггеры · наблюдение, не сигналы</span></span></div>
     <div id="procFeed" class="proc-feed"><span class="gs-note">событий пока нет — запусти автопилот</span></div>
+    <div class="whale-panel" id="whaleDemo"></div>
     <div class="dl-swipes">
       <div class="dl-swipe up" id="dlLong">↑ свайп / тап — вирт-лонг</div>
       <div class="dl-swipe dn" id="dlShort">↓ свайп / тап — вирт-шорт</div>
@@ -1780,6 +1804,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(p==='demo')document.getElementById('phaseDesc').textContent='ТРЕНАЖЕР — реальный стакан и поток сделок Binance по выбранному тикеру. Модель считает гипотезу, сделки виртуальные. Решения и реальный вход — за тобой.';
     if(p==='demo'){ if(typeof _demoStart==='function')_demoStart(); } else { if(typeof _demoStop==='function')_demoStop(); }
     if(p==='live'){ if(typeof _mxWsStart==='function')_mxWsStart(); } else { if(typeof _mxWsStop==='function')_mxWsStop(); }
+    if(p==='live'||p==='demo'){ if(typeof _whStart==='function')_whStart(_symFromTicker(_tkKey())); } else { if(typeof _whStop==='function')_whStop(); }
     if(p==='live'){
       const lpEl=document.getElementById('livePrice');
       const prepPx=document.getElementById('price').value;
@@ -3586,6 +3611,59 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(_mxWs){try{_mxWs.onclose=null;_mxWs.close();}catch(e){}_mxWs=null;}
     _mxBook=null; _mxWsSym=''; _mxWallAge={};
   }
+  /* ══════════ ЛЕНТА КИТОВ: крупные сделки спот (Binance aggTrade) + перп (Bybit publicTrade) ══════════ */
+  /* Наблюдение потока крупных принтов, не сигнал. Нотионал = цена×объём (обе биржи в базовых единицах). */
+  let _whWsSpot=null,_whWsPerp=null,_whSym='',_whFeed=[],_whThresh=0,_whRAF=0;
+  function _whAutoThresh(px){ px=+px||0; return px>=1000?75000:px>=10?30000:px>0?15000:50000; }
+  function _whGetThresh(){ if(_whThresh>0)return _whThresh; try{const v=+localStorage.getItem('msa_whale_thresh_v1'); if(v>0){_whThresh=v; return v;}}catch(e){} _whThresh=_whAutoThresh(typeof _livePx==='function'&&_livePx()); return _whThresh; }
+  function _whFmt(n){ n=+n||0; return n>=1e6?('$'+(n/1e6).toFixed(2)+'M'):n>=1e3?('$'+(n/1e3).toFixed(0)+'k'):('$'+Math.round(n)); }
+  function _whSetThresh(v){ v=Math.max(1000,Math.round(+v||0)); _whThresh=v; try{localStorage.setItem('msa_whale_thresh_v1',String(v));}catch(e){} document.querySelectorAll('.wh-thval').forEach(e=>e.textContent=_whFmt(v)); }
+  function _whSliderIn(v){ _whSetThresh(Math.pow(10,(+v)/100)); }
+  function _whAutoSet(){ const v=_whAutoThresh(typeof _livePx==='function'&&_livePx()); _whSetThresh(v); document.querySelectorAll('.wh-slider').forEach(s=>{s.value=Math.round(Math.log10(v)*100);}); }
+  function _whPush(mkt,side,notional,px){
+    _whFeed.push({t:Date.now(),mkt,side,n:notional,px:+px});
+    const cut=Date.now()-90000; while(_whFeed.length&&_whFeed[0].t<cut)_whFeed.shift();
+    if(_whFeed.length>300)_whFeed.splice(0,_whFeed.length-300);
+    if(!_whRAF){ _whRAF=requestAnimationFrame(()=>{ _whRAF=0; _whRender(); if(phase==='live'&&typeof _sessDrawPrice==='function')try{_sessDrawPrice();}catch(e){} }); }
+  }
+  function _whStart(sym){
+    sym=(sym||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase(); if(!sym)return;
+    if(_whSym===sym&&(_whWsSpot||_whWsPerp))return;
+    _whStop(); _whSym=sym; _whFeed=[]; _whEnsure();
+    try{ const ws=new WebSocket('wss://stream.binance.com:9443/ws/'+sym.toLowerCase()+'@aggTrade');
+      ws.onmessage=e=>{ try{ const d=JSON.parse(e.data); const p=+d.p,q=+d.q,notn=p*q; if(notn>=_whGetThresh())_whPush('spot',d.m?'sell':'buy',notn,p); }catch(x){} };
+      ws.onclose=()=>{ if(_whWsSpot===ws)_whWsSpot=null; }; _whWsSpot=ws;
+    }catch(e){}
+    try{ const ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');
+      ws.onopen=()=>{ try{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.'+sym]}));}catch(e){} };
+      ws.onmessage=e=>{ try{ const m=JSON.parse(e.data); if(m.topic&&m.data){ for(const t of m.data){ const p=+t.p,v=+t.v,notn=p*v; if(notn>=_whGetThresh())_whPush('perp',t.S==='Buy'?'buy':'sell',notn,p); } } }catch(x){} };
+      ws.onclose=()=>{ if(_whWsPerp===ws)_whWsPerp=null; }; _whWsPerp=ws;
+    }catch(e){}
+    _whRender();
+  }
+  function _whStop(){ [_whWsSpot,_whWsPerp].forEach(w=>{ if(w){try{w.onclose=null;w.close();}catch(e){}} }); _whWsSpot=null; _whWsPerp=null; _whSym=''; }
+  function _whEnsure(){
+    ['whaleSess','whaleDemo'].forEach(id=>{ const el=document.getElementById(id); if(!el||el.querySelector('.wh-tape-slot'))return;
+      el.innerHTML='<div class="wh-head">🐋 ЛЕНТА КИТОВ <span class="wh-sub">крупные сделки спот+перп · наблюдение, не сигнал</span></div>'
+        +'<div class="wh-gauge-slot"></div>'
+        +'<div class="wh-ctrl"><span class="wh-clbl">порог</span><input type="range" class="wh-slider" min="300" max="600" step="1" oninput="_whSliderIn(this.value)"><span class="wh-thval"></span><button type="button" class="wh-auto" onclick="_whAutoSet()">авто</button></div>'
+        +'<div class="wh-tape wh-tape-slot"></div>';
+      const s=el.querySelector('.wh-slider'); if(s)s.value=Math.round(Math.log10(_whGetThresh())*100);
+      const tv=el.querySelector('.wh-thval'); if(tv)tv.textContent=_whFmt(_whGetThresh());
+    });
+  }
+  function _whGauge(){ const cut=Date.now()-60000; let b=0,s=0,bn=0,sn=0; for(let i=_whFeed.length-1;i>=0;i--){ const e=_whFeed[i]; if(e.t<cut)break; if(e.side==='buy'){b+=e.n;bn++;}else{s+=e.n;sn++;} } return {b,s,bn,sn,tot:b+s}; }
+  function _whRender(){
+    _whEnsure();
+    const g=_whGauge(), th=_whGetThresh(), pct=g.tot>0?Math.round(g.b/g.tot*100):50;
+    const gaugeHtml='<div class="wh-gbar"><span class="wh-gbuy" style="width:'+pct+'%"></span></div>'
+      +'<div class="wh-glbl"><span class="wh-buy">▲ '+_whFmt(g.b)+' ('+g.bn+')</span><span class="wh-mid">киты 60с</span><span class="wh-sell">▼ '+_whFmt(g.s)+' ('+g.sn+')</span></div>';
+    const rows=_whFeed.slice(-14).reverse().map(e=>{
+      const tm=new Date(e.t).toLocaleTimeString('ru-RU');
+      return '<div class="wh-row '+(e.side==='buy'?'wh-buy':'wh-sell')+'"><span class="wh-t">'+tm+'</span><span class="wh-mkt wh-'+e.mkt+'">'+(e.mkt==='spot'?'СПОТ':'ПЕРП')+'</span><span class="wh-side">'+(e.side==='buy'?'▲':'▼')+'</span><span class="wh-n">'+_whFmt(e.n)+'</span><span class="wh-px">'+(typeof _rpx==='function'?_rpx(e.px):e.px)+'</span></div>';
+    }).join('') || '<div class="wh-empty">ждём крупных принтов ≥ '+_whFmt(th)+'…</div>';
+    ['whaleSess','whaleDemo'].forEach(id=>{ const el=document.getElementById(id); if(!el)return; const gs=el.querySelector('.wh-gauge-slot'),ts=el.querySelector('.wh-tape-slot'),tv=el.querySelector('.wh-thval'); if(gs)gs.innerHTML=gaugeHtml; if(ts)ts.innerHTML=rows; if(tv)tv.textContent=_whFmt(th); });
+  }
   // ── сводная карта ликвидности в Сессии: агрегация книг (перп WS + спот) в ДОЛЯХ — единицы и бренды бирж не смешиваются и не светятся ──
   let _swLast=0,_swBusy=false;
   async function _sessWallsTick(){
@@ -3693,6 +3771,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     ctx.fillStyle=g; ctx.fill(area);
     ctx.strokeStyle=col; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke(path);
     ctx.fillStyle=col; ctx.beginPath(); ctx.arc((n-1)*dx,toY(hh[n-1]),3.2,0,7); ctx.fill();
+    // маркеры крупных сделок (лента китов): точки у правого края на уровне цены сделки, свежие ярче
+    try{ if(typeof _whFeed!=='undefined'&&_whFeed.length){ const nowT=Date.now();
+      for(let i=_whFeed.length-1;i>=0;i--){ const e=_whFeed[i]; const age=nowT-e.t; if(age>30000)break;
+        const y=Math.max(3,Math.min(H-3,toY(e.px))), x=W-6-(age/30000)*(W*0.42), r=Math.min(6,2+Math.log10(Math.max(1,e.n/10000))*1.5);
+        ctx.globalAlpha=Math.max(0.15,1-age/30000); ctx.fillStyle=e.side==='buy'?'#1D9E75':'#E24B4A';
+        ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+      } ctx.globalAlpha=1;
+    } }catch(e){}
     const cur=hh[n-1], first=hh[0], pct=first?((cur-first)/first*100):0;
     if(now)now.textContent=fmt(cur);
     if(chg){ chg.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%'; chg.className='dl-price-chg '+(pct>=0?'up':'dn'); }
@@ -4651,6 +4737,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(typeof _markActiveChip==='function')_markActiveChip();
     renderPosition(); _syncSessTicker();
     if(phase==='live'&&typeof _mxWsStart==='function'){_swLast=0;_mxWsStart();}
+    if(phase==='live'&&typeof _whStart==='function')_whStart(_symFromTicker(_tkKey()));
   }
   function _syncSessTicker(){
     const sel=document.getElementById('sessTicker'); if(!sel)return;
@@ -4692,6 +4779,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const ss=document.getElementById('dlSym'); if(ss)ss.textContent=(typeof _symFromTicker==='function')?_symFromTicker(tk):tk;
     if(typeof _syncSessTicker==='function')_syncSessTicker();
     if(_dlRunning){ _demoStop(); _demoStart(); }
+    if(phase==='demo'&&typeof _whStart==='function')_whStart(_symFromTicker(tk));
   }
   document.addEventListener('click',e=>{ if(!e.target.closest('#demoTkWrap'))_closeDemoDD(); });
   function _markActiveChip(){
@@ -5481,11 +5569,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   pollContextEngine(); setInterval(pollContextEngine,60e3);
   // ── Тир 2: вернулись на вкладку → немедленный refresh (интервалы живы, но пропускали тики при document.hidden) ──
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden)return;
+    if(document.hidden){ if(typeof _whStop==='function')_whStop(); return; }
     try{ if(typeof fetchLivePx==='function')fetchLivePx(); }catch(e){}
     try{ if(typeof pollContextEngine==='function')pollContextEngine(); }catch(e){}
     try{ if(typeof _bgTick==='function')_bgTick(); }catch(e){}
     try{ if(typeof _chartRefresh==='function')_chartRefresh(); }catch(e){}
+    try{ if((phase==='live'||phase==='demo')&&typeof _whStart==='function')_whStart(_symFromTicker(_tkKey())); }catch(e){}
   });
 
   // ── Дрилл: 5-минутная сессия с итоговой карточкой фактов ──
