@@ -2,6 +2,11 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
+<!-- ═══ БЕЗОПАСНОСТЬ: CSP (Шаг 1). Приложение статичное (GitHub Pages), заголовков нет → политика через meta. ═══
+     script/style-src 'unsafe-inline' ОБЯЗАТЕЛЕН: терминал — один HTML-файл с инлайн-скриптом, ~140 инлайн-обработчиков и @import шрифтов
+     (убрать unsafe-inline = переписать всю событийную модель, что ломает исходную архитектуру). Главная защита здесь — жёсткий
+     connect-src (эксфильтрация только на разрешённые биржи/сервисы), object-src 'none', base-uri/form-action 'self'. worker-src blob: — демо-воркер. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; worker-src 'self' blob:; connect-src 'self' https://api.binance.com https://fapi.binance.com wss://stream.binance.com:9443 https://api.bybit.com wss://stream.bybit.com https://www.okx.com wss://ws.okx.com:8443 https://api.mexc.com wss://contract.mexc.com https://api.coingecko.com https://www.deribit.com https://dpaste.com https://scalpsniper-ai-proxy.johntreph009.workers.dev; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; manifest-src 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5.0">
 <meta name="theme-color" content="#0a0b0d">
 <link rel="manifest" href="manifest.json">
@@ -1352,16 +1357,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <button class="btn" id="syncPushBtn" onclick="syncPush()">⟳ Создать код с этого устройства</button>
       </div>
       <div class="sync-code-wrap" id="syncCodeWrap" style="display:none">
-        <input id="syncCode" readonly onclick="this.select()">
-        <button class="btn sync-copy" id="syncCopyBtn" onclick="copySyncCode()">Копировать</button>
+        <input id="syncCode" readonly onclick="this.select()" placeholder="код (ссылка на зашифрованный блок)">
+        <button class="btn sync-copy" id="syncCopyBtn" onclick="copySyncCode()">Копировать код</button>
+      </div>
+      <div class="sync-code-wrap" id="syncPassWrap" style="display:none">
+        <input id="syncPass" readonly onclick="this.select()" placeholder="пароль (ключ расшифровки)">
+        <button class="btn sync-copy" id="syncPassCopyBtn" onclick="copySyncPass()">Копировать пароль</button>
       </div>
       <div class="sync-row">
-        <input id="syncIn" placeholder="код с другого устройства (XXXX-YYYY)">
-        <button class="btn" onclick="syncPull()">Применить код</button>
+        <input id="syncIn" placeholder="код с другого устройства">
+      </div>
+      <div class="sync-row">
+        <input id="syncPassIn" type="password" placeholder="пароль с другого устройства" autocomplete="off">
+        <button class="btn" onclick="syncPull()">Применить</button>
       </div>
       <div class="sync-status" id="syncStatus"></div>
     </div>
-    <p class="phase-desc" style="margin-top:8px">На первом устройстве — «Создать код», скопируй. На втором — вставь код и «Применить». Передаются зоны, журнал, позиции и настройки в зашифрованном виде (AES-GCM, пароль внутри кода). API-ключ не уезжает на сервер.</p>
+    <p class="phase-desc" style="margin-top:8px">На первом устройстве — «Создать код», получишь <b>две части: код и пароль</b>. Передай их на второе устройство <b>разными каналами</b> (код — в чат, пароль — отдельно/устно): так перехват одной части не раскроет данные. Передаются зоны, журнал, позиции и настройки в зашифрованном виде (AES-GCM); пароль на сервер (dpaste) не уходит — там только шифртекст. API-ключ не синхронизируется.</p>
   </div>
   </div><!-- /t-main -->
 
@@ -1765,23 +1777,30 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const r=await fetch('https://dpaste.com/api/v2/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'content='+encodeURIComponent(enc)+'&syntax=text&expiry_days=7'});
       if(!r.ok)throw new Error('сервис недоступен ('+r.status+')');
       const url=(await r.text()).trim(); const m=url.match(/dpaste\.com\/(\w+)/); if(!m)throw new Error('не получил код');
-      const code=m[1]+'-'+pass;
-      document.getElementById('syncCode').value=code;
+      // РАЗДЕЛЯЕМ транспорт и ключ: код (dpaste- id) и пароль выдаются отдельно и передаются разными каналами
+      document.getElementById('syncCode').value=m[1];
+      document.getElementById('syncPass').value=pass;
       document.getElementById('syncCodeWrap').style.display='flex';
-      _syncStat('Код готов · действует 7 дней · API-ключ НЕ включён','var(--green)');
+      document.getElementById('syncPassWrap').style.display='flex';
+      _syncStat('Готово · код и пароль раздельно · передай разными каналами · 7 дней','var(--green)');
     }catch(e){ _syncStat('Ошибка: '+e.message,'var(--danger)'); }
     finally{ btn.disabled=false; }
   }
-  function copySyncCode(){
-    const i=document.getElementById('syncCode'); if(!i.value)return; i.select();
-    try{navigator.clipboard&&navigator.clipboard.writeText(i.value);}catch(e){document.execCommand&&document.execCommand('copy');}
-    const b=document.getElementById('syncCopyBtn'),t=b.textContent; b.textContent='✓ скопировано'; setTimeout(()=>b.textContent=t,1300);
+  function _copyField(inputId,btnId){
+    const i=document.getElementById(inputId); if(!i||!i.value)return; i.select();
+    try{navigator.clipboard&&navigator.clipboard.writeText(i.value);}catch(e){try{document.execCommand&&document.execCommand('copy');}catch(_){}}
+    const b=document.getElementById(btnId); if(b){const t=b.textContent; b.textContent='✓ скопировано'; setTimeout(()=>b.textContent=t,1300);}
   }
+  function copySyncCode(){ _copyField('syncCode','syncCopyBtn'); }
+  function copySyncPass(){ _copyField('syncPass','syncPassCopyBtn'); }
   async function syncPull(){
-    const raw=(document.getElementById('syncIn').value||'').trim().replace(/\s+/g,'');
-    const parts=raw.split('-'); if(parts.length<2||!parts[0]||!parts[1]){_syncStat('Код неполный (формат XXXX-YYYY)','var(--danger)'); return;}
-    const id=parts[0], pass=parts.slice(1).join('-');
-    if(!confirm('Применение кода заменит зоны, журнал, позиции и настройки на ЭТОМ устройстве данными с другого. API-ключ не затрагивается. Продолжить?'))return;
+    let id=(document.getElementById('syncIn').value||'').trim().replace(/\s+/g,'');
+    let pass=(document.getElementById('syncPassIn').value||'').trim();
+    // обратная совместимость: старый склеенный формат ID-PASS в поле кода
+    if(!pass && id.includes('-')){ const p=id.split('-'); id=p[0]; pass=p.slice(1).join('-'); }
+    id=id.replace(/[^A-Za-z0-9]/g,'');   // dpaste-slug только буквы/цифры — защита от инъекции в URL-путь
+    if(!id||!pass){_syncStat('Нужны и код, и пароль (раздельные поля)','var(--danger)'); return;}
+    if(!confirm('Применение заменит зоны, журнал, позиции и настройки на ЭТОМ устройстве данными с другого. API-ключ не затрагивается. Продолжить?'))return;
     try{
       _syncStat('Загружаю…');
       const g=await fetch('https://dpaste.com/'+id+'.txt'); if(!g.ok)throw new Error('код не найден или истёк ('+g.status+')');
@@ -2003,7 +2022,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const px=cleanNum(parts[0]||'');
       if(!px||!isFinite(px)){skips.push('строка '+(i+1)+': нет цены');return;}
       const kind=normKind(parts[1]);
-      const note=(parts[2]||'').trim();
+      const note=_sanitizeText(parts[2]||'',200).trim();   // санитайзер вставленного текста (XSS defense-in-depth)
       let stop=null;
       if(parts[3]){const s=cleanNum(parts[3]);if(s&&isFinite(s))stop=s;}
       const proto=normProto(parts[4]);
@@ -2202,6 +2221,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function escapeHtml(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
   // парс числа с русской запятой-разделителем («0,5» → 0.5); чистим пробелы-тысячи
   function _pf(v){ if(v==null)return NaN; return parseFloat(String(v).trim().replace(/\s/g,'').replace(',','.')); }
+  // ── Санитайзер текстового ввода (вставка разбора из чата). Вырезает HTML/скрипты/опасные схемы и управляющие
+  //    символы, оставляя читаемый текст. Рендер всё равно проходит через escapeHtml — двойного экранирования нет,
+  //    т.к. санитайзер не вводит HTML-сущности. Defense-in-depth против XSS из вставленного контента. ──
+  function _sanitizeText(s, maxLen){
+    if(s==null)return '';
+    s=String(s)
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,'')   // управляющие символы (кроме \t\n\r)
+      .replace(/<\/?[a-z][\s\S]*?>/gi,'')                              // HTML-теги целиком (<script>, <img …> и т.п.)
+      .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi,'')         // остатки инлайн-обработчиков onXxx=
+      .replace(/\b(javascript|vbscript|data)\s*:/gi,'$1_:');          // нейтрализуем опасные URL-схемы в тексте
+    if(maxLen&&s.length>maxLen)s=s.slice(0,maxLen);
+    return s;
+  }
   function updateLive(){
     updateStreakBadge();renderLadder();
     const lp=parseFloat(document.getElementById('livePrice').value);
@@ -3552,6 +3584,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   //    глубокий разбор — вставкой pipe-блока из чата. _renderSituation ниже остаётся: его кормит парсер вставки.
   // показать блок «Анализ ситуации» из AI-синтеза + извлечь приоритетный протокол
   function _renderSituation(txt){
+    txt=_sanitizeText(txt||'',6000);   // санитайзер вставленного разбора до извлечения/рендера (XSS defense-in-depth)
     const box=document.getElementById('aiSituation');
     const pm=txt&&txt.match(/Приоритет:\s*([^\n]+)/i);
     _aiPriorityProto=pm?normProto(pm[1]):null;
