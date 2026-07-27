@@ -637,6 +637,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .wh-buy .wh-side,.wh-buy .wh-n{color:#5DCAA5}.wh-sell .wh-side,.wh-sell .wh-n{color:#F09595}
   .wh-n{font-weight:700;margin-left:auto}.wh-px{color:var(--text-dim);min-width:58px;text-align:right}
   .wh-empty{color:var(--text-faint);font-size:9.5px;padding:6px 0}
+  /* ── Ликвидации (переиспользуют .wh-* стили, свой ползунок/полоска) ── */
+  .lq-slider{flex:1;accent-color:var(--danger);height:3px;min-width:60px}
+  .lq-thval{color:var(--accent);min-width:44px;text-align:right;font-weight:700}
+  .lq-gbar{height:7px;border-radius:4px;background:rgba(29,158,117,.35);overflow:hidden;margin-bottom:3px}
+  .lq-gfill{display:block;height:100%;background:#E24B4A;transition:width .3s}
+  .lq-coin{color:var(--text);font-weight:700;min-width:44px}
   .wh-liqline{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:9px;margin:-3px 0 7px}
   .wh-liqline .wh-liq-long{color:#F09595}.wh-liqline .wh-liq-short{color:#5DCAA5}
   .wh-liqtag{color:#ff7a18;border-color:#8a4a10}
@@ -1218,6 +1224,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     </div>
     <div class="sess-walls" id="sessWalls" title="Сводная карта ликвидности: ближайшие концентрации в книге (агрегация нескольких площадок в долях) и дистанции до них"></div>
     <div class="whale-panel" id="whaleSess"></div>
+    <div class="whale-panel" id="liqSess"></div>
     <div class="session-ctx" id="sessionCtx"><div class="sc-bias" id="scBias"></div><div class="sc-guards" id="scGuards"></div></div>
     <div class="sess-pchart">
       <div class="dl-price" onclick="_sessPcToggle()" style="cursor:pointer" title="Свернуть/развернуть график цены"><span class="dl-price-now" id="sessPxNow">—</span><span class="dl-price-chg" id="sessPxChg"></span><span class="dl-price-lbl">цена · live <span id="sessPcChev">▾</span></span></div>
@@ -1446,6 +1453,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="dl-canvas-lbl" style="margin-top:8px">ПРОЦЕССИНГ ДВИЖКА <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Живой лог решений: режимы диспетчера, входы/выходы стратегий, итоги сетки, сдвиги толпы/китов, новостные триггеры · наблюдение, не сигналы</span></span></div>
     <div id="procFeed" class="proc-feed"><span class="gs-note">событий пока нет — запусти автопилот</span></div>
     <div class="whale-panel" id="whaleDemo"></div>
+    <div class="whale-panel" id="liqDemo"></div>
     <div class="dl-swipes">
       <div class="dl-swipe up" id="dlLong">↑ свайп / тап — вирт-лонг</div>
       <div class="dl-swipe dn" id="dlShort">↓ свайп / тап — вирт-шорт</div>
@@ -1809,7 +1817,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(p==='demo')document.getElementById('phaseDesc').textContent='ТРЕНАЖЕР — реальный стакан и поток сделок Binance по выбранному тикеру. Модель считает гипотезу, сделки виртуальные. Решения и реальный вход — за тобой.';
     if(p==='demo'){ if(typeof _demoStart==='function')_demoStart(); } else { if(typeof _demoStop==='function')_demoStop(); }
     if(p==='live'){ if(typeof _mxWsStart==='function')_mxWsStart(); } else { if(typeof _mxWsStop==='function')_mxWsStop(); }
-    if(p==='live'||p==='demo'){ if(typeof _whStart==='function')_whStart(_symFromTicker(_tkKey())); } else { if(typeof _whStop==='function')_whStop(); }
+    if(p==='live'||p==='demo'){ if(typeof _whStart==='function')_whStart(_symFromTicker(_tkKey())); if(typeof _liqStart==='function')_liqStart(); } else { if(typeof _whStop==='function')_whStop(); if(typeof _liqStop==='function')_liqStop(); }
     if(p==='live'){
       const lpEl=document.getElementById('livePrice');
       const prepPx=document.getElementById('price').value;
@@ -3675,6 +3683,66 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       return '<div class="wh-row '+(e.side==='buy'?'wh-buy':'wh-sell')+'"><span class="wh-t">'+tm+'</span><span class="wh-mkt wh-'+e.mkt+'">'+(e.mkt==='spot'?'СПОТ':'ПЕРП')+'</span><span class="wh-side">'+(e.side==='buy'?'▲':'▼')+'</span><span class="wh-n">'+_whFmt(e.n)+'</span><span class="wh-px">'+px+'</span></div>';
     }).join('') || '<div class="wh-empty">ждём крупных принтов ≥ '+_whFmt(th)+'…</div>';
     ['whaleSess','whaleDemo'].forEach(id=>{ const el=document.getElementById(id); if(!el)return; const gs=el.querySelector('.wh-gauge-slot'),ts=el.querySelector('.wh-tape-slot'),tv=el.querySelector('.wh-thval'); if(gs)gs.innerHTML=gaugeHtml; if(ts)ts.innerHTML=rows; if(tv)tv.textContent=_whFmt(th); });
+  }
+  /* ══════════ ФИД ЛИКВИДАЦИЙ: market-wide OKX perp (liquidation-orders) ══════════ */
+  /* Наблюдение вынужденных закрытий. $ = размер×ctVal×цена (ctVal из OKX instruments, кэш 12ч). Лонг-ликв = вынужденные продажи, шорт-ликв = вынужденные покупки. */
+  let _liqWs=null,_liqFeed=[],_liqThresh=0,_liqCtVal=null,_liqRAF=0,_liqPing=null;
+  function _liqGetThresh(){ if(_liqThresh>0)return _liqThresh; try{const v=+localStorage.getItem('msa_liq_thresh_v1'); if(v>0){_liqThresh=v;return v;}}catch(e){} _liqThresh=10000; return _liqThresh; }
+  function _liqSetThresh(v){ v=Math.max(500,Math.round(+v||0)); _liqThresh=v; try{localStorage.setItem('msa_liq_thresh_v1',String(v));}catch(e){} document.querySelectorAll('.lq-thval').forEach(e=>e.textContent=_whFmt(v)); }
+  function _liqSliderIn(v){ _liqSetThresh(Math.pow(10,(+v)/100)); }
+  function _liqAutoSet(){ _liqSetThresh(10000); document.querySelectorAll('.lq-slider').forEach(s=>{s.value=Math.round(Math.log10(10000)*100);}); }
+  async function _liqLoadCtVal(){
+    if(_liqCtVal)return _liqCtVal;
+    try{ const raw=localStorage.getItem('msa_okx_ctval_v1'); if(raw){ const o=JSON.parse(raw); if(o&&o.t&&Date.now()-o.t<12*3600e3&&o.m){ _liqCtVal=o.m; return _liqCtVal; } } }catch(e){}
+    try{ const j=await fetch('https://www.okx.com/api/v5/public/instruments?instType=SWAP',{cache:'no-store'}).then(r=>r.json());
+      const m={}; ((j&&j.data)||[]).forEach(i=>{ m[i.instId]=+i.ctVal||0; });
+      if(Object.keys(m).length>50){ _liqCtVal=m; try{localStorage.setItem('msa_okx_ctval_v1',JSON.stringify({t:Date.now(),m}));}catch(e){} }
+    }catch(e){}
+    return _liqCtVal||{};
+  }
+  function _liqPush(coin,pos,notional,px){
+    _liqFeed.push({t:Date.now(),coin,pos,n:notional,px:+px});
+    const cut=Date.now()-120000; while(_liqFeed.length&&_liqFeed[0].t<cut)_liqFeed.shift();
+    if(_liqFeed.length>400)_liqFeed.splice(0,_liqFeed.length-400);
+    if(!_liqRAF){ _liqRAF=requestAnimationFrame(()=>{_liqRAF=0;_liqRender();}); }
+  }
+  async function _liqStart(){
+    if(_liqWs)return; _liqEnsure(); await _liqLoadCtVal();
+    try{
+      const ws=new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
+      ws.onopen=()=>{ try{ws.send(JSON.stringify({op:'subscribe',args:[{channel:'liquidation-orders',instType:'SWAP'}]}));}catch(e){} if(_liqPing)clearInterval(_liqPing); _liqPing=setInterval(()=>{try{ws.send('ping');}catch(e){}},25000); };
+      ws.onmessage=e=>{ if(e.data==='pong')return; try{ const m=JSON.parse(e.data); if(!m.data)return;
+        for(const o of m.data){ const instId=o.instId||''; if(!/-USDT-SWAP$/.test(instId))continue; const coin=instId.replace('-USDT-SWAP',''); const cv=(_liqCtVal&&_liqCtVal[instId])||0;
+          for(const d of (o.details||[])){ const px=+d.bkPx||0, sz=+d.sz||0; if(!px||!sz)continue; const notn=cv>0?sz*cv*px:sz*px; if(notn>=_liqGetThresh())_liqPush(coin, d.posSide||(d.side==='buy'?'short':'long'), notn, px); }
+        }
+      }catch(x){} };
+      ws.onclose=()=>{ if(_liqWs===ws)_liqWs=null; if(_liqPing){clearInterval(_liqPing);_liqPing=null;} };
+      _liqWs=ws;
+    }catch(e){}
+    _liqRender();
+  }
+  function _liqStop(){ if(_liqPing){clearInterval(_liqPing);_liqPing=null;} if(_liqWs){try{_liqWs.onclose=null;_liqWs.close();}catch(e){}_liqWs=null;} }
+  function _liqEnsure(){
+    ['liqSess','liqDemo'].forEach(id=>{ const el=document.getElementById(id); if(!el||el.querySelector('.lq-tape-slot'))return;
+      el.innerHTML='<div class="wh-head">💥 ЛИКВИДАЦИИ <span class="wh-sub">рынок · perp · вынужденные закрытия · наблюдение</span></div>'
+        +'<div class="lq-gauge-slot"></div>'
+        +'<div class="wh-ctrl"><span class="wh-clbl">порог</span><input type="range" class="lq-slider" min="270" max="600" step="1" oninput="_liqSliderIn(this.value)"><span class="lq-thval"></span><button type="button" class="wh-auto" onclick="_liqAutoSet()">авто</button></div>'
+        +'<div class="wh-tape lq-tape-slot"></div>';
+      const s=el.querySelector('.lq-slider'); if(s)s.value=Math.round(Math.log10(_liqGetThresh())*100);
+      const tv=el.querySelector('.lq-thval'); if(tv)tv.textContent=_whFmt(_liqGetThresh());
+    });
+  }
+  function _liqGauge(){ const cut=Date.now()-60000; let L=0,S=0,ln=0,sn=0; for(let i=_liqFeed.length-1;i>=0;i--){ const e=_liqFeed[i]; if(e.t<cut)break; if(e.pos==='long'){L+=e.n;ln++;}else{S+=e.n;sn++;} } return {L,S,ln,sn,tot:L+S}; }
+  function _liqRender(){
+    _liqEnsure();
+    const g=_liqGauge(), th=_liqGetThresh(), pct=g.tot>0?Math.round(g.L/g.tot*100):50;
+    const gaugeHtml='<div class="lq-gbar"><span class="lq-gfill" style="width:'+pct+'%"></span></div>'
+      +'<div class="wh-glbl"><span class="wh-sell">лонги ликв '+_whFmt(g.L)+' ('+g.ln+')</span><span class="wh-mid">60с</span><span class="wh-buy">шорты ликв '+_whFmt(g.S)+' ('+g.sn+')</span></div>';
+    const rows=_liqFeed.slice(-14).reverse().map(e=>{
+      const tm=new Date(e.t).toLocaleTimeString('ru-RU'), longLiq=e.pos==='long';
+      return '<div class="wh-row '+(longLiq?'wh-sell':'wh-buy')+'"><span class="wh-t">'+tm+'</span><span class="lq-coin">'+e.coin+'</span><span class="wh-side">'+(longLiq?'LONG':'SHORT')+'</span><span class="wh-n">'+_whFmt(e.n)+'</span><span class="wh-px">'+(+e.px).toLocaleString('en-US',{maximumFractionDigits:6})+'</span></div>';
+    }).join('') || '<div class="wh-empty">ждём ликвидаций ≥ '+_whFmt(th)+'…</div>';
+    ['liqSess','liqDemo'].forEach(id=>{ const el=document.getElementById(id); if(!el)return; const gs=el.querySelector('.lq-gauge-slot'),ts=el.querySelector('.lq-tape-slot'),tv=el.querySelector('.lq-thval'); if(gs)gs.innerHTML=gaugeHtml; if(ts)ts.innerHTML=rows; if(tv)tv.textContent=_whFmt(th); });
   }
   // ── сводная карта ликвидности в Сессии: агрегация книг (перп WS + спот) в ДОЛЯХ — единицы и бренды бирж не смешиваются и не светятся ──
   let _swLast=0,_swBusy=false;
@@ -5582,12 +5650,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   pollContextEngine(); setInterval(pollContextEngine,60e3);
   // ── Тир 2: вернулись на вкладку → немедленный refresh (интервалы живы, но пропускали тики при document.hidden) ──
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden){ if(typeof _whStop==='function')_whStop(); return; }
+    if(document.hidden){ if(typeof _whStop==='function')_whStop(); if(typeof _liqStop==='function')_liqStop(); return; }
     try{ if(typeof fetchLivePx==='function')fetchLivePx(); }catch(e){}
     try{ if(typeof pollContextEngine==='function')pollContextEngine(); }catch(e){}
     try{ if(typeof _bgTick==='function')_bgTick(); }catch(e){}
     try{ if(typeof _chartRefresh==='function')_chartRefresh(); }catch(e){}
     try{ if((phase==='live'||phase==='demo')&&typeof _whStart==='function')_whStart(_symFromTicker(_tkKey())); }catch(e){}
+    try{ if((phase==='live'||phase==='demo')&&typeof _liqStart==='function')_liqStart(); }catch(e){}
   });
 
   // ── Дрилл: 5-минутная сессия с итоговой карточкой фактов ──
