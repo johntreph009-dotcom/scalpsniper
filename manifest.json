@@ -1,0 +1,18 @@
+{
+  "id": "scalpsniper.html",
+  "name": "ScalpSniper — Trading Terminal",
+  "short_name": "ScalpSniper",
+  "description": "Предсессионная разметка и риск-план для крипто-скальпинга",
+  "lang": "ru",
+  "categories": ["finance", "productivity"],
+  "start_url": "scalpsniper.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0b0d",
+  "theme_color": "#0a0b0d",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

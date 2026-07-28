@@ -4830,7 +4830,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const sessEl=document.getElementById('livePrice');
     if(document.activeElement!==sessEl){sessEl.value=px;updateLive();}
     _setLiveInd('● LIVE','var(--green)');
-    if(phase==='live'){ const _p=parseFloat(px); if(isFinite(_p)){ if(!_sessHist.length||_sessHist[_sessHist.length-1]!==_p){ _sessHist.push(_p); if(_sessHist.length>140)_sessHist.shift(); } if(typeof _sessDrawPrice==='function')_sessDrawPrice(); } _chartRedraw(); if(typeof _sessWallsTick==='function')_sessWallsTick(); }
+    if(phase==='live'){ const _p=parseFloat(px); if(isFinite(_p)){ if(_sessHist.length){const _lv=_sessHist[_sessHist.length-1]; if(_lv>0&&(_p/_lv>5||_p/_lv<0.2))_sessHist.length=0;} /* аномальный скачок = смена инструмента/глитч → сброс истории */ if(!_sessHist.length||_sessHist[_sessHist.length-1]!==_p){ _sessHist.push(_p); if(_sessHist.length>140)_sessHist.shift(); } if(typeof _sessDrawPrice==='function')_sessDrawPrice(); } _chartRedraw(); if(typeof _sessWallsTick==='function')_sessWallsTick(); }
   }
   // ── Композитная цена: медиана спот-цен нескольких бирж с отсечкой выбросов ──
   // Не сигнал и не директива — консенсусный ориентир по нескольким книгам. Решение за трейдером.
@@ -4918,6 +4918,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function setSessionTicker(v){
     v=(v||'').trim(); if(!v)return;
     if(!/\//.test(v))v=v.toUpperCase()+'/USDT';
+    if(v!==document.getElementById('ticker').value && typeof _sessHist!=='undefined')_sessHist.length=0;   // смена инструмента → чистим историю графика (иначе смешение цен ломает мини-график и % изменения)
     document.getElementById('ticker').value=v;
     saveSettings(); reloadZonesForTicker(); triggerPriceFetch();
     if(typeof _chartRefresh==='function')_chartRefresh();
