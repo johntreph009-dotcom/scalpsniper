@@ -4281,11 +4281,48 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         ctx.fillStyle=col;ctx.font='bold 8px JetBrains Mono,monospace';
         ctx.fillText(lbl,4,y-2);
       };
-      positions.filter(p=>(p.ticker||'BTC/USDT').toUpperCase()===_tkKey()).forEach(p=>{
-        posLine(p.entry,'rgba(255,176,32,.95)',(p.side==='long'?'LONG ':'SHORT ')+p.entry);
+      const _mine=positions.filter(p=>(p.ticker||'BTC/USDT').toUpperCase()===_tkKey());
+      // ── Trailing Shadow: живая зона риска заливкой от входа в сторону стопа.
+      // Стоп переведён в безубыток (SL==вход) → тени нет: риска больше нет, остаётся только линия.
+      _mine.forEach(p=>{
+        const e=+p.entry, s=+p.stop;
+        if(!isFinite(e)||!isFinite(s)||s===e)return;
+        const yE=toY(Math.max(minP,Math.min(maxP,e))), yS=toY(Math.max(minP,Math.min(maxP,s)));
+        if(Math.abs(yS-yE)<1)return;
+        const g=ctx.createLinearGradient(0,yE,0,yS);            // плотнее у входа, растворяется к стопу
+        g.addColorStop(0,p.side==='long'?'rgba(63,185,80,.15)':'rgba(239,68,68,.15)');
+        g.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle=g; ctx.fillRect(0,Math.min(yE,yS),plotW,Math.abs(yS-yE));
+      });
+      _mine.forEach(p=>{
+        posLine(p.entry,'rgba(255,176,32,.95)',(p.side==='long'?'LONG ':'SHORT ')+p.entry+(+p.stop===+p.entry?' · БУ':''));
         if(p.stop)posLine(p.stop,'rgba(239,68,68,.9)','SL '+p.stop);
         if(p.target)posLine(p.target,'rgba(63,185,80,.9)','TP '+p.target);
       });
+    }
+    // ── Trend Projection: кривая перспективы справа от последней свечи.
+    // Наклон = наклон MA дня (_dayTrend.slope) + перекос потока (CVD). Это ПРОЕКЦИЯ ТЕКУЩЕГО СОСТОЯНИЯ,
+    // а не прогноз цены: гнётся вверх/вниз/ровно ровно настолько, насколько согласны тренд и поток.
+    if(L.trend&&candles.length){
+      const _ps=(_klSym||_symFromTicker(_tkKey())||'');
+      const _tv=((_dayTrendCache||{})[_ps]||{}).val, _cv=(((_dayCtxCache||{})[_ps]||{}).val||{}).cvd;
+      const sl=_tv?(+_tv.slope||0):0, cd=_cv?((+_cv.ratio||0)/100):0;
+      const k=Math.max(-1,Math.min(1,(sl/0.5)*0.6+cd*0.4));   // −1..1 · slope в %, ±0.5% = насыщение
+      const lastC=+candles[candles.length-1].c;
+      if(isFinite(lastC)&&lastC>=minP&&lastC<=maxP){
+        const x0=plotW, y0=toY(lastC), len=mob?20:28, dy=k*(mob?16:22);
+        const y1=Math.max(6,Math.min(ph-6,y0-dy));
+        const col=k>0.15?'46,224,138':k<-0.15?'255,90,95':'160,160,160';
+        ctx.save();
+        ctx.strokeStyle='rgba('+col+',.85)';ctx.lineWidth=1.4;ctx.setLineDash([3,3]);
+        ctx.shadowColor='rgba('+col+',.9)';ctx.shadowBlur=6;ctx.lineCap='round';
+        ctx.beginPath();ctx.moveTo(x0,y0);
+        ctx.quadraticCurveTo(x0+len*0.5,y0-dy*0.28,x0+len,y1);   // плавный загиб, а не прямая
+        ctx.stroke();
+        ctx.setLineDash([]);ctx.shadowBlur=0;
+        ctx.fillStyle='rgba('+col+',.95)';ctx.beginPath();ctx.arc(x0+len,y1,2,0,7);ctx.fill();
+        ctx.restore();
+      }
     }
     // MMI Layer 1: линия опционного Max Pain (голубой пунктир)
     if(typeof _mpCache!=='undefined'){
