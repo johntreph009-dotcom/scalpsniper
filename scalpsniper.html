@@ -1870,7 +1870,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       : p==='live'
       ? 'Фаза сессии — реагируешь, не анализируешь. Вводишь текущую цену, панель подсвечивает активную зону и твой готовый план. Думать поздно, исполняй размеченное.'
       : 'Журнал — разбор после сессии. Сделки и отработка зон, факт vs план, винрейт по типам и протоколам, бэкап и синхронизация. Ищи паттерн, не оправдание.';
-    if(p==='demo')document.getElementById('phaseDesc').textContent='ТРЕНАЖЕР — реальный стакан и поток сделок Binance по выбранному тикеру. Модель считает гипотезу, сделки виртуальные. Решения и реальный вход — за тобой.';
+    if(p==='demo')document.getElementById('phaseDesc').textContent='ТРЕНАЖЕР — реальный стакан и поток сделок по выбранному тикеру (источник выбирается автоматически из доступных бирж). Модель считает гипотезу, сделки виртуальные. Сетка автопилота видна прямо на графике. Решения и реальный вход — за тобой.';
     if(p==='demo'){ if(typeof _demoStart==='function')_demoStart(); } else { if(typeof _demoStop==='function')_demoStop(); }
     if(p==='live'){ if(typeof _mxWsStart==='function')_mxWsStart(); } else { if(typeof _mxWsStop==='function')_mxWsStop(); }
     if(p==='live'||p==='demo'){ if(typeof _whStart==='function')_whStart(_symFromTicker(_tkKey())); if(typeof _liqStart==='function')_liqStart(); } else { if(typeof _whStop==='function')_whStop(); if(typeof _liqStop==='function')_liqStop(); }
@@ -5566,7 +5566,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(ts-_dlLastSec>=1000){ const fps=Math.round(_dlFrames*1000/(ts-_dlLastSec)); _dlFrames=0; _dlLastSec=ts;
         const r=document.getElementById('dlRate'); if(r)r.textContent=fps+' FPS';
         const u=document.getElementById('dlUps'); if(u)u.textContent=_dlMsgCount; _dlMsgCount=0;
-        const sc=document.getElementById('dlSrc'); if(sc)sc.textContent=(_dlSrc==='ws'?'live':_dlSrc==='poll'?'REST':'подключение…'); }
+        const sc=document.getElementById('dlSrc'); if(sc)sc.textContent=(_dlSrc==='poll'?'REST':(_dlSrc&&_dlSrc!=='—')?('live · '+_dlSrc):'подключение…'); }
       _dlRAF=requestAnimationFrame(loop); };
     _dlRAF=requestAnimationFrame(loop);
   }
