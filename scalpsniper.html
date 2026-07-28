@@ -4158,6 +4158,22 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const stars=Math.max(1,Math.min(3,z.stars||2));
       if(px>=minP&&px<=maxP){
         const y=toY(px);
+        // ── Trailing Shadow ЗОНЫ: риск-конверт от уровня до его стопа. Рисуется ПО УМОЛЧАНИЮ
+        // для каждой размеченной зоны со стопом — план и его риск видны на графике до всякой позиции.
+        // Под лентой зоны, чтобы линия уровня оставалась чёткой. Сильнее ★ — заметнее конверт.
+        if(z.stop){
+          const sp0=+z.stop;
+          if(isFinite(sp0)&&sp0!==px){
+            const sy=toY(Math.max(minP,Math.min(maxP,sp0)));
+            if(Math.abs(sy-y)>=1){
+              const al=(0.05+stars*0.025).toFixed(3);
+              const g=ctx.createLinearGradient(0,y,0,sy);            // плотно у уровня → прозрачно у стопа
+              g.addColorStop(0,(sp0<px?'rgba(63,185,80,':'rgba(239,68,68,')+al+')');   // стоп ниже уровня = лонг
+              g.addColorStop(1,'rgba(0,0,0,0)');
+              ctx.fillStyle=g; ctx.fillRect(0,Math.min(y,sy),plotW,Math.abs(sy-y));
+            }
+          }
+        }
         const bh=5;                       // лента ПОСТОЯННОЙ высоты — кластеры зон больше не сливаются
         const a=0.05+stars*0.04;          // сила ★ = яркость, не толщина
         _zoneHitAreas.push({idx:zones.indexOf(z),yCenter:y,bh:9});
