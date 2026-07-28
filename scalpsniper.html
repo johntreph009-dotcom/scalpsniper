@@ -151,7 +151,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .dl-price-chg.up{color:#5DCAA5} .dl-price-chg.dn{color:#F09595}
   .dl-price-lbl{margin-left:auto;font-size:9px;letter-spacing:.4px;text-transform:uppercase;color:var(--text-faint)}
   .dl-pchart-wrap{background:#0d0f12;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-bottom:14px}
-  #dlPriceChart{display:block;width:100%;height:96px}
+  #dlPriceChart{display:block;width:100%;height:150px}
   #sessPriceChart{display:block;width:100%;height:92px}
   .dl-regime-chip.trend{color:#5DCAA5;border-color:#0F6E56;background:rgba(29,158,117,.1)}
   .dl-regime-chip.danger{color:#F09595;border-color:#A32D2D;background:rgba(226,75,74,.14)}
@@ -5349,7 +5349,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   let _dlCtx=null,_dlW=0,_dlH=0;
   let _dlModel=null,_dlRegime='FLAT_SCALPING',_dlCand=null,_dlCandT=0,_dlEngLast=0,_dlJournal=[];
   let _dlMsgCount=0,_dlSrc='—',_dlDec=2;
-  let _dlHist=[],_dlPCtx=null,_dlPW=0,_dlPH=0;
+  let _dlHist=[],_dlPCtx=null,_dlPW=0,_dlPH=0,_dlTick=0;   // _dlTick — монотонный счётчик тиков: якорь событий сетки на оси X (сам _dlHist обрезается)
   let _sessHist=[],_sessPCtx=null,_sessPW=0,_sessPH=0;
   const DLJ_KEY='msa_demo_journal_v1';
   // знаки после запятой по реальному шагу цены инструмента (из стакана) — корректно для любой монеты
@@ -5363,6 +5363,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     let symbol='BTCUSDT', N=12;
     let asks=[], bids=[], mid=0, midEma=0, cumDelta=0, tapeEma=0, tapeEmaPrev=0, tradeCount=0, gotDepth=false;
     let depthWS=null, tradeWS=null, pollT=null, mxWS=null, mxPing=null, lastMx=0;
+    let okWS=null, okPing=null, lastOk=0, lastBinTrade=0, srcName='—';
     self.onmessage=function(e){ if(e.data&&e.data.cmd==='init'){ symbol=e.data.symbol||'BTCUSDT'; startStreams(); } };
     function startStreams(){
       const s=symbol.toLowerCase();
@@ -5373,23 +5374,38 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         mxWS.onopen=function(){ try{mxWS.send(JSON.stringify({method:'sub.depth.full',param:{symbol:ms,limit:20}}));}catch(e){}
           mxPing=setInterval(function(){ try{mxWS.send(JSON.stringify({method:'ping'}));}catch(e){} },15000); };
         mxWS.onmessage=function(ev){ try{ var d=JSON.parse(ev.data);
-          if(d.channel==='push.depth.full'&&d.data&&d.data.asks&&d.data.asks.length){ lastMx=Date.now(); applyDepth({asks:d.data.asks,bids:d.data.bids||[]}); } }catch(e){} };
+          if(d.channel==='push.depth.full'&&d.data&&d.data.asks&&d.data.asks.length){ lastMx=Date.now(); srcName='перп A'; applyDepth({asks:d.data.asks,bids:d.data.bids||[]}); } }catch(e){} };
         mxWS.onerror=function(){};
+      }catch(e){}
+      // вторая опора — перп OKX. Список инструментов в приложении берётся из вселенной OKX,
+      // и многих пар просто НЕТ на первой бирже: без этого источника стакан молчит на таких тикерах.
+      try{
+        const oi=symbol.replace(/USDT$/,'')+'-USDT-SWAP';
+        okWS=new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
+        okWS.onopen=function(){ try{okWS.send(JSON.stringify({op:'subscribe',args:[{channel:'books5',instId:oi},{channel:'trades',instId:oi}]}));}catch(e){}
+          okPing=setInterval(function(){ try{okWS.send('ping');}catch(e){} },20000); };
+        okWS.onmessage=function(ev){ try{ if(ev.data==='pong')return; var d=JSON.parse(ev.data); if(!d.arg||!d.data)return;
+          if(d.arg.channel==='books5'){ if(Date.now()-lastMx<3000)return;      // первая биржа жива — не мешаем
+            var q=d.data[0]; if(q&&q.asks&&q.asks.length){ lastOk=Date.now(); srcName='перп B'; applyDepth({asks:q.asks,bids:q.bids||[]}); } }
+          else if(d.arg.channel==='trades'){ if(Date.now()-lastBinTrade<3000)return;   // чтобы дельта не считалась дважды
+            for(var i=0;i<d.data.length;i++){ var t=d.data[i]; tradeCount++; cumDelta=cumDelta*0.999+(t.side==='sell'? -(+t.sz):(+t.sz)); } }
+        }catch(e){} };
+        okWS.onerror=function(){};
       }catch(e){}
       // фолбэк — спот-книга; применяется только если перп молчит >3с
       setTimeout(function(){
         try{
           depthWS=new WebSocket('wss://stream.binance.com:9443/ws/'+s+'@depth20@100ms');
-          depthWS.onmessage=function(ev){ if(Date.now()-lastMx<3000)return; try{ applyDepth(JSON.parse(ev.data)); }catch(e){} };
-          depthWS.onerror=function(){ if(Date.now()-lastMx>3000)startPoll(); };
-          depthWS.onclose=function(){ if(Date.now()-lastMx>3000)startPoll(); };
-        }catch(err){ if(Date.now()-lastMx>3000)startPoll(); }
+          depthWS.onmessage=function(ev){ if(Date.now()-lastMx<3000||Date.now()-lastOk<3000)return; try{ srcName='спот'; applyDepth(JSON.parse(ev.data)); }catch(e){} };
+          depthWS.onerror=function(){ if(Date.now()-lastMx>3000&&Date.now()-lastOk>3000)startPoll(); };
+          depthWS.onclose=function(){ if(Date.now()-lastMx>3000&&Date.now()-lastOk>3000)startPoll(); };
+        }catch(err){ if(Date.now()-lastMx>3000&&Date.now()-lastOk>3000)startPoll(); }
         setTimeout(function(){ if(!gotDepth) startPoll(); }, 3500);
       }, 2500);
       // лента сделок для дельты — как было
       try{
         tradeWS=new WebSocket('wss://stream.binance.com:9443/ws/'+s+'@aggTrade');
-        tradeWS.onmessage=function(ev){ try{ const t=JSON.parse(ev.data); tradeCount++; cumDelta=cumDelta*0.999+(t.m? -(+t.q):(+t.q)); }catch(e){} };
+        tradeWS.onmessage=function(ev){ try{ const t=JSON.parse(ev.data); lastBinTrade=Date.now(); tradeCount++; cumDelta=cumDelta*0.999+(t.m? -(+t.q):(+t.q)); }catch(e){} };
       }catch(e){}
       setInterval(tick, 100);
     }
@@ -5433,7 +5449,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(midEma&&mid)midEma+=(mid-midEma)*0.05;
       tapeEmaPrev=tapeEma; tapeEma=tapeEma*0.8+tradeCount*0.2; tradeCount=0;
       if(!asks.length||!bids.length)return;
-      const b=snap(); self.postMessage({t:'snap',buf:b.buffer,m:model(),src:(pollT?'poll':'ws')},[b.buffer]);
+      const b=snap(); self.postMessage({t:'snap',buf:b.buffer,m:model(),src:(pollT?'poll':srcName)},[b.buffer]);
     }
   `; }
   function _dlSetupCanvas(){
@@ -5446,7 +5462,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // ── приятный live-график цены (плавная area-кривая, как референс) ──
   function _dlSetupPriceCanvas(){
     const cv=document.getElementById('dlPriceChart'); if(!cv)return;
-    const dpr=window.devicePixelRatio||1; const w=cv.getBoundingClientRect().width||cv.clientWidth||320, h=96;
+    const dpr=window.devicePixelRatio||1; const w=cv.getBoundingClientRect().width||cv.clientWidth||320, h=150;   // выше: на 96px сетку не разглядеть
     cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
     _dlPCtx=cv.getContext('2d'); _dlPCtx.setTransform(dpr,0,0,dpr,0,0); _dlPW=w; _dlPH=h;
   }
@@ -5467,14 +5483,45 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     ctx.fillStyle=g; ctx.fill(area);
     ctx.strokeStyle=col; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke(path);
     ctx.fillStyle=col; ctx.beginPath(); ctx.arc((n-1)*dx,toY(hh[n-1]),3.2,0,7); ctx.fill();
-    // уровни спрей-дрилла: buy зелёный / sell красный пунктир, приглушены = заняты; маркер справа = инвентарь
+    // ── СЕТКА В РАБОТЕ: диапазон, уровни, инвентарь и след фарма прямо на графике ──
     if(typeof _gs!=='undefined'&&_gs){
       ctx.save(); ctx.lineWidth=1;
+      // рабочий диапазон сетки — где она вообще ловит
+      const yHi=toY(_gs.hi), yLo=toY(_gs.lo);
+      ctx.fillStyle='rgba(255,122,24,.05)'; ctx.fillRect(0,Math.min(yHi,yLo),W,Math.abs(yLo-yHi));
+      // центр — вокруг него строится спрей
+      const yC=toY(_gs.center);
+      ctx.strokeStyle='rgba(255,122,24,.5)'; ctx.setLineDash([6,5]);
+      ctx.beginPath(); ctx.moveTo(0,yC); ctx.lineTo(W,yC); ctx.stroke();
+      // уровни: открытый = ждёт налива (ярко), занятый = уже налит (приглушён)
       _gs.levels.forEach(L=>{ const y=toY(L.px);
-        ctx.strokeStyle=L.side==='buy'?('rgba(29,158,117,'+(L.open?'.55':'.16')+')'):('rgba(226,75,74,'+(L.open?'.55':'.16')+')');
+        ctx.strokeStyle=L.side==='buy'?('rgba(46,224,138,'+(L.open?'.6':'.18')+')'):('rgba(255,90,95,'+(L.open?'.6':'.18')+')');
         ctx.setLineDash([3,4]); ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); });
       ctx.setLineDash([]);
-      _gs.inv.forEach(pp=>{ const y=toY(pp.entry); ctx.fillStyle=pp.side==='long'?'#1D9E75':'#E24B4A'; ctx.fillRect(W-7,y-2,6,4); });
+      // инвентарь: линия от входа ноги к текущей цене — сразу видно, что висит и в какую сторону тянет
+      const curY=toY(hh[n-1]);
+      _gs.inv.forEach(pp=>{ const y=toY(pp.entry), good=(hh[n-1]-pp.entry)*(pp.side==='long'?1:-1)>=0;
+        ctx.strokeStyle=good?'rgba(46,224,138,.45)':'rgba(255,90,95,.45)';
+        ctx.beginPath(); ctx.moveTo(W-30,y); ctx.lineTo(W-6,curY); ctx.stroke();
+        ctx.fillStyle=pp.side==='long'?'#2EE08A':'#FF5A5F'; ctx.fillRect(W-34,y-2,5,4); });
+      // след фарма: где сетка налилась и где сняла пару. Это и есть «как она фармит»
+      if(_gs.ev&&_gs.ev.length){
+        const base=_dlTick-n;                       // тик, соответствующий левому краю окна
+        _gs.ev.forEach(e=>{ const idx=e.k-base; if(idx<0||idx>n-1)return;
+          const x=idx*dx, y=toY(e.px);
+          if(e.t==='pair'){ ctx.fillStyle='rgba(46,224,138,.95)'; ctx.beginPath(); ctx.arc(x,y,3.2,0,7); ctx.fill();
+            ctx.strokeStyle='rgba(46,224,138,.5)'; ctx.beginPath(); ctx.arc(x,y,5.5,0,7); ctx.stroke(); }
+          else if(e.t==='hfa'){ ctx.strokeStyle='rgba(255,122,24,.95)'; ctx.lineWidth=1.6; ctx.beginPath(); ctx.arc(x,y,5,0,7); ctx.stroke(); ctx.lineWidth=1; }
+          else { ctx.fillStyle='rgba(255,255,255,.5)'; ctx.beginPath(); ctx.arc(x,y,1.8,0,7); ctx.fill(); }
+        });
+      }
+      // счётчик фарма в углу — пары и реализованное, без ухода в панель
+      const fl2=_gs.inv.reduce((s,x)=>s+((hh[n-1]-x.entry)/x.entry*1e4)*(x.side==='long'?1:-1),0);
+      const net2=_gs.realized+fl2;
+      ctx.font='bold 9px JetBrains Mono,monospace';
+      ctx.fillStyle='rgba(255,122,24,.9)'; ctx.fillText('СЕТКА',6,12);
+      ctx.fillStyle=net2>=0?'#2EE08A':'#FF5A5F';
+      ctx.fillText('пар '+_gs.pairs+' · '+(net2>=0?'+':'')+net2.toFixed(1)+' bps'+(_gs.hfa?' · HFA '+_gs.hfa:''),48,12);
       ctx.restore();
     }
     const cur=hh[n-1], first=hh[0], pct=first?((cur-first)/first*100):0;
@@ -5505,7 +5552,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(_dlRunning)return; _dlRunning=true;
     try{ const blob=new Blob([_dlWorkerCode()],{type:'application/javascript'});
       _dlWorker=new Worker(URL.createObjectURL(blob));
-      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); if(_dlHist.length>180)_dlHist.shift();} if(typeof _apOnSnap==='function')_apOnSnap(); } };
+      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); _dlTick++; if(_dlHist.length>180)_dlHist.shift();} if(typeof _apOnSnap==='function')_apOnSnap(); } };
       const _raw=(document.getElementById('ticker')&&document.getElementById('ticker').value)||'BTC/USDT';
       const _sym=(typeof _symFromTicker==='function')?_symFromTicker(_raw):'BTCUSDT';
       _dlWorker.postMessage({cmd:'init',symbol:_sym});
@@ -5675,10 +5722,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!_gs)return; const hh=_dlHist, px=hh[hh.length-1]; if(!px)return;
     const prev=_gs.lastPx||px; _gs.lastPx=px;
     // филлы: цена пересекла уровень
+    if(!_gs.ev)_gs.ev=[];
+    const _ev=(t,p,v)=>{ _gs.ev.push({k:_dlTick,px:p,t,v:v||0}); if(_gs.ev.length>80)_gs.ev.shift(); };  // след фарма для графика
     for(const L of _gs.levels){
       if(!L.open)continue;
-      if(L.side==='buy'&&prev>L.px&&px<=L.px){ L.open=false;_gs.fills++;_gs.inv.push({side:'long',entry:L.px,tp:L.px+_gs.step,lvl:L}); }
-      else if(L.side==='sell'&&prev<L.px&&px>=L.px){ L.open=false;_gs.fills++;_gs.inv.push({side:'short',entry:L.px,tp:L.px-_gs.step,lvl:L}); }
+      if(L.side==='buy'&&prev>L.px&&px<=L.px){ L.open=false;_gs.fills++;_gs.inv.push({side:'long',entry:L.px,tp:L.px+_gs.step,lvl:L}); _ev('fill',L.px); }
+      else if(L.side==='sell'&&prev<L.px&&px>=L.px){ L.open=false;_gs.fills++;_gs.inv.push({side:'short',entry:L.px,tp:L.px-_gs.step,lvl:L}); _ev('fill',L.px); }
     }
     // HFA-защита (ДО закрытия пар — иначе ногу заберёт лимитный тейк на шаг и весь рывок пройдёт мимо):
     // нога, которую вынесло в плюс на ≥100 bps (1%), снимается ПО РЫНКУ по фактической цене.
@@ -5686,23 +5735,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     let hfa=false;
     _gs.inv=_gs.inv.filter(pp=>{
       const pb=((px-pp.entry)/pp.entry*1e4)*(pp.side==='long'?1:-1);
-      if(pb>=100){ _gs.pairs++; _gs.hfa=(_gs.hfa||0)+1; _gs.realized+=pb; if(pp.lvl)pp.lvl.open=true; hfa=true; return false; }
+      if(pb>=100){ _gs.pairs++; _gs.hfa=(_gs.hfa||0)+1; _gs.realized+=pb; if(pp.lvl)pp.lvl.open=true; hfa=true; _ev('hfa',px,pb); return false; }
       return true;
     });
     if(hfa&&typeof _proc==='function')_proc('HFA-защита сетки: нога снята по рынку ≥100 bps · центр сдвигается за ценой','pr-up');
     // закрытие пар: тейк на шаг, уровень реоткрывается (как у реального грида)
     _gs.inv=_gs.inv.filter(pp=>{
       const hit=pp.side==='long'?px>=pp.tp:px<=pp.tp;
-      if(hit){ _gs.pairs++; _gs.realized+=_gs.step/pp.entry*10000; if(pp.lvl)pp.lvl.open=true; return false; }
+      if(hit){ _gs.pairs++; _gs.realized+=_gs.step/pp.entry*10000; if(pp.lvl)pp.lvl.open=true; _ev('pair',pp.tp,_gs.step/pp.entry*10000); return false; }
       return true;
     });
     // перестройка: выход за диапазон, устойчивый дрейф от центра или срабатывание HFA (сдвиг за ликвидностью)
     const out=px>_gs.hi||px<_gs.lo;
     const drift=Math.abs(px-_gs.center)>_gs.step*2.4 && Date.now()-_gs.lastRb>15000;
     if(out||drift||hfa){
-      const keep={inv:_gs.inv.map(x=>({side:x.side,entry:x.entry,tp:x.tp,lvl:null})),f:_gs.fills,p:_gs.pairs,r:_gs.realized,rb:_gs.rebuilds+1,t0:_gs.t0,h:_gs.hfa||0};
+      const keep={inv:_gs.inv.map(x=>({side:x.side,entry:x.entry,tp:x.tp,lvl:null})),f:_gs.fills,p:_gs.pairs,r:_gs.realized,rb:_gs.rebuilds+1,t0:_gs.t0,h:_gs.hfa||0,ev:_gs.ev||[]};
       const ng=_gsBuild(px);
-      if(ng){ ng.inv=keep.inv; ng.fills=keep.f; ng.pairs=keep.p; ng.realized=keep.r; ng.rebuilds=keep.rb; ng.t0=keep.t0; ng.hfa=keep.h; _gs=ng; }
+      if(ng){ ng.inv=keep.inv; ng.fills=keep.f; ng.pairs=keep.p; ng.realized=keep.r; ng.rebuilds=keep.rb; ng.t0=keep.t0; ng.hfa=keep.h; ng.ev=keep.ev; _gs=ng; }
     }
     _gsRender(px);
   }
