@@ -3928,11 +3928,35 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   const _MC_KIND={fade:{rgb:'255,122,24',line:'rgba(255,122,24,.85)'},break:{rgb:'34,197,94',line:'rgba(34,197,94,.8)'},watch:{rgb:'150,150,140',line:'rgba(150,150,140,.5)'},stand:{rgb:'100,140,255',line:'rgba(100,140,255,.55)'}};
   async function _fetchKlines(sym,tf){
+    // Источник свечей с фолбэком: Binance → OKX (SWAP/спот) → Bybit.
+    // На части сетей (гео/ISP-блок) Binance И Bybit недоступны ("Failed to fetch") — OKX обычно жив,
+    // поэтому график не должен зависеть от одной биржи. sym напр. SOLUSDT; предполагаем котировку USDT.
+    // 1) Binance (основной)
     try{
       const r=await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval='+tf+'&limit=65',{cache:'no-store'});
-      if(!r.ok)return null;
-      return (await r.json()).map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5],tb:+k[9]}));
-    }catch{return null;}
+      if(r.ok){ const j=await r.json(); if(Array.isArray(j)&&j.length)
+        return j.map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5],tb:+k[9]})); }
+    }catch(e){}
+    const base=sym.replace(/USDT$/,''), inst=base+'-USDT';
+    const okxBar={'1m':'1m','5m':'5m','15m':'15m','1h':'1H','4h':'4H'}[tf]||'1m';
+    // 2) OKX свечи (сначала перп SWAP, затем спот) — OKX формат newest-first, разворачиваем
+    for(const iid of [inst+'-SWAP', inst]){
+      try{
+        const r=await fetch('https://www.okx.com/api/v5/market/candles?instId='+iid+'&bar='+okxBar+'&limit=65',{cache:'no-store'});
+        if(r.ok){ const j=await r.json(); const d=j&&j.data;
+          if(Array.isArray(d)&&d.length)
+            return d.map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5],tb:0})).reverse(); }
+      }catch(e){}
+    }
+    // 3) Bybit линейные свечи (newest-first, разворачиваем)
+    try{
+      const byI={'1m':'1','5m':'5','15m':'15','1h':'60','4h':'240'}[tf]||'1';
+      const r=await fetch('https://api.bybit.com/v5/market/kline?category=linear&symbol='+sym+'&interval='+byI+'&limit=65',{cache:'no-store'});
+      if(r.ok){ const j=await r.json(); const d=j&&j.result&&j.result.list;
+        if(Array.isArray(d)&&d.length)
+          return d.map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5],tb:0})).reverse(); }
+    }catch(e){}
+    return null;
   }
   // ── приятный live-график цены в Сессии (плавная area-кривая) ──
   function _sessSetupPriceCanvas(){
