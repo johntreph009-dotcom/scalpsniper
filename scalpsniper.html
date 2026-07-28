@@ -6,7 +6,7 @@
      script/style-src 'unsafe-inline' ОБЯЗАТЕЛЕН: терминал — один HTML-файл с инлайн-скриптом, ~140 инлайн-обработчиков и @import шрифтов
      (убрать unsafe-inline = переписать всю событийную модель, что ломает исходную архитектуру). Главная защита здесь — жёсткий
      connect-src (эксфильтрация только на разрешённые биржи/сервисы), object-src 'none', base-uri/form-action 'self'. worker-src blob: — демо-воркер. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; worker-src 'self' blob:; connect-src 'self' https://api.binance.com https://fapi.binance.com wss://stream.binance.com:9443 https://api.bybit.com wss://stream.bybit.com https://www.okx.com wss://ws.okx.com:8443 https://api.mexc.com wss://contract.mexc.com https://api.coingecko.com https://www.deribit.com https://dpaste.com https://scalpsniper-ai-proxy.johntreph009.workers.dev; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; manifest-src 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; worker-src 'self' blob:; connect-src 'self' https://api.binance.com https://fapi.binance.com wss://stream.binance.com:9443 https://api.bybit.com wss://stream.bybit.com https://www.okx.com wss://ws.okx.com:8443 https://api.mexc.com wss://contract.mexc.com wss://ws-feed.exchange.coinbase.com wss://ws.kraken.com https://api.coingecko.com https://www.deribit.com https://dpaste.com https://scalpsniper-ai-proxy.johntreph009.workers.dev; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; manifest-src 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5.0">
 <meta name="theme-color" content="#0a0b0d">
 <link rel="manifest" href="manifest.json">
@@ -247,6 +247,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .ai-scen-item{font-size:10px;line-height:1.45;color:var(--text-dim);padding:6px 9px;border-left:2px solid var(--accent-dim);background:rgba(255,255,255,.025);border-radius:0 5px 5px 0}
   .ai-scen-item:first-child{border-left-color:var(--accent);color:var(--text)}
   .quick-status{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-top:6px;min-height:12px;letter-spacing:.2px}
+  .wh-ex{opacity:.55;font-size:7px;letter-spacing:.4px}
   .zones-fresh{display:flex;align-items:center;gap:8px;margin:2px 0 8px;font-size:10px;font-family:'JetBrains Mono',monospace;letter-spacing:.2px}
   #zonesFreshTxt{flex:1}
   .zones-fresh.fresh #zonesFreshTxt{color:var(--green)}
@@ -3747,8 +3748,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _whAutoSet(){ const v=_whAutoThresh(typeof _livePx==='function'&&_livePx()); _whSetThresh(v); document.querySelectorAll('.wh-slider').forEach(s=>{s.value=Math.round(Math.log10(v)*100);}); }
   // rAF-троттл отрисовки ленты: шквал сделок коалесцируется в 1 рендер на кадр (+ маркеры на графике Сессии)
   const _whRenderThrottled=_rafThrottle(function(){ _whRender(); if(phase==='live'&&typeof _sessDrawPrice==='function')try{_sessDrawPrice();}catch(e){} });
-  function _whPush(mkt,side,notional,px){
-    _whFeed.push({t:Date.now(),mkt,side,n:notional,px:+px});
+  function _whPush(mkt,side,notional,px,ex){
+    _whFeed.push({t:Date.now(),mkt,side,n:notional,px:+px,ex:ex||''});
     const cut=Date.now()-90000; while(_whFeed.length&&_whFeed[0].t<cut)_whFeed.shift();
     if(_whFeed.length>300)_whFeed.splice(0,_whFeed.length-300);
     _whRenderThrottled();
@@ -3756,29 +3757,45 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // ── Web Worker ленты (Шаг 2): владеет WS (Binance spot aggTrade + Bybit publicTrade/allLiquidation), парсит и
   //    фильтрует по порогу В ВОРКЕРЕ, батчит и шлёт в главный поток только готовые события (≤ раз в 120мс).
   //    UI-нить больше не парсит высокочастотный поток — анти-джанк на экстремальной волатильности. ──
-  function _whWorkerCode(){ return "var w1=null,w2=null,sym='',thr=0,buf=[];"+
-    "function close(){try{if(w1){w1.onclose=null;w1.close();}}catch(e){}try{if(w2){w2.onclose=null;w2.close();}}catch(e){}w1=null;w2=null;}"+
+  // Мультибиржевая лента в одном воркере: Binance спот · Bybit перп+ликвидации · OKX спот+перп · Coinbase спот · Kraken спот.
+  // Каждый источник изолирован: недоступная биржа (гео/ISP-блок) молча отваливается, остальные продолжают лить —
+  // так лента и «аквариум» набиваются максимально плотно из того, что реально доступно. Всё приводится к нотионалу USDT.
+  function _whWorkerCode(){ return "var ws=[],sym='',base='',ctv=0,thr=0,buf=[];"+
+    "function close(){for(var i=0;i<ws.length;i++){try{ws[i].onclose=null;ws[i].close();}catch(e){}}ws=[];}"+
+    "function add(u,oo,om){try{var s=new WebSocket(u);if(oo)s.onopen=function(){try{oo(s);}catch(e){}};s.onmessage=function(e){try{om(e.data);}catch(e){}};s.onerror=function(){};ws.push(s);}catch(e){}}"+
+    "function P(mkt,side,n,px,ex){if(isFinite(n)&&n>0&&n>=thr)buf.push({mkt:mkt,side:side,n:n,px:px,ex:ex});}"+
     "function open(){close();"+
-    "try{w1=new WebSocket('wss://stream.binance.com:9443/ws/'+sym.toLowerCase()+'@aggTrade');"+
-    "w1.onmessage=function(e){try{var d=JSON.parse(e.data),p=+d.p,q=+d.q,n=p*q;if(n>=thr)buf.push({mkt:'spot',side:d.m?'sell':'buy',n:n,px:p});}catch(x){}};}catch(e){}"+
-    "try{w2=new WebSocket('wss://stream.bybit.com/v5/public/linear');"+
-    "w2.onopen=function(){try{w2.send(JSON.stringify({op:'subscribe',args:['publicTrade.'+sym,'allLiquidation.'+sym]}));}catch(e){}};"+
-    "w2.onmessage=function(e){try{var m=JSON.parse(e.data);if(!m.topic||!m.data)return;"+
-    "if(m.topic.indexOf('publicTrade')===0){for(var i=0;i<m.data.length;i++){var t=m.data[i],p=+t.p,v=+t.v,n=p*v;if(n>=thr)buf.push({mkt:'perp',side:t.S==='Buy'?'buy':'sell',n:n,px:p});}}"+
-    "else if(m.topic.indexOf('allLiquidation')===0){for(var j=0;j<m.data.length;j++){var l=m.data[j],pp=+l.p,vv=+l.v,nn=pp*vv;if(nn>=thr)buf.push({mkt:'liq',side:l.S==='Sell'?'long':'short',n:nn,px:pp});}}"+
-    "}catch(x){}};}catch(e){}}"+
+    "add('wss://stream.binance.com:9443/ws/'+sym.toLowerCase()+'@aggTrade',null,function(d){var o=JSON.parse(d),p=+o.p,q=+o.q;P('spot',o.m?'sell':'buy',p*q,p,'BIN');});"+
+    "add('wss://stream.bybit.com/v5/public/linear',function(s){s.send(JSON.stringify({op:'subscribe',args:['publicTrade.'+sym,'allLiquidation.'+sym]}));},function(d){var m=JSON.parse(d);if(!m.topic||!m.data)return;"+
+    "if(m.topic.indexOf('publicTrade')===0){for(var i=0;i<m.data.length;i++){var t=m.data[i],p=+t.p,v=+t.v;P('perp',t.S==='Buy'?'buy':'sell',p*v,p,'BYB');}}"+
+    "else if(m.topic.indexOf('allLiquidation')===0){for(var j=0;j<m.data.length;j++){var l=m.data[j],lp=+l.p,lv=+l.v;P('liq',l.S==='Sell'?'long':'short',lp*lv,lp,'BYB');}}});"+
+    "add('wss://ws.okx.com:8443/ws/v5/public',function(s){var a=[{channel:'trades',instId:base+'-USDT'}];if(ctv>0)a.push({channel:'trades',instId:base+'-USDT-SWAP'});"+
+    "s.send(JSON.stringify({op:'subscribe',args:a}));setInterval(function(){try{s.send('ping');}catch(e){}},20000);},"+
+    "function(d){if(d==='pong')return;var m=JSON.parse(d);if(!m.arg||!m.data)return;var sw=(m.arg.instId||'').indexOf('SWAP')>0;"+
+    "for(var i=0;i<m.data.length;i++){var t=m.data[i],p=+t.px,z=+t.sz;P(sw?'perp':'spot',t.side==='buy'?'buy':'sell',p*z*(sw?ctv:1),p,'OKX');}});"+
+    "add('wss://ws-feed.exchange.coinbase.com',function(s){s.send(JSON.stringify({type:'subscribe',product_ids:[base+'-USD'],channels:['matches']}));},"+
+    "function(d){var m=JSON.parse(d);if(m.type!=='match'&&m.type!=='last_match')return;var p=+m.price,z=+m.size;P('spot',m.side==='sell'?'buy':'sell',p*z,p,'CBS');});"+   // side в matches = сторона МЕЙКЕРА, агрессор противоположен
+    "add('wss://ws.kraken.com',function(s){s.send(JSON.stringify({event:'subscribe',pair:[(base==='BTC'?'XBT':base)+'/USD'],subscription:{name:'trade'}}));},"+
+    "function(d){var m=JSON.parse(d);if(!Array.isArray(m)||m[2]!=='trade')return;var a=m[1];for(var i=0;i<a.length;i++){var p=+a[i][0],v=+a[i][1];P('spot',a[i][3]==='b'?'buy':'sell',p*v,p,'KRK');}});"+
+    "}"+
     "setInterval(function(){if(buf.length){postMessage(buf);buf=[];}},120);"+
-    "onmessage=function(e){var d=e.data||{};if(d.cmd==='init'){sym=(d.symbol||'').toUpperCase();thr=+d.thr||0;open();}else if(d.cmd==='thr'){thr=+d.v||0;}else if(d.cmd==='stop'){close();}};";
+    "onmessage=function(e){var d=e.data||{};if(d.cmd==='init'){sym=(d.symbol||'').toUpperCase();base=(d.base||'').toUpperCase();ctv=+d.ctv||0;thr=+d.thr||0;open();}else if(d.cmd==='thr'){thr=+d.v||0;}else if(d.cmd==='stop'){close();}};";
   }
   function _whStart(sym){
     sym=(sym||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase(); if(!sym)return;
     if(_whSym===sym&&_whWorker)return;
     _whStop(); _whSym=sym; _whFeed=[]; _whEnsure();
+    const base=sym.replace(/USDT$/,'');
+    // объём перпа OKX — в КОНТРАКТАХ, нотионал = sz×ctVal×цена. Берём ctVal из кэша модуля ликвидаций;
+    // если его ещё нет — перп OKX в этой сессии просто не подписывается (спот OKX работает), кэш греем на следующий старт.
+    let ctv=0;
+    try{ const m=(typeof _liqCtVal!=='undefined'&&_liqCtVal)||(JSON.parse(localStorage.getItem('msa_okx_ctval_v1')||'{}').m); if(m)ctv=+m[base+'-USDT-SWAP']||0; }catch(e){}
+    if(!ctv&&typeof _liqLoadCtVal==='function'){try{_liqLoadCtVal();}catch(e){}}
     try{
       const blob=new Blob([_whWorkerCode()],{type:'application/javascript'});
       _whWorker=new Worker(URL.createObjectURL(blob));
-      _whWorker.onmessage=function(e){ const items=e.data; if(!Array.isArray(items))return; for(let i=0;i<items.length;i++){ const it=items[i]; _whPush(it.mkt,it.side,it.n,it.px); } };
-      _whWorker.postMessage({cmd:'init',symbol:sym,thr:_whGetThresh()});
+      _whWorker.onmessage=function(e){ const items=e.data; if(!Array.isArray(items))return; for(let i=0;i<items.length;i++){ const it=items[i]; _whPush(it.mkt,it.side,it.n,it.px,it.ex); } };
+      _whWorker.postMessage({cmd:'init',symbol:sym,base,ctv,thr:_whGetThresh()});
     }catch(e){ /* воркер недоступен — UI не роняем, лента просто пустая */ }
     _whRender();
   }
@@ -3805,7 +3822,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(e.mkt==='liq'){ const long=e.side==='long';
         return '<div class="wh-row wh-liq '+(long?'wh-liq-long':'wh-liq-short')+'"><span class="wh-t">'+tm+'</span><span class="wh-mkt wh-liqtag">💥ЛИКВ</span><span class="wh-side">'+(long?'L':'S')+'</span><span class="wh-n">'+_whFmt(e.n)+'</span><span class="wh-px">'+px+'</span></div>';
       }
-      return '<div class="wh-row '+(e.side==='buy'?'wh-buy':'wh-sell')+'"><span class="wh-t">'+tm+'</span><span class="wh-mkt wh-'+e.mkt+'">'+(e.mkt==='spot'?'СПОТ':'ПЕРП')+'</span><span class="wh-side">'+(e.side==='buy'?'▲':'▼')+'</span><span class="wh-n">'+_whFmt(e.n)+'</span><span class="wh-px">'+px+'</span></div>';
+      return '<div class="wh-row '+(e.side==='buy'?'wh-buy':'wh-sell')+'"><span class="wh-t">'+tm+'</span><span class="wh-mkt wh-'+e.mkt+'" title="'+escapeHtml(e.ex||'')+'">'+(e.mkt==='spot'?'СПОТ':'ПЕРП')+(e.ex?' <span class="wh-ex">'+escapeHtml(e.ex)+'</span>':'')+'</span><span class="wh-side">'+(e.side==='buy'?'▲':'▼')+'</span><span class="wh-n">'+_whFmt(e.n)+'</span><span class="wh-px">'+px+'</span></div>';
     }).join('') || '<div class="wh-empty">ждём крупных принтов ≥ '+_whFmt(th)+'…</div>';
     ['whaleSess','whaleDemo'].forEach(id=>{ const el=document.getElementById(id); if(!el)return; const gs=el.querySelector('.wh-gauge-slot'),ts=el.querySelector('.wh-tape-slot'),tv=el.querySelector('.wh-thval'); if(gs)gs.innerHTML=gaugeHtml; if(ts)ts.innerHTML=rows; if(tv)tv.textContent=_whFmt(th); });
   }
