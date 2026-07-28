@@ -5527,14 +5527,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(L.side==='buy'&&prev>L.px&&px<=L.px){ L.open=false;_gs.fills++;_gs.inv.push({side:'long',entry:L.px,tp:L.px+_gs.step,lvl:L}); }
       else if(L.side==='sell'&&prev<L.px&&px>=L.px){ L.open=false;_gs.fills++;_gs.inv.push({side:'short',entry:L.px,tp:L.px-_gs.step,lvl:L}); }
     }
-    // закрытие пар: тейк на шаг, уровень реоткрывается (как у реального грида)
-    _gs.inv=_gs.inv.filter(pp=>{
-      const hit=pp.side==='long'?px>=pp.tp:px<=pp.tp;
-      if(hit){ _gs.pairs++; _gs.realized+=_gs.step/pp.entry*10000; if(pp.lvl)pp.lvl.open=true; return false; }
-      return true;
-    });
-    // HFA-защита: нога, ушедшая в плюс на ≥100 bps (1%), снимается по рынку — не ждём отката к шагу сетки.
-    // Такой профит на одной ноге = движение против сетки уже началось, дальше её обычно и убивает.
+    // HFA-защита (ДО закрытия пар — иначе ногу заберёт лимитный тейк на шаг и весь рывок пройдёт мимо):
+    // нога, которую вынесло в плюс на ≥100 bps (1%), снимается ПО РЫНКУ по фактической цене.
+    // Такой отрыв = рынок ушёл резко, сетке там больше делать нечего — центр едет за ликвидностью.
     let hfa=false;
     _gs.inv=_gs.inv.filter(pp=>{
       const pb=((px-pp.entry)/pp.entry*1e4)*(pp.side==='long'?1:-1);
@@ -5542,6 +5537,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       return true;
     });
     if(hfa&&typeof _proc==='function')_proc('HFA-защита сетки: нога снята по рынку ≥100 bps · центр сдвигается за ценой','pr-up');
+    // закрытие пар: тейк на шаг, уровень реоткрывается (как у реального грида)
+    _gs.inv=_gs.inv.filter(pp=>{
+      const hit=pp.side==='long'?px>=pp.tp:px<=pp.tp;
+      if(hit){ _gs.pairs++; _gs.realized+=_gs.step/pp.entry*10000; if(pp.lvl)pp.lvl.open=true; return false; }
+      return true;
+    });
     // перестройка: выход за диапазон, устойчивый дрейф от центра или срабатывание HFA (сдвиг за ликвидностью)
     const out=px>_gs.hi||px<_gs.lo;
     const drift=Math.abs(px-_gs.center)>_gs.step*2.4 && Date.now()-_gs.lastRb>15000;
