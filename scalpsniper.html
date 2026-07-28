@@ -248,6 +248,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .ai-scen-item:first-child{border-left-color:var(--accent);color:var(--text)}
   .quick-status{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-top:6px;min-height:12px;letter-spacing:.2px}
   .wh-ex{opacity:.55;font-size:7px;letter-spacing:.4px}
+  .ap-fee{cursor:pointer;text-decoration:underline dotted;color:var(--accent)}
   .zones-fresh{display:flex;align-items:center;gap:8px;margin:2px 0 8px;font-size:10px;font-family:'JetBrains Mono',monospace;letter-spacing:.2px}
   #zonesFreshTxt{flex:1}
   .zones-fresh.fresh #zonesFreshTxt{color:var(--green)}
@@ -3331,7 +3332,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           const approach=w.side==='ask'?m.pxSlope>0:m.pxSlope<0;
           const flip=w.side==='ask'?m.deltaSlope<0:m.deltaSlope>0;
           if(!approach||!(flip||m.absorb))return null;
-          return {side:w.side==='ask'?'short':'long',stopBps:5,tpBps:18,ref:w.key};   // было 7.5 — при комиссии 5 это требовало 80% WR только чтобы не терять
+          return {side:w.side==='ask'?'short':'long',stopBps:5,tpBps:Math.max(7.5,5+2*AP_FEE),ref:w.key};   // цель дышит по издержкам: при 0 — родные 7.5, при 5 — 15
         },
         cancel:(m,pos)=>{const w=m.walls.find(x=>x.key===pos.ref);return !w||w.eaten>0.6;}
       }},
@@ -3351,7 +3352,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           if(!w)return null;
           const long=w.side==='ask';
           if(long?m.deltaSlope<=0:m.deltaSlope>=0)return null;
-          return {side:long?'long':'short',stopBps:6,tpBps:20,ref:w.key};   // было 5/10 → точка безубытка 66.7%, недостижимо
+          return {side:long?'long':'short',stopBps:5,tpBps:Math.max(10,5+2*AP_FEE),ref:w.key};   // при 0 издержек — родные 10, при 5 — 15
         },
         cancel:(m,pos)=>{const w=m.walls.find(x=>x.key===pos.ref);return !!w&&w.s>=w.s0*0.8;} // refill = спуф
       }},
@@ -3370,8 +3371,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           if(m.liqNearBps==null||m.liqNearBps>10||m.accel<1.4)return null;
           const long=m.liqNearSide==='up';
           if(long?m.pxSlope<=0:m.pxSlope>=0)return null; // движение уже к кластеру
-          if(m.liqNearBps+6<18)return null;                                   // цель обязана быть ≥ стоп+2×комиссии, иначе сетап нерентабелен
-          return {side:long?'long':'short',stopBps:7,tpBps:Math.min(24,m.liqNearBps+6)};
+          if(m.liqNearBps+4<7+2*AP_FEE)return null;                           // цель обязана быть ≥ стоп+2×издержек
+          return {side:long?'long':'short',stopBps:7,tpBps:Math.min(24,m.liqNearBps+4)};
         },
         cancel:m=>m.accel<0.8 // поток заглох до сноса
       }},
@@ -3391,7 +3392,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           const r=up?m.retrUp:m.retrDn;
           if(r==null||r<0.35||r>0.65||!m.deltaCalm)return null;
           const tp=up?(m.swingHi-m.px)/m.px*1e4:(m.px-m.swingLo)/m.px*1e4;
-          if(tp<18)return null; // цель обязана быть ≥ стоп+2×комиссии (было 6 — оттуда и брался минус)
+          if(tp<Math.max(6,8+2*AP_FEE))return null; // цель обязана быть ≥ стоп+2×издержек; при 0 — родные 6
           return {side:up?'long':'short',stopBps:8,tpBps:Math.min(26,tp)};
         },
         cancel:m=>{const up=m.f.dir==='up';const r=up?m.retrUp:m.retrDn;return r!=null&&r>0.78;}
@@ -3414,7 +3415,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           if(!m.deltaCalm)return null;                                             // дельта ещё жива — точка не созрела
           const w=m.walls.find(w=>w.dist<=3&&w.eaten<0.2&&w.age>=20e3&&w.s>=m.avg*2);
           if(!w)return null;                                                       // нет нетронутой лимитки вплотную
-          return {side:w.side==='ask'?'short':'long',stopBps:3,tpBps:15,ref:w.key};   // было 9 → безубыток 66.7%; стоп короткий, цель обязана быть длинной
+          return {side:w.side==='ask'?'short':'long',stopBps:3,tpBps:Math.max(9,3+2*AP_FEE),ref:w.key};   // при 0 издержек — родные 9
         },
         cancel:(m,pos)=>{const w=m.walls.find(x=>x.key===pos.ref);return !w||w.eaten>0.5;}  // лимитку съели — тезис умер
       }}
@@ -5216,6 +5217,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _setTkSort(k){ _tkSort=k;
     const pw=document.getElementById('tickerWrap'); if(pw&&pw.classList.contains('open'))_renderTickerDD(_tickerSyms);
     const sw=document.getElementById('sessTkWrap'); if(sw&&sw.classList.contains('open'))_renderSessDD(false);
+    // Тренажёр забыли: чип менял _tkSort, но список не перерисовывался — выглядело как «залипло и не реагирует»
+    const dw=document.getElementById('demoTkWrap'); if(dw&&dw.classList.contains('open'))_renderDemoDD(false);
   }
   function _populateTickerList(syms){ _tickerSyms=syms; _renderTickerDD(syms); }
   function _filterTickerDD(){
@@ -5687,7 +5690,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _gsBuild(px){
     const hh=_dlHist; if(!px||hh.length<12)return null;
     const wl=Math.min.apply(null,hh), wh=Math.max.apply(null,hh);
-    const half=Math.max((wh-wl)*0.9, px*0.0008); // мин полудиапазон 8 bps
+    // Шаг сетки ОБЯЗАН отбивать комиссию: доход пары = шаг, расход = FEE за круг.
+    // Было: мин. полудиапазон 8 bps → шаг 2 bps против комиссии 5 → КАЖДАЯ пара в минус.
+    // Разбор журнала: сессия со 150 закрытыми парами (конверсия 92%) дала −654 bps — фарм работал, экономика нет.
+    // Теперь шаг не меньше 2×FEE: пара приносит минимум столько же, сколько стоит.
+    const minHalf=px*Math.max(0.0008, AP_FEE*2*4/1e4);   // step=half/4 → half=minStep*4; при нулевых издержках остаётся родной пол 8 bps
+    const half=Math.max((wh-wl)*0.9, minHalf);
     const sym=document.getElementById('dlSym')?.textContent||'';
     const dt=(_dayTrendCache[sym]&&_dayTrendCache[sym].val)||null;
     const flow=_dlModel?(_dlModel.pUp-_dlModel.pDown):0;
@@ -5742,10 +5750,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(hfa&&typeof _proc==='function')_proc('HFA-защита сетки: нога снята по рынку ≥100 bps · центр сдвигается за ценой','pr-up');
     // ── ВЫКЛЮЧАТЕЛЬ СЕТКИ. Журнал: 8 сеточных сессий = −4661 bps (78% всего убытка), средняя −583.
     // Убивает не прибыльная нога, а ОДНОСТОРОННИЙ инвентарь в тренде: сетка усредняется против движения.
+    // Число ног само по себе НЕ признак беды: набирать инвентарь — штатное дыхание сетки, на этом она и зарабатывает.
+    // Режем по РИСКУ и РЕЖИМУ, а не по счётчику ног. Чем больше сетка уже заработала, тем длиннее поводок.
     const _fl=_gs.inv.reduce((s,x)=>s+((px-x.entry)/x.entry*1e4)*(x.side==='long'?1:-1),0);
-    const oneSide=_gs.inv.length>=4&&_gs.inv.every(x=>x.side===_gs.inv[0].side);
-    if((oneSide&&_fl<=-60)||(_gs.realized+_fl)<=-150){
-      const why=oneSide?('инвентарь '+_gs.inv.length+' ног в одну сторону, флоут '+_fl.toFixed(0)+' bps'):('лимит убытка сессии '+(_gs.realized+_fl).toFixed(0)+' bps');
+    const earned=Math.max(0,_gs.realized);
+    const giveBack=_fl<=-Math.max(120,earned*1.5);                       // отдаёт больше, чем заработала
+    const outBand=px>_gs.hi||px<_gs.lo;
+    const trendKill=outBand&&_fl<0&&(()=>{try{const f=_apCtxF();return f.str>=2&&((f.dir==='up'&&_gs.inv.some(x=>x.side==='short'))||(f.dir==='down'&&_gs.inv.some(x=>x.side==='long')));}catch(e){return false;}})();
+    if(giveBack||trendKill||(_gs.realized+_fl)<=-Math.max(200,earned*2)){
+      const why=trendKill?('цена вышла за диапазон, тренд идёт против инвентаря (флоут '+_fl.toFixed(0)+' bps)')
+        :giveBack?('отдаёт больше заработанного: флоут '+_fl.toFixed(0)+' bps при реализованных '+_gs.realized.toFixed(0))
+        :('лимит убытка сессии '+(_gs.realized+_fl).toFixed(0)+' bps');
       _gs.realized+=_fl; _gs.inv=[];                       // режем инвентарь по рынку, не усредняемся дальше
       if(typeof _ap!=='undefined'){_ap.gridBlockUntil=Date.now()+120e3; _ap.gridOn=false;}   // пауза 2 мин: тренд не для сетки
       if(typeof _gsStop==='function')_gsStop();
@@ -5787,7 +5802,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // ═══════════ АВТОПИЛОТ (демо) — стратегии из реестра сами открывают ВИРТУАЛЬНЫЕ сделки ═══════════
   // Тик на КАЖДОМ сообщении потока (макс. частота). Одна сделка за раз, cooldown 45с,
   // комиссия 5 bps на круг зашита в PnL, макс. ведение 180с. Реальных ордеров нет и не будет.
-  const AP_FEE=5, AP_MINFIT=62, AP_COOLDOWN=45e3, AP_MAXHOLD=180e3;
+  // ИЗДЕРЖКИ НА КРУГ (bps) — НЕ константа: у разных аккаунтов разная комиссия (на MEXC у мейкера бывает 0),
+  // а от этого числа зависит вся экономика — цели протоколов, гейт матожидания и минимальный шаг сетки.
+  // Даже при нулевой комиссии остаётся спред/проскальзывание: модель считает по mid, реальный вход его пересекает.
+  let AP_FEE=5; try{const _f=localStorage.getItem('msa_ap_fee_v1'); if(_f!=null&&isFinite(+_f)&&+_f>=0)AP_FEE=+_f;}catch(e){}
+  function _apSetFee(){
+    const v=prompt('Издержки на круг, bps (комиссия + проскальзывание).\nНулевая комиссия у мейкера → ставь оценку спреда, обычно 0–2.',String(AP_FEE));
+    if(v==null)return; const n=(typeof _pf==='function')?_pf(v):parseFloat(v);
+    if(!isFinite(n)||n<0)return; AP_FEE=n;
+    try{localStorage.setItem('msa_ap_fee_v1',String(n));}catch(e){}
+    if(typeof _proc==='function')_proc('издержки на круг: <b>'+n+' bps</b> — цели, гейт и шаг сетки пересчитаны');
+  }
+  const AP_MINFIT=62, AP_COOLDOWN=45e3, AP_MAXHOLD=180e3;
   const AP_CONFIRM=1200;      // мс удержания сетапа до входа — лечит вход «на дрожании»
   const AP_MAXBE=0.50;        // потолок требуемого WR: план, которому для нуля нужно >50% побед, не берём
   const AP_SEGMIN=8;          // с какого числа наблюдений доверяем сегментной статистике
@@ -6006,6 +6032,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const expHtml=exp==null?'':(' · матожидание <b class="'+cls(exp)+'">'+sg(exp)+' bps/сделку</b>'+(wr!=null&&exp<0&&wr>=50?' <span class="gs-note">(WR высокий, но минус — ловушка)</span>':''));
     const mode=_ap.gridOn?'СЕТКА (рейндж)':'НАПРАВЛЕННЫЙ (тренд/поток)';
     p.innerHTML='<b>АВТОПИЛОТ</b> · режим <b>'+mode+'</b> · сегмент <b>'+_apSegKey(m.f)+'</b> · лидер '+lead+' '+(S[lead]||0)+'%'
+      +' · издержки <b class="ap-fee" onclick="_apSetFee()" title="Комиссия + проскальзывание на круг. От этого числа считаются цели, гейт и шаг сетки. Нажми, чтобы изменить">'+AP_FEE+' bps</b>'
       +'<br>'+posHtml
       +'<br>сегодня: <b>'+_ap.today.n+'</b> сд · WR '+(wr==null?'—':wr+'%')+expHtml+' · <b class="'+cls(_ap.today.sum)+'">'+sg(_ap.today.sum)+' bps</b>'+beTxt+(last?' · последние: '+last:'')
       +'<br><span class="gs-note">виртуально · комиссия '+AP_FEE+' bps в PnL · модель · тренажёр — реальные ордера не открывает</span>';
