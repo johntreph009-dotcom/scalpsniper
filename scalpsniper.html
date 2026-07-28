@@ -1617,7 +1617,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // ── Шаг 3: IndexedDB-обёртка (async CRUD, обход лимитов localStorage для растущего журнала). Нативная, без библиотек. ──
   class IdbStore{
     constructor(db,store){ this.db=db; this.store=store; this._p=null; }
-    _open(){ if(this._p)return this._p; this._p=new Promise((res,rej)=>{ if(!self.indexedDB)return rej(new Error('no idb')); const r=indexedDB.open(this.db,1); r.onupgradeneeded=()=>{ const d=r.result; if(!d.objectStoreNames.contains(this.store))d.createObjectStore(this.store,{keyPath:'id'}); }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); return this._p; }
+    // Открываем БД без явной версии; если нужного стора нет — переоткрываем с версией+1, чтобы создать его.
+    // Это делает класс переиспользуемым для НЕСКОЛЬКИХ сторов на одной БД (иначе version=1 создаёт только первый).
+    _open(){ if(this._p)return this._p; const _s=this; this._p=new Promise((res,rej)=>{ if(!self.indexedDB)return rej(new Error('no idb'));
+      const req=indexedDB.open(_s.db);
+      req.onupgradeneeded=()=>{ const d=req.result; if(!d.objectStoreNames.contains(_s.store))d.createObjectStore(_s.store,{keyPath:'id'}); };
+      req.onerror=()=>rej(req.error);
+      req.onsuccess=()=>{ const d=req.result;
+        if(d.objectStoreNames.contains(_s.store)){ res(d); return; }
+        const nv=d.version+1; d.close();
+        const r2=indexedDB.open(_s.db,nv);
+        r2.onupgradeneeded=()=>{ const d2=r2.result; if(!d2.objectStoreNames.contains(_s.store))d2.createObjectStore(_s.store,{keyPath:'id'}); };
+        r2.onsuccess=()=>res(r2.result); r2.onerror=()=>rej(r2.error);
+      };
+    }); return this._p; }
     async _os(mode){ const d=await this._open(); return d.transaction(this.store,mode).objectStore(this.store); }
     async put(rec){ const s=await this._os('readwrite'); return new Promise((res,rej)=>{const q=s.put(rec);q.onsuccess=()=>res();q.onerror=()=>rej(q.error);}); }
     async get(id){ const s=await this._os('readonly'); return new Promise(res=>{const q=s.get(id);q.onsuccess=()=>res(q.result);q.onerror=()=>res(null);}); }
