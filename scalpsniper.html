@@ -3402,7 +3402,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         'Дельта иссушена — агрессор выдохся у уровня',
         'Цена вплотную к уровню, а не в середине диапазона'
       ],
-      fit:f=>{let s=0;if(f.rv==='high')s+=35;if(f.cvdDir==='flat')s+=20;if(f.anom)s+=10;if(f.str<=1)s+=10;return s;},
+      fit:f=>{let s=0;if(f.rv==='high')s+=35;if(f.cvdDir==='flat')s+=20;if(f.anom)s+=10;if(f.str<=1)s+=10;
+        if(f.micro){if(f.wallIntact)s+=15;if(f.deltaCalm)s+=10;if(f.wallEaten)s-=25;}   // микро-структура из общего вектора
+        return s;},
       // автопилот: конфлюенс 3-х факторов — аномальный объём + нетронутая лимитка вплотную + затухшая дельта.
       // Редкая точка: короткий стоп за стену, тейк агрессивный (R:R ~1:3).
       auto:{
@@ -4712,17 +4714,55 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(typeof _chartRedraw==='function')_chartRedraw();
   }
   // ── протокол-радар: одновременный фит-расчёт ВСЕХ стратегий к текущим условиям (наблюдение, не выбор) ──
-  function _protoFit(){
+  // ═══════════ ЯДРО СИНЕРГИИ: единое пространство вариантов для мэтчинга стратегий ═══════════
+  // Слой 1 — ЕДИНЫЙ ВЕКТОР ПРИЗНАКОВ. Дневной контекст и микро-структура сводятся в один объект,
+  // который читают ВСЕ стратегии: только на общих признаках их оценки сопоставимы между собой.
+  function _coreFeat(m){
+    const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):null;
+    const tr=(sym&&((_dayTrendCache[sym]||{}).val))||{};
+    const cx=(sym&&(((_dayCtxCache||{})[sym]||{}).val))||{};
+    const F={dir:tr.dir||'range',str:tr.strength||0,rv:(cx.rvol||{}).lvl||'norm',cvdDir:(cx.cvd||{}).dir||'flat',
+      oiDir:(cx.oi||{}).dir||'flat',anom:!!cx.anomaly,fnd:(cx.funding||{}).state||'norm',
+      wallIntact:false,wallEaten:false,deltaCalm:false,absorb:false,liqNear:false,retrFib:false,accel:1,micro:false};
+    if(m){ F.micro=true; F.deltaCalm=!!m.deltaCalm; F.absorb=!!m.absorb; F.accel=m.accel||1;
+      F.liqNear=m.liqNearBps!=null&&m.liqNearBps<=10;
+      const r=(m.f&&m.f.dir==='up')?m.retrUp:m.retrDn; F.retrFib=r!=null&&r>=0.35&&r<=0.65;
+      const ws=m.walls||[];
+      F.wallIntact=ws.some(w=>w.dist<=4&&w.eaten<0.2&&w.s>=m.avg*1.6);
+      F.wallEaten=ws.some(w=>w.dist<=8&&w.eaten>=0.45);
+    }
+    return F;
+  }
+  // Слой 2 — МАТРИЦА ОТНОШЕНИЙ. Стратегии не независимы: одни читают рынок одинаково (союз),
+  // другие утверждают взаимоисключающее об одном и том же уровне (конфликт).
+  // fade и пробой одной стены не могут быть правы одновременно — раньше оба могли светить высокий фит.
+  const PROTO_REL={
+    VALENTINI:{ally:['ITE_SNIPER','ELLIOTT_CLUSTER'],foe:['SQUEEZE'],why:'отбой от целой стены'},
+    SQUEEZE:{ally:['SHOTGUN'],foe:['VALENTINI','ITE_SNIPER'],why:'пробой съеденной стены'},
+    SHOTGUN:{ally:['SQUEEZE'],foe:['ELLIOTT_CLUSTER'],why:'снос в кластер ликвидаций'},
+    ELLIOTT_CLUSTER:{ally:['VALENTINI'],foe:['SHOTGUN'],why:'спокойный фиб-откат по тренду'},
+    ITE_SNIPER:{ally:['VALENTINI'],foe:['SQUEEZE'],why:'нетронутая лимитка + мёртвая дельта'}
+  };
+  // фит считается ОТНОСИТЕЛЬНО соседей: сильный союзник поднимает, сильный оппонент опускает.
+  // Вес конфликта выше веса союза — спор информативнее подтверждения.
+  function _protoFit(m){
     const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):null; if(!sym)return null;
     const tr=((_dayTrendCache[sym]||{}).val)||null;
     const cx=(((_dayCtxCache||{})[sym]||{}).val)||null;
     if(!tr||!cx)return null;
-    // контекст рынка → fit() каждой стратегии из реестра PROTOCOLS
-    const f={dir:tr.dir,str:tr.strength||0,rv:(cx.rvol||{}).lvl,cvdDir:(cx.cvd||{}).dir,oiDir:(cx.oi||{}).dir,anom:!!cx.anomaly,fnd:(cx.funding||{}).state};
-    const S={};
+    const f=_coreFeat(m);
+    const raw={};
     Object.entries(PROTOCOLS).forEach(([k,v])=>{
       let s=(v.base||20); try{s+=v.fit?v.fit(f):0;}catch(e){}
-      S[k]=Math.max(5,Math.min(95,s));
+      raw[k]=Math.max(5,Math.min(95,s));
+    });
+    const S={}; S._raw=raw; S._rel={};
+    Object.keys(raw).forEach(k=>{
+      const r=PROTO_REL[k]||{}; let b=0; const up=[],dn=[];
+      (r.ally||[]).forEach(a=>{ if(raw[a]>50){ b+=(raw[a]-50)*0.30; up.push(a); } });
+      (r.foe||[]).forEach(o=>{ if(raw[o]>50){ b-=(raw[o]-50)*0.45; dn.push(o); } });
+      S[k]=Math.max(5,Math.min(95,Math.round(raw[k]+b)));
+      S._rel[k]={up,dn,d:Math.round(b)};
     });
     return S;
   }
@@ -4734,6 +4774,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     keys.forEach(k=>{
       const el=document.getElementById('pfit_'+k); if(!el)return;
       el.textContent='фит '+S[k]+'%'+(k===top?' ●':'');
+      // видимое пространство вариантов: из чего сложился балл и кто с кем спорит
+      const rl=(S._rel||{})[k]||{}, rw=(S._raw||{})[k];
+      const rel=PROTO_REL[k]||{};
+      el.title=(rel.why?rel.why+'\n':'')+'свой балл '+rw+'%'
+        +(rl.d?' · синергия '+(rl.d>0?'+':'')+rl.d:'')+' → итог '+S[k]+'%'
+        +((rl.up||[]).length?'\nподтверждают: '+rl.up.join(', '):'')
+        +((rl.dn||[]).length?'\nспорят: '+rl.dn.join(', '):'')
+        +((rel.foe||[]).length?'\nвзаимоисключающие: '+rel.foe.join(', '):'');
       el.classList.toggle('pfit-top',k===top);
       const card=el.closest('.proto'); if(card)card.classList.toggle('proto-lead',k===top);
     });
@@ -4794,6 +4842,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const farFromAll=p=>z.every(zz=>Math.abs(zz.px-p)/p>0.0015);
       if(swH&&swH>price*1.003&&swH<=price*(1+within)&&farFromAll(swH))z.push({px:_rpx(swH),kind:'watch',note:'хай периода '+tf+' — структурный уровень',stop:null,proto:null,stars:2,createdAt:Date.now()});
       if(swL&&swL<price*0.997&&swL>=price*(1-within)&&farFromAll(swL))z.push({px:_rpx(swL),kind:'watch',note:'лоу периода '+tf+' — структурный уровень',stop:null,proto:null,stars:2,createdAt:Date.now()});
+      // пространство вариантов в разметке: у боевой зоны сразу виден альтернативный сценарий —
+      // что произойдёт, если рынок опровергнет основной (fade ↔ пробой одной и той же стены).
+      z.forEach(o=>{ if(o.kind==='fade')o.note+=' · если стену съедят → сценарий SQUEEZE (пробой)';
+        else if(o.kind==='break')o.note+=' · если стена устоит → сценарий VALENTINI (отбой)'; });
       z.sort((a,c)=>c.px-a.px);
       const topZ=z.slice().sort((a,c)=>(c.stars-a.stars)||(Math.abs(a.px-price)-Math.abs(c.px-price)))[0];
       _lastQuickPrice=price;
@@ -5660,15 +5712,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(_ap.gridOn){ if(!_gs)_gsStart(); _apRender(m); return; } // сетка торгует, направленные молчат
       if(_ap.pos){_apManage(m);_apRender(m);return;}
       if(now<_ap.cdUntil){_apRender(m);return;}
-      // фиты по всем стратегиям, лидер ≥ порога, контекст + триггер
-      const S=_protoFit()||{};
+      // фиты по всем стратегиям (уже с поправкой на синергию), лидер ≥ порога, контекст + триггер
+      const S=_protoFit(m)||{};
       const cand=Object.entries(PROTOCOLS)
         .filter(([k,v])=>v.auto&&(S[k]||0)>=AP_MINFIT&&v.auto.ctx(m.f))
         .sort((a,b)=>(S[b[0]]||0)-(S[a[0]]||0));
-      for(const [k,v] of cand){
-        let plan=null; try{plan=v.auto.trig(m);}catch(e){}
-        if(plan){_apOpen(k,plan,m,S[k]);break;}
-      }
+      // собираем ВСЕ сработавшие триггеры и решаем в пространстве вариантов, а не «первый сверху»
+      const fired=[];
+      for(const [k,v] of cand){ let plan=null; try{plan=v.auto.trig(m);}catch(e){}
+        if(plan)fired.push({k,plan,fit:S[k]||0}); }
+      const win=_coreResolve(fired);
+      if(win)_apOpen(win.k,win.plan,m,win.fit,win.conf,win.against);
       _apRender(m);
     }catch(e){console.warn('autopilot:',e&&e.message);}
   }
@@ -5682,10 +5736,33 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{localStorage.setItem(AP_LOGKEY,JSON.stringify(_ap.log));localStorage.setItem(AP_SEGKEY,JSON.stringify(_ap.seg));}catch(e){}
     _ap.today.n++; if(st.net>0)_ap.today.w++; _ap.today.sum=+(_ap.today.sum+st.net).toFixed(1);
   }
-  function _apOpen(proto,plan,m,fit){
+  // Слой 3 — РАЗРЕШЕНИЕ В ПРОСТРАНСТВЕ ВАРИАНТОВ. Сработать могут несколько стратегий сразу.
+  // Совпали по стороне — конфлюенс (усиливают друг друга), разошлись — спор (вычитают).
+  // Равный спор = входа нет: пространство вариантов не дало перевеса, а гадать в моменте нельзя.
+  function _coreResolve(fired){
+    if(!fired||!fired.length)return null;
+    fired.forEach(x=>{
+      const rel=PROTO_REL[x.k]||{};
+      const same=fired.filter(y=>y!==x&&y.plan.side===x.plan.side);
+      const opp=fired.filter(y=>y.plan.side!==x.plan.side);
+      let w=x.fit;
+      same.forEach(y=>{ w+=((rel.ally||[]).indexOf(y.k)>=0?0.35:0.20)*y.fit; });
+      opp.forEach(y=>{ w-=((rel.foe||[]).indexOf(y.k)>=0?0.50:0.30)*y.fit; });
+      x.w=+w.toFixed(1); x.conf=same.map(y=>y.k); x.against=opp.map(y=>y.k);
+    });
+    fired.sort((a,b)=>b.w-a.w);
+    const top=fired[0];
+    if(top.against.length&&fired[1]&&(top.w-fired[1].w)<8){
+      if(typeof _proc==='function')_proc('спор стратегий без перевеса: '+fired.slice(0,2).map(x=>x.k+' '+x.plan.side).join(' ↔ ')+' — вход пропущен');
+      return null;
+    }
+    return top;
+  }
+  function _apOpen(proto,plan,m,fit,conf,against){
     const dir=plan.side==='long'?1:-1;
-    _ap.pos={proto,side:plan.side,entry:m.px,stop:m.px*(1-dir*plan.stopBps/1e4),tp:m.px*(1+dir*plan.tpBps/1e4),t0:Date.now(),seg:_apSegKey(m.f),ref:plan.ref||null,fit};
-    if(typeof _proc==='function')_proc('вход: <b>'+proto+'</b> '+(plan.side==='long'?'LONG':'SHORT')+' @ '+m.px.toFixed(_dlDec)+' · стоп '+plan.stopBps+' / тейк '+plan.tpBps+' bps · фит '+fit+'%');
+    _ap.pos={proto,side:plan.side,entry:m.px,stop:m.px*(1-dir*plan.stopBps/1e4),tp:m.px*(1+dir*plan.tpBps/1e4),t0:Date.now(),seg:_apSegKey(m.f),ref:plan.ref||null,fit,conf:conf||[],against:against||[]};
+    if(typeof _proc==='function')_proc('вход: <b>'+proto+'</b> '+(plan.side==='long'?'LONG':'SHORT')+' @ '+m.px.toFixed(_dlDec)+' · стоп '+plan.stopBps+' / тейк '+plan.tpBps+' bps · фит '+fit+'%'
+      +((conf&&conf.length)?' · конфлюенс: '+conf.join(', '):'')+((against&&against.length)?' · спорили: '+against.join(', '):''));
   }
   function _apManage(m){
     const p=_ap.pos, dir=p.side==='long'?1:-1;
@@ -5713,7 +5790,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // итог = зафиксированная часть (разгрузка 30%) + остаток объёма по цене выхода − комиссия круга
     const q=p.qty==null?1:p.qty;
     const bps=+((((px-p.entry)/p.entry*1e4)*dir)*q+(p.realBps||0)-AP_FEE).toFixed(1);
-    const rec={t:Date.now(),proto:p.proto,side:p.side,entry:+p.entry.toFixed(6),exit:+px.toFixed(6),bps,seg:p.seg,reason,hold:Math.round((Date.now()-p.t0)/1e3),part:!!p.part};
+    const rec={t:Date.now(),proto:p.proto,side:p.side,entry:+p.entry.toFixed(6),exit:+px.toFixed(6),bps,seg:p.seg,reason,hold:Math.round((Date.now()-p.t0)/1e3),part:!!p.part,conf:p.conf||[],against:p.against||[]};
     _ap.log.push(rec); if(_ap.log.length>300)_ap.log=_ap.log.slice(-300);
     const sg=_ap.seg[p.seg]=_ap.seg[p.seg]||{};
     const st=sg[p.proto]=sg[p.proto]||{n:0,w:0,sum:0};
