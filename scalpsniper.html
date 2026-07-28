@@ -3393,6 +3393,26 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           return {side:up?'long':'short',stopBps:8,tpBps:Math.min(20,tp)};
         },
         cancel:m=>{const up=m.f.dir==='up';const r=up?m.retrUp:m.retrDn;return r!=null&&r>0.78;}
+      }},
+    ITE_SNIPER:{name:'ITE Sniper',sub:'ideal entry / confluence',aliases:['ite','itesniper','sniper','idealentry'],base:15,
+      checks:[
+        'Аномальный объём — RVOL высокий (в потоке событие)',
+        'Крупная лимитка стоит и держит уровень, её не съели',
+        'Дельта иссушена — агрессор выдохся у уровня',
+        'Цена вплотную к уровню, а не в середине диапазона'
+      ],
+      fit:f=>{let s=0;if(f.rv==='high')s+=35;if(f.cvdDir==='flat')s+=20;if(f.anom)s+=10;if(f.str<=1)s+=10;return s;},
+      // автопилот: конфлюенс 3-х факторов — аномальный объём + нетронутая лимитка вплотную + затухшая дельта.
+      // Редкая точка: короткий стоп за стену, тейк агрессивный (R:R ~1:3).
+      auto:{
+        ctx:f=>f.rv==='high',
+        trig:m=>{
+          if(!m.deltaCalm)return null;                                             // дельта ещё жива — точка не созрела
+          const w=m.walls.find(w=>w.dist<=3&&w.eaten<0.2&&w.age>=20e3&&w.s>=m.avg*2);
+          if(!w)return null;                                                       // нет нетронутой лимитки вплотную
+          return {side:w.side==='ask'?'short':'long',stopBps:3,tpBps:9,ref:w.key};
+        },
+        cancel:(m,pos)=>{const w=m.walls.find(x=>x.key===pos.ref);return !w||w.eaten>0.5;}  // лимитку съели — тезис умер
       }}
   };
   // производные структуры — НЕ редактировать, всё берётся из PROTOCOLS
@@ -5513,13 +5533,22 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(hit){ _gs.pairs++; _gs.realized+=_gs.step/pp.entry*10000; if(pp.lvl)pp.lvl.open=true; return false; }
       return true;
     });
-    // перестройка: выход за диапазон или устойчивый дрейф от центра
+    // HFA-защита: нога, ушедшая в плюс на ≥100 bps (1%), снимается по рынку — не ждём отката к шагу сетки.
+    // Такой профит на одной ноге = движение против сетки уже началось, дальше её обычно и убивает.
+    let hfa=false;
+    _gs.inv=_gs.inv.filter(pp=>{
+      const pb=((px-pp.entry)/pp.entry*1e4)*(pp.side==='long'?1:-1);
+      if(pb>=100){ _gs.pairs++; _gs.hfa=(_gs.hfa||0)+1; _gs.realized+=pb; if(pp.lvl)pp.lvl.open=true; hfa=true; return false; }
+      return true;
+    });
+    if(hfa&&typeof _proc==='function')_proc('HFA-защита сетки: нога снята по рынку ≥100 bps · центр сдвигается за ценой','pr-up');
+    // перестройка: выход за диапазон, устойчивый дрейф от центра или срабатывание HFA (сдвиг за ликвидностью)
     const out=px>_gs.hi||px<_gs.lo;
     const drift=Math.abs(px-_gs.center)>_gs.step*2.4 && Date.now()-_gs.lastRb>15000;
-    if(out||drift){
-      const keep={inv:_gs.inv.map(x=>({side:x.side,entry:x.entry,tp:x.tp,lvl:null})),f:_gs.fills,p:_gs.pairs,r:_gs.realized,rb:_gs.rebuilds+1,t0:_gs.t0};
+    if(out||drift||hfa){
+      const keep={inv:_gs.inv.map(x=>({side:x.side,entry:x.entry,tp:x.tp,lvl:null})),f:_gs.fills,p:_gs.pairs,r:_gs.realized,rb:_gs.rebuilds+1,t0:_gs.t0,h:_gs.hfa||0};
       const ng=_gsBuild(px);
-      if(ng){ ng.inv=keep.inv; ng.fills=keep.f; ng.pairs=keep.p; ng.realized=keep.r; ng.rebuilds=keep.rb; ng.t0=keep.t0; _gs=ng; }
+      if(ng){ ng.inv=keep.inv; ng.fills=keep.f; ng.pairs=keep.p; ng.realized=keep.r; ng.rebuilds=keep.rb; ng.t0=keep.t0; ng.hfa=keep.h; _gs=ng; }
     }
     _gsRender(px);
   }
@@ -5535,7 +5564,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const cls=v=>v>=0?'gs-up':'gs-dn', sg=v=>(v>=0?'+':'')+v.toFixed(1);
     p.style.display='block';
     p.innerHTML='<b>СЕТКА</b> '+_gs.levels.length+' ур × '+stepBps+' bps · '+_gs.lo.toFixed(dec)+'–'+_gs.hi.toFixed(dec)+' · <b>'+modeTxt+'</b> · '+mm+':'+ss
-      +'<br>филлы <b>'+_gs.fills+'</b> · пары <b>'+_gs.pairs+'</b> · реализовано <b class="'+cls(_gs.realized)+'">'+sg(_gs.realized)+' bps</b> · инвентарь <b>'+_gs.inv.length+'</b> ур (<span class="'+cls(fl)+'">'+sg(fl)+'</span>) · итог <b class="'+cls(net)+'">'+sg(net)+'</b> · перестроек '+_gs.rebuilds
+      +'<br>филлы <b>'+_gs.fills+'</b> · пары <b>'+_gs.pairs+'</b> · реализовано <b class="'+cls(_gs.realized)+'">'+sg(_gs.realized)+' bps</b> · инвентарь <b>'+_gs.inv.length+'</b> ур (<span class="'+cls(fl)+'">'+sg(fl)+'</span>) · итог <b class="'+cls(net)+'">'+sg(net)+'</b> · перестроек '+_gs.rebuilds+(_gs.hfa?' · <b title="ноги, снятые HFA-защитой на +100 bps">HFA '+_gs.hfa+'</b>':'')
       +'<br><span class="gs-note">'+(_gs.inv.length>=3?'⚠ копит инвентарь против движения — так сетку убивает тренд, и так её вычисляют':'собирает шаг в рейндже — штатный режим сеточника')+' · модель · тренажёр</span>';
   }
 
@@ -5647,13 +5676,26 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     else if(dir>0?m.px>=p.tp:m.px<=p.tp)reason='tp';
     else if(Date.now()-p.t0>AP_MAXHOLD)reason='time';
     else{const a=(PROTOCOLS[p.proto]||{}).auto;if(a&&a.cancel){let c=false;try{c=a.cancel(m,p);}catch(e){}if(c)reason='cancel';}}
+    // многоступенчатая разгрузка: треть пути до тейка → фиксируем 30% объёма, стоп в безубыток,
+    // остаток 70% ведём до полного тейка. Считается только если позиция ещё жива.
+    if(!reason&&!p.part){
+      const den=dir>0?(p.tp-p.entry):(p.entry-p.tp);
+      const prog=den>0?(dir>0?(m.px-p.entry):(p.entry-m.px))/den:0;
+      if(prog>=0.3){
+        const bps=((m.px-p.entry)/p.entry*1e4)*dir;
+        p.realBps=(p.realBps||0)+bps*0.3; p.qty=0.7; p.part=true; p.stop=p.entry;   // BU: дальше хуже нуля не станет
+        if(typeof _proc==='function')_proc('разгрузка 30%: <b>'+p.proto+'</b> @ '+m.px.toFixed(_dlDec)+' · +'+bps.toFixed(1)+' bps зафиксировано · стоп в безубыток','pr-up');
+      }
+    }
     if(reason)_apClose(m.px,reason);
   }
   function _apClose(px,reason){
     const p=_ap.pos; if(!p)return;
     const dir=p.side==='long'?1:-1;
-    const bps=+(((px-p.entry)/p.entry*1e4)*dir-AP_FEE).toFixed(1);
-    const rec={t:Date.now(),proto:p.proto,side:p.side,entry:+p.entry.toFixed(6),exit:+px.toFixed(6),bps,seg:p.seg,reason,hold:Math.round((Date.now()-p.t0)/1e3)};
+    // итог = зафиксированная часть (разгрузка 30%) + остаток объёма по цене выхода − комиссия круга
+    const q=p.qty==null?1:p.qty;
+    const bps=+((((px-p.entry)/p.entry*1e4)*dir)*q+(p.realBps||0)-AP_FEE).toFixed(1);
+    const rec={t:Date.now(),proto:p.proto,side:p.side,entry:+p.entry.toFixed(6),exit:+px.toFixed(6),bps,seg:p.seg,reason,hold:Math.round((Date.now()-p.t0)/1e3),part:!!p.part};
     _ap.log.push(rec); if(_ap.log.length>300)_ap.log=_ap.log.slice(-300);
     const sg=_ap.seg[p.seg]=_ap.seg[p.seg]||{};
     const st=sg[p.proto]=sg[p.proto]||{n:0,w:0,sum:0};
