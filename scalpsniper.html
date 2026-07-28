@@ -3958,6 +3958,42 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }catch(e){}
     return null;
   }
+  // ── OKX-фолбэки данных (Binance/Bybit/MEXC блокируются на части сетей — гео/ISP; OKX обычно жив) ──
+  // Все возвращают форму, совместимую с Binance-ветками вызывающего кода, чтобы не переписывать логику.
+  function _okxInst(sym){ return sym.replace(/USDT$/,'')+'-USDT-SWAP'; }   // SOLUSDT → SOL-USDT-SWAP
+  async function _pxAny(sym){
+    try{const r=await fetch('https://api.binance.com/api/v3/ticker/price?symbol='+sym,{cache:'no-store'}); if(r.ok){const p=+(await r.json()).price; if(p&&isFinite(p))return p;}}catch(e){}
+    try{const r=await fetch('https://www.okx.com/api/v5/market/ticker?instId='+_okxInst(sym),{cache:'no-store'}); if(r.ok){const d=(await r.json()).data; const p=+(d&&d[0]&&d[0].last); if(p&&isFinite(p))return p;}}catch(e){}
+    return null;
+  }
+  async function _depthAny(sym){   // → {asks:[[p,q]…], bids:[[p,q]…]} как Binance /depth
+    try{const r=await fetch('https://api.binance.com/api/v3/depth?symbol='+sym+'&limit=1000',{cache:'no-store'}); if(r.ok){const j=await r.json(); if(j&&j.asks&&j.asks.length)return {asks:j.asks,bids:j.bids};}}catch(e){}
+    try{const r=await fetch('https://www.okx.com/api/v5/market/books?instId='+_okxInst(sym)+'&sz=400',{cache:'no-store'}); if(r.ok){const d=(await r.json()).data, b=d&&d[0]; if(b&&b.asks&&b.asks.length)return {asks:b.asks.map(a=>[a[0],a[1]]),bids:b.bids.map(a=>[a[0],a[1]])};}}catch(e){}
+    return null;
+  }
+  async function _klRaw(sym,tf,limit){   // → массив в форме Binance klines [[t,o,h,l,c,v]…] по возрастанию времени
+    try{const r=await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval='+tf+'&limit='+limit,{cache:'no-store'}); if(r.ok){const j=await r.json(); if(Array.isArray(j)&&j.length)return j;}}catch(e){}
+    const okxBar={'1m':'1m','5m':'5m','15m':'15m','1h':'1H','4h':'4H','1d':'1D'}[tf]||tf;
+    for(const iid of [_okxInst(sym), sym.replace(/USDT$/,'')+'-USDT']){
+      try{const r=await fetch('https://www.okx.com/api/v5/market/candles?instId='+iid+'&bar='+okxBar+'&limit='+Math.min(limit,300),{cache:'no-store'}); if(r.ok){const d=(await r.json()).data; if(Array.isArray(d)&&d.length)return d.map(k=>[+k[0],+k[1],+k[2],+k[3],+k[4],+k[5]]).reverse();}}catch(e){}
+    }
+    return null;
+  }
+  async function _fundingAny(sym){   // → фандинг в %, как в quickAnalyze
+    try{const r=await fetch('https://fapi.binance.com/fapi/v1/premiumIndex?symbol='+sym,{cache:'no-store'}); if(r.ok){const f=(await r.json()).lastFundingRate; if(f!=null)return +(+f*100).toFixed(4);}}catch(e){}
+    try{const r=await fetch('https://www.okx.com/api/v5/public/funding-rate?instId='+_okxInst(sym),{cache:'no-store'}); if(r.ok){const d=(await r.json()).data, f=d&&d[0]&&d[0].fundingRate; if(f!=null)return +(+f*100).toFixed(4);}}catch(e){}
+    return null;
+  }
+  async function _oiAny(sym){   // → OI в базовых единицах (Binance openInterest / OKX oiCcy)
+    try{const r=await fetch('https://fapi.binance.com/fapi/v1/openInterest?symbol='+sym,{cache:'no-store'}); if(r.ok){const oi=(await r.json()).openInterest; if(oi!=null)return Math.round(+oi);}}catch(e){}
+    try{const r=await fetch('https://www.okx.com/api/v5/public/open-interest?instType=SWAP&instId='+_okxInst(sym),{cache:'no-store'}); if(r.ok){const d=(await r.json()).data, oi=d&&d[0]&&d[0].oiCcy; if(oi!=null)return Math.round(+oi);}}catch(e){}
+    return null;
+  }
+  async function _aggCvdAny(sym){   // дельта агрессии → {ratio:%, dir} из недавних сделок
+    try{const r=await fetch('https://fapi.binance.com/fapi/v1/aggTrades?symbol='+sym+'&limit=1000',{cache:'no-store'}); if(r.ok){const at=await r.json(); if(Array.isArray(at)&&at.length){let buy=0,sell=0; at.forEach(t=>{const q=+t.q; if(t.m)sell+=q; else buy+=q;}); const tot=buy+sell,rr=tot?(buy-sell)/tot:0; return {ratio:Math.round(rr*100),dir:rr>0.12?'buy':rr<-0.12?'sell':'flat'};}}}catch(e){}
+    try{const r=await fetch('https://www.okx.com/api/v5/market/trades?instId='+_okxInst(sym)+'&limit=500',{cache:'no-store'}); if(r.ok){const d=(await r.json()).data; if(Array.isArray(d)&&d.length){let buy=0,sell=0; d.forEach(t=>{const q=+t.sz; if(t.side==='sell')sell+=q; else buy+=q;}); const tot=buy+sell,rr=tot?(buy-sell)/tot:0; return {ratio:Math.round(rr*100),dir:rr>0.12?'buy':rr<-0.12?'sell':'flat'};}}}catch(e){}
+    return null;
+  }
   // ── приятный live-график цены в Сессии (плавная area-кривая) ──
   function _sessSetupPriceCanvas(){
     const cv=document.getElementById('sessPriceChart'); if(!cv)return;
@@ -4476,14 +4512,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const c=_dayTrendCache[sym];
     if(!force && c && Date.now()-c.at<90000) return c.val;
     try{
-      const r=await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval=15m&limit=96',{cache:'no-store'});
-      if(!r.ok)throw 0; const kl=await r.json();
+      const kl=await _klRaw(sym,'15m',96);
+      if(!kl)throw 0;
       const cl=kl.map(k=>+k[4]),hi=kl.map(k=>+k[2]),lo=kl.map(k=>+k[3]),n=cl.length;
       if(n<40)throw 0;
       const last=cl[n-1];
       const sma=(off,len)=>{const s=cl.slice(n-len-off,n-off);return s.reduce((a,b)=>a+b,0)/s.length;};
       const slope=(sma(0,20)-sma(8,20))/sma(8,20);
-      let dayOpen=null; try{const rd=await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval=1d&limit=1',{cache:'no-store'}); const kd=await rd.json(); dayOpen=+kd[0][1];}catch(e){}
+      let dayOpen=null; try{const kd=await _klRaw(sym,'1d',1); if(kd&&kd[0])dayOpen=+kd[0][1];}catch(e){}
       const vsOpen=dayOpen?((last-dayOpen)/dayOpen):0;
       const recHi=Math.max(...hi.slice(-16)),prevHi=Math.max(...hi.slice(-32,-16));
       const recLo=Math.min(...lo.slice(-16)),prevLo=Math.min(...lo.slice(-32,-16));
@@ -4514,17 +4550,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const c=_dayCtxCache[sym];
     if(!force && c && Date.now()-c.at<90000) return c.val;
     let cvd={ratio:0,dir:'flat'}, rvol={val:1,lvl:'norm'};
+    try{ const cv=await _aggCvdAny(sym); if(cv)cvd=cv; }catch(e){}
     try{
-      const at=await (await fetch('https://fapi.binance.com/fapi/v1/aggTrades?symbol='+sym+'&limit=1000',{cache:'no-store'})).json();
-      if(Array.isArray(at)&&at.length){
-        let buy=0,sell=0;
-        at.forEach(t=>{const q=+t.q; if(t.m)sell+=q; else buy+=q;}); // m=isBuyerMaker → агрессор продавец
-        const tot=buy+sell; const r=tot?(buy-sell)/tot:0;
-        cvd={ratio:Math.round(r*100),dir:r>0.12?'buy':r<-0.12?'sell':'flat'};
-      }
-    }catch(e){}
-    try{
-      const kl=await (await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval=15m&limit=48',{cache:'no-store'})).json();
+      const kl=await _klRaw(sym,'15m',48);
       if(Array.isArray(kl)&&kl.length>6){
         const vols=kl.map(k=>+k[5]);
         const lastClosed=vols[vols.length-2];
@@ -4546,9 +4574,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // Фандинг (перекос позиционирования)
     let funding={val:0,state:'norm'};
     try{
-      const pr=await (await fetch('https://fapi.binance.com/fapi/v1/premiumIndex?symbol='+sym,{cache:'no-store'})).json();
-      const fv=+(+pr.lastFundingRate*100).toFixed(4);
-      funding={val:fv,state:Math.abs(fv)>=0.05?'extreme':Math.abs(fv)>=0.02?'elev':'norm'};
+      const fv=await _fundingAny(sym);
+      if(fv!=null)funding={val:fv,state:Math.abs(fv)>=0.05?'extreme':Math.abs(fv)>=0.02?'elev':'norm'};
     }catch(e){}
     // Контекст BTC (бэкграунд рынка для альтов)
     let btc={dir:'range'};
@@ -4680,14 +4707,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const sym=_symFromTicker(raw);
     const btn=document.getElementById('quickBtn'); const oldT=btn?btn.textContent:'';
     const st=document.getElementById('quickStatus');
-    if(btn){btn.disabled=true;btn.textContent='⏳ Тяну Binance…';}
+    if(btn){btn.disabled=true;btn.textContent='⏳ Тяну данные…';}
     if(st)st.textContent='⏳ '+sym+': стакан, POC, фандинг, OI…';
     _quickBusy=true;
     try{
-      const j=async u=>{const r=await fetch(u,{cache:'no-store'}); if(!r.ok)throw new Error('http '+r.status); return r.json();};
-      const price=parseFloat((await j('https://api.binance.com/api/v3/ticker/price?symbol='+sym)).price);
+      const price=await _pxAny(sym);
       if(!price||!isFinite(price))throw new Error('нет цены');
-      const depth=await j('https://api.binance.com/api/v3/depth?symbol='+sym+'&limit=1000');
+      const depth=await _depthAny(sym);
+      if(!depth)throw new Error('нет стакана');
       // масштабирование под выбранный ТФ: диапазон уровней, кластеры и стопы дышат с таймфреймом
       const tf=document.getElementById('tf')?.value||'5m';
       const tfMult={'1m':0.6,'5m':1,'15m':1.8,'1h':3.2,'4h':6}[tf]||1;
@@ -4695,11 +4722,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const stopK=0.003*Math.sqrt(tfMult);
       const tfKl={'1m':['1m',240],'5m':['5m',96],'15m':['15m',96],'1h':['1h',120],'4h':['4h',120]}[tf]||['5m',96];
       let poc=null,funding=null,oi=null,momUp=null,swH=null,swL=null;
-      try{const kl=await j('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval='+tfKl[0]+'&limit='+tfKl[1]); const m={}; kl.forEach(k=>{const tp=(+k[2]+ +k[3]+ +k[4])/3,v=+k[5],key=Math.round(tp/b)*b; m[key]=(m[key]||0)+v;}); let bv=-1; for(const k in m){if(m[k]>bv){bv=m[k];poc=+k;}}
+      try{const kl=await _klRaw(sym,tfKl[0],tfKl[1]); if(!kl)throw 0; const m={}; kl.forEach(k=>{const tp=(+k[2]+ +k[3]+ +k[4])/3,v=+k[5],key=Math.round(tp/b)*b; m[key]=(m[key]||0)+v;}); let bv=-1; for(const k in m){if(m[k]>bv){bv=m[k];poc=+k;}}
         swH=Math.max(...kl.map(k=>+k[2])); swL=Math.min(...kl.map(k=>+k[3]));
         const closes=kl.map(k=>+k[4]).slice(-20); const ma=closes.reduce((a,c)=>a+c,0)/(closes.length||1); momUp = price>ma*1.0005?true : price<ma*0.9995?false : null; }catch(e){}
-      try{const fr=await j('https://fapi.binance.com/fapi/v1/premiumIndex?symbol='+sym); funding=+(+fr.lastFundingRate*100).toFixed(4);}catch(e){}
-      try{const o=await j('https://fapi.binance.com/fapi/v1/openInterest?symbol='+sym); oi=Math.round(+o.openInterest);}catch(e){}
+      try{funding=await _fundingAny(sym);}catch(e){}
+      try{oi=await _oiAny(sym);}catch(e){}
       const agg=arr=>{const m={}; arr.forEach(a=>{const p=+a[0],q=+a[1],key=Math.round(p/b)*b; m[key]=(m[key]||0)+p*q;}); return m;};
       const within=0.025*Math.min(tfMult,4); // 1m ±1.5% … 4h ±10%
       const pick=(m,side)=>Object.entries(m).map(([p,n])=>({p:+p,n})).filter(o=>{const d=(o.p-price)/price; return side==='ask'?(d>0.0003&&d<=within):(d<-0.0003&&d>=-within);}).sort((a,c)=>c.n-a.n).slice(0,3);
@@ -4740,7 +4767,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const trTxt=tdir==='up'?'тренд↑':tdir==='down'?'тренд↓':'рейндж';
       const cvTxt=cvdDir==='buy'?'CVD↑':cvdDir==='sell'?'CVD↓':'CVD≈';
       if(st)st.textContent='✓ '+raw+': '+z.length+' зон ('+mix+') · ТФ '+tf+' ±'+(within*100).toFixed(1)+'% · '+trTxt+'×'+trend.strength+' · '+cvTxt+' · RVOL '+ctx.rvol.val+'× · цена '+price+' · POC '+(poc??'н/д')+(funding!=null?' · фанд '+funding+'%':'')+' · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
-    }catch(e){ if(st)st.textContent='⚠ '+sym+': '+(e.message||'ошибка')+' (пара есть на Binance?)'; }
+    }catch(e){ if(st)st.textContent='⚠ '+sym+': '+(e.message||'ошибка')+' (пара есть на бирже?)'; }
     finally{ _quickBusy=false; if(btn){btn.disabled=false;btn.textContent=oldT||'⚡ Обновить зоны (без скринов)';} }
   }
   // ── свежесть зон ──
