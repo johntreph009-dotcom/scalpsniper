@@ -1616,20 +1616,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function reloadZonesForTicker(){ load(); editingIdx=-1; renderZones(); if(typeof renderLadder==='function')renderLadder(); if(typeof renderReadinessScore==='function')renderReadinessScore(); if(typeof renderPosition==='function')renderPosition(); if(typeof _syncSessTicker==='function')_syncSessTicker(); if(typeof _chartRedraw==='function'&&phase==='live')_chartRedraw(); }
   // ── Шаг 3: IndexedDB-обёртка (async CRUD, обход лимитов localStorage для растущего журнала). Нативная, без библиотек. ──
   class IdbStore{
-    constructor(db,store){ this.db=db; this.store=store; this._p=null; }
-    // Открываем БД без явной версии; если нужного стора нет — переоткрываем с версией+1, чтобы создать его.
-    // Это делает класс переиспользуемым для НЕСКОЛЬКИХ сторов на одной БД (иначе version=1 создаёт только первый).
+    // ОТДЕЛЬНАЯ БД НА КАЖДЫЙ СТОР (db+'__'+store) → version 1, стор создаётся при первом открытии, без version-bump.
+    // Так класс переиспользуем для нескольких сторов БЕЗ риска блокировки апгрейда открытым соединением другого стора.
+    constructor(db,store){ this.db=db+'__'+store; this.store=store; this._p=null; }
     _open(){ if(this._p)return this._p; const _s=this; this._p=new Promise((res,rej)=>{ if(!self.indexedDB)return rej(new Error('no idb'));
-      const req=indexedDB.open(_s.db);
+      const req=indexedDB.open(_s.db,1);
       req.onupgradeneeded=()=>{ const d=req.result; if(!d.objectStoreNames.contains(_s.store))d.createObjectStore(_s.store,{keyPath:'id'}); };
+      req.onsuccess=()=>res(req.result);
       req.onerror=()=>rej(req.error);
-      req.onsuccess=()=>{ const d=req.result;
-        if(d.objectStoreNames.contains(_s.store)){ res(d); return; }
-        const nv=d.version+1; d.close();
-        const r2=indexedDB.open(_s.db,nv);
-        r2.onupgradeneeded=()=>{ const d2=r2.result; if(!d2.objectStoreNames.contains(_s.store))d2.createObjectStore(_s.store,{keyPath:'id'}); };
-        r2.onsuccess=()=>res(r2.result); r2.onerror=()=>rej(r2.error);
-      };
     }); return this._p; }
     async _os(mode){ const d=await this._open(); return d.transaction(this.store,mode).objectStore(this.store); }
     async put(rec){ const s=await this._os('readwrite'); return new Promise((res,rej)=>{const q=s.put(rec);q.onsuccess=()=>res();q.onerror=()=>rej(q.error);}); }
