@@ -2234,6 +2234,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(maxLen&&s.length>maxLen)s=s.slice(0,maxLen);
     return s;
   }
+  // ── Перф-утилиты (Шаг 2). rAF-троттл: коалесцирует шквал вызовов в 1 отрисовку на кадр (анти-джанк на волатильности).
+  //    debounce: откладывает вызов до паузы. Обе нативные, без библиотек. ──
+  function _rafThrottle(fn){ let scheduled=false; return function(){ if(scheduled)return; scheduled=true; requestAnimationFrame(()=>{ scheduled=false; try{fn();}catch(e){} }); }; }
+  function _debounce(fn, ms){ let t=null; return function(){ const a=arguments, c=this; clearTimeout(t); t=setTimeout(()=>{ try{fn.apply(c,a);}catch(e){} }, ms||150); }; }
   function updateLive(){
     updateStreakBadge();renderLadder();
     const lp=parseFloat(document.getElementById('livePrice').value);
@@ -3659,38 +3663,51 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   /* ══════════ ЛЕНТА КИТОВ: крупные сделки спот (Binance aggTrade) + перп (Bybit publicTrade) ══════════ */
   /* Наблюдение потока крупных принтов, не сигнал. Нотионал = цена×объём (обе биржи в базовых единицах). */
-  let _whWsSpot=null,_whWsPerp=null,_whSym='',_whFeed=[],_whThresh=0,_whRAF=0;
+  let _whWorker=null,_whSym='',_whFeed=[],_whThresh=0;   // Шаг 2: WS ленты вынесены в Web Worker (разгрузка UI-потока)
   function _whAutoThresh(px){ px=+px||0; return px>=1000?75000:px>=10?30000:px>0?15000:50000; }
   function _whGetThresh(){ if(_whThresh>0)return _whThresh; try{const v=+localStorage.getItem('msa_whale_thresh_v1'); if(v>0){_whThresh=v; return v;}}catch(e){} _whThresh=_whAutoThresh(typeof _livePx==='function'&&_livePx()); return _whThresh; }
   function _whFmt(n){ n=+n||0; return n>=1e6?('$'+(n/1e6).toFixed(2)+'M'):n>=1e3?('$'+(n/1e3).toFixed(0)+'k'):('$'+Math.round(n)); }
-  function _whSetThresh(v){ v=Math.max(1000,Math.round(+v||0)); _whThresh=v; try{localStorage.setItem('msa_whale_thresh_v1',String(v));}catch(e){} document.querySelectorAll('.wh-thval').forEach(e=>e.textContent=_whFmt(v)); }
+  function _whSetThresh(v){ v=Math.max(1000,Math.round(+v||0)); _whThresh=v; try{localStorage.setItem('msa_whale_thresh_v1',String(v));}catch(e){} document.querySelectorAll('.wh-thval').forEach(e=>e.textContent=_whFmt(v)); if(_whWorker)try{_whWorker.postMessage({cmd:'thr',v:v});}catch(e){} }
   function _whSliderIn(v){ _whSetThresh(Math.pow(10,(+v)/100)); }
   function _whAutoSet(){ const v=_whAutoThresh(typeof _livePx==='function'&&_livePx()); _whSetThresh(v); document.querySelectorAll('.wh-slider').forEach(s=>{s.value=Math.round(Math.log10(v)*100);}); }
+  // rAF-троттл отрисовки ленты: шквал сделок коалесцируется в 1 рендер на кадр (+ маркеры на графике Сессии)
+  const _whRenderThrottled=_rafThrottle(function(){ _whRender(); if(phase==='live'&&typeof _sessDrawPrice==='function')try{_sessDrawPrice();}catch(e){} });
   function _whPush(mkt,side,notional,px){
     _whFeed.push({t:Date.now(),mkt,side,n:notional,px:+px});
     const cut=Date.now()-90000; while(_whFeed.length&&_whFeed[0].t<cut)_whFeed.shift();
     if(_whFeed.length>300)_whFeed.splice(0,_whFeed.length-300);
-    if(!_whRAF){ _whRAF=requestAnimationFrame(()=>{ _whRAF=0; _whRender(); if(phase==='live'&&typeof _sessDrawPrice==='function')try{_sessDrawPrice();}catch(e){} }); }
+    _whRenderThrottled();
+  }
+  // ── Web Worker ленты (Шаг 2): владеет WS (Binance spot aggTrade + Bybit publicTrade/allLiquidation), парсит и
+  //    фильтрует по порогу В ВОРКЕРЕ, батчит и шлёт в главный поток только готовые события (≤ раз в 120мс).
+  //    UI-нить больше не парсит высокочастотный поток — анти-джанк на экстремальной волатильности. ──
+  function _whWorkerCode(){ return "var w1=null,w2=null,sym='',thr=0,buf=[];"+
+    "function close(){try{if(w1){w1.onclose=null;w1.close();}}catch(e){}try{if(w2){w2.onclose=null;w2.close();}}catch(e){}w1=null;w2=null;}"+
+    "function open(){close();"+
+    "try{w1=new WebSocket('wss://stream.binance.com:9443/ws/'+sym.toLowerCase()+'@aggTrade');"+
+    "w1.onmessage=function(e){try{var d=JSON.parse(e.data),p=+d.p,q=+d.q,n=p*q;if(n>=thr)buf.push({mkt:'spot',side:d.m?'sell':'buy',n:n,px:p});}catch(x){}};}catch(e){}"+
+    "try{w2=new WebSocket('wss://stream.bybit.com/v5/public/linear');"+
+    "w2.onopen=function(){try{w2.send(JSON.stringify({op:'subscribe',args:['publicTrade.'+sym,'allLiquidation.'+sym]}));}catch(e){}};"+
+    "w2.onmessage=function(e){try{var m=JSON.parse(e.data);if(!m.topic||!m.data)return;"+
+    "if(m.topic.indexOf('publicTrade')===0){for(var i=0;i<m.data.length;i++){var t=m.data[i],p=+t.p,v=+t.v,n=p*v;if(n>=thr)buf.push({mkt:'perp',side:t.S==='Buy'?'buy':'sell',n:n,px:p});}}"+
+    "else if(m.topic.indexOf('allLiquidation')===0){for(var j=0;j<m.data.length;j++){var l=m.data[j],pp=+l.p,vv=+l.v,nn=pp*vv;if(nn>=thr)buf.push({mkt:'liq',side:l.S==='Sell'?'long':'short',n:nn,px:pp});}}"+
+    "}catch(x){}};}catch(e){}}"+
+    "setInterval(function(){if(buf.length){postMessage(buf);buf=[];}},120);"+
+    "onmessage=function(e){var d=e.data||{};if(d.cmd==='init'){sym=(d.symbol||'').toUpperCase();thr=+d.thr||0;open();}else if(d.cmd==='thr'){thr=+d.v||0;}else if(d.cmd==='stop'){close();}};";
   }
   function _whStart(sym){
     sym=(sym||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase(); if(!sym)return;
-    if(_whSym===sym&&(_whWsSpot||_whWsPerp))return;
+    if(_whSym===sym&&_whWorker)return;
     _whStop(); _whSym=sym; _whFeed=[]; _whEnsure();
-    try{ const ws=new WebSocket('wss://stream.binance.com:9443/ws/'+sym.toLowerCase()+'@aggTrade');
-      ws.onmessage=e=>{ try{ const d=JSON.parse(e.data); const p=+d.p,q=+d.q,notn=p*q; if(notn>=_whGetThresh())_whPush('spot',d.m?'sell':'buy',notn,p); }catch(x){} };
-      ws.onclose=()=>{ if(_whWsSpot===ws)_whWsSpot=null; }; _whWsSpot=ws;
-    }catch(e){}
-    try{ const ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');
-      ws.onopen=()=>{ try{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.'+sym,'allLiquidation.'+sym]}));}catch(e){} };
-      ws.onmessage=e=>{ try{ const m=JSON.parse(e.data); if(!m.topic||!m.data)return;
-        if(m.topic.indexOf('publicTrade')===0){ for(const t of m.data){ const p=+t.p,v=+t.v,notn=p*v; if(notn>=_whGetThresh())_whPush('perp',t.S==='Buy'?'buy':'sell',notn,p); } }
-        else if(m.topic.indexOf('allLiquidation')===0){ for(const t of m.data){ const p=+t.p,v=+t.v,notn=p*v; if(notn>=_whGetThresh())_whPush('liq',t.S==='Sell'?'long':'short',notn,p); } }
-      }catch(x){} };
-      ws.onclose=()=>{ if(_whWsPerp===ws)_whWsPerp=null; }; _whWsPerp=ws;
-    }catch(e){}
+    try{
+      const blob=new Blob([_whWorkerCode()],{type:'application/javascript'});
+      _whWorker=new Worker(URL.createObjectURL(blob));
+      _whWorker.onmessage=function(e){ const items=e.data; if(!Array.isArray(items))return; for(let i=0;i<items.length;i++){ const it=items[i]; _whPush(it.mkt,it.side,it.n,it.px); } };
+      _whWorker.postMessage({cmd:'init',symbol:sym,thr:_whGetThresh()});
+    }catch(e){ /* воркер недоступен — UI не роняем, лента просто пустая */ }
     _whRender();
   }
-  function _whStop(){ [_whWsSpot,_whWsPerp].forEach(w=>{ if(w){try{w.onclose=null;w.close();}catch(e){}} }); _whWsSpot=null; _whWsPerp=null; _whSym=''; }
+  function _whStop(){ if(_whWorker){try{_whWorker.postMessage({cmd:'stop'});_whWorker.terminate();}catch(e){}_whWorker=null;} _whSym=''; }
   function _whEnsure(){
     ['whaleSess','whaleDemo'].forEach(id=>{ const el=document.getElementById(id); if(!el||el.querySelector('.wh-tape-slot'))return;
       el.innerHTML='<div class="wh-head">🐋 ЛЕНТА КИТОВ <span class="wh-sub">крупные сделки спот+перп + 💥ликвидации · наблюдение, не сигнал</span></div>'
@@ -3733,11 +3750,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }catch(e){}
     return _liqCtVal||{};
   }
+  const _liqRenderThrottled=_rafThrottle(function(){ _liqRender(); });
   function _liqPush(coin,pos,notional,px){
     _liqFeed.push({t:Date.now(),coin,pos,n:notional,px:+px});
     const cut=Date.now()-120000; while(_liqFeed.length&&_liqFeed[0].t<cut)_liqFeed.shift();
     if(_liqFeed.length>400)_liqFeed.splice(0,_liqFeed.length-400);
-    if(!_liqRAF){ _liqRAF=requestAnimationFrame(()=>{_liqRAF=0;_liqRender();}); }
+    _liqRenderThrottled();
   }
   async function _liqStart(){
     if(_liqWs)return; _liqEnsure(); await _liqLoadCtVal();
