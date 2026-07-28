@@ -5060,31 +5060,61 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   document.addEventListener('click',e=>{ if(!e.target.closest('#tickerWrap'))_closeTickerDD(); });
   // Топ-30 инструментов дня — волатильность вперёд (диапазон high-low), с порогом ликвидности и плотностью сделок как вторичными.
   // Один вызов 24hr по всему USDT-универсуму. Метрики кладём в _tkMeta для показа в дропдауне.
+  // Источник метрик топа: Binance 24hr → фолбэк OKX SWAP (Binance REST блокируется на части сетей;
+  // без метрик _tkMeta пуст → в дропдауне пропадают чипы «волат/объём/Δ%» и сегментация).
+  async function _topRowsBinance(){
+    const r=await fetch('https://api.binance.com/api/v3/ticker/24hr',{cache:'no-store'});
+    if(!r.ok)throw 0; const all=await r.json();
+    if(!Array.isArray(all)||!all.length)throw 0;
+    return all.filter(t=>t.symbol.endsWith('USDT'))
+      .map(t=>{const s=t.symbol.slice(0,-4),hi=+t.highPrice,lo=+t.lowPrice;return {s,qv:+t.quoteVolume,cnt:+t.count,chg:+t.priceChangePercent,rng:lo>0?(hi-lo)/lo*100:0};});
+  }
+  let _okxCcySet=null;
+  // база тикеров перпов OKX, ТОЛЬКО крипта: instCategory '1' = крипта, '3' = токенизированные акции (SOXL/SNDK/GLW —
+  // они лезут в топ по волатильности и забивают выдачу). Кэш 12ч.
+  async function _okxCryptoCcys(){
+    if(_okxCcySet)return _okxCcySet;
+    try{const c=JSON.parse(localStorage.getItem('msa_okx_ccy_v1')||'null'); if(c&&Date.now()-c.at<432e5&&c.v&&c.v.length){_okxCcySet=new Set(c.v);return _okxCcySet;}}catch(e){}
+    const r=await fetch('https://www.okx.com/api/v5/public/instruments?instType=SWAP',{cache:'no-store'});
+    if(!r.ok)throw 0; const d=(await r.json()).data||[];
+    const v=d.filter(x=>x.instCategory==='1'&&/-USDT-SWAP$/.test(x.instId)).map(x=>x.instId.replace('-USDT-SWAP',''));
+    if(!v.length)throw 0;
+    _okxCcySet=new Set(v); try{localStorage.setItem('msa_okx_ccy_v1',JSON.stringify({at:Date.now(),v}));}catch(e){}
+    return _okxCcySet;
+  }
+  async function _topRowsOkx(){
+    const ok=await _okxCryptoCcys();
+    const r=await fetch('https://www.okx.com/api/v5/market/tickers?instType=SWAP',{cache:'no-store'});
+    if(!r.ok)throw 0; const d=(await r.json()).data||[];
+    return d.filter(t=>/-USDT-SWAP$/.test(t.instId))
+      .map(t=>{const s=t.instId.replace('-USDT-SWAP',''),hi=+t.high24h,lo=+t.low24h,last=+t.last,op=+t.open24h;
+        return {s,qv:+t.volCcy24h*last,cnt:0,chg:op>0?(last-op)/op*100:0,rng:lo>0?(hi-lo)/lo*100:0};})   // qv — нотионал в USDT
+      .filter(o=>ok.has(o.s));
+  }
   async function _fetchTopTickers(){
     _populateTickerList(_DEFAULT_TICKERS);
-    try{
-      const r=await fetch('https://api.binance.com/api/v3/ticker/24hr',{cache:'no-store'});
-      if(!r.ok)throw 0;
-      const all=await r.json();
-      const stables=new Set(['USDC','BUSD','TUSD','FDUSD','DAI','USDP','FRAX','USDD','EURI','EUR']);
-      const levTok=/(UP|DOWN|BULL|BEAR)$/;            // отсекаем плечевые токены — не для скальпа перпов
-      const MIN_QV=10e6;                              // порог ликвидности (спот 24ч): отсекает тонкое, оставляет ~40+ кандидатов на топ-30. Крутить тут.
-      const MAX_RNG=80;                               // потолок диапазона: >80% за сутки = вик-артефакт/глитч, не торгуемая волатильность
-      const rows=all
-        .filter(t=>t.symbol.endsWith('USDT'))
-        .map(t=>{const s=t.symbol.slice(0,-4),hi=+t.highPrice,lo=+t.lowPrice;return {s,qv:+t.quoteVolume,cnt:+t.count,chg:+t.priceChangePercent,rng:lo>0?(hi-lo)/lo*100:0};})
-        .filter(o=>!stables.has(o.s)&&!levTok.test(o.s)&&o.qv>=MIN_QV&&isFinite(o.rng)&&o.rng>0&&o.rng<=MAX_RNG);
-      const N=rows.length;
-      if(!N){return;}
-      // перцентильные ранги: волатильность доминирует (0.7), сделки/оборот — вторично
-      const pr=key=>{const srt=[...rows].sort((a,b)=>a[key]-b[key]);const m=new Map();srt.forEach((o,i)=>m.set(o.s,N>1?i/(N-1):1));return m;};
-      const pR=pr('rng'),pC=pr('cnt'),pQ=pr('qv');
-      rows.forEach(o=>o.score=0.7*pR.get(o.s)+0.2*pC.get(o.s)+0.1*pQ.get(o.s));
-      rows.sort((a,b)=>b.score-a.score);
-      const top=rows.slice(0,30);
-      _tkMeta={}; top.forEach(o=>_tkMeta[o.s]={rng:o.rng,chg:o.chg,qv:o.qv,cnt:o.cnt});
-      _populateTickerList(top.map(o=>o.s));
-    }catch(e){}
+    const stables=new Set(['USDC','BUSD','TUSD','FDUSD','DAI','USDP','FRAX','USDD','EURI','EUR']);
+    const levTok=/(UP|DOWN|BULL|BEAR)$/;            // отсекаем плечевые токены — не для скальпа перпов
+    const MIN_QV=10e6;                              // порог ликвидности (24ч, USDT): отсекает тонкое. Крутить тут.
+    const MAX_RNG=80;                               // потолок диапазона: >80% за сутки = вик-артефакт/глитч, не торгуемая волатильность
+    let rows=null, hasCnt=true;
+    try{ rows=await _topRowsBinance(); }catch(e){}
+    if(!rows||!rows.length){ try{ rows=await _topRowsOkx(); hasCnt=false; }catch(e){} }
+    if(!rows||!rows.length)return;
+    rows=rows.filter(o=>!stables.has(o.s)&&!levTok.test(o.s)&&o.qv>=MIN_QV&&isFinite(o.rng)&&o.rng>0&&o.rng<=MAX_RNG);
+    const N=rows.length;
+    if(!N){return;}
+    // перцентильные ранги: волатильность доминирует (0.7), сделки/оборот — вторично
+    const pr=key=>{const srt=[...rows].sort((a,b)=>a[key]-b[key]);const m=new Map();srt.forEach((o,i)=>m.set(o.s,N>1?i/(N-1):1));return m;};
+    const pR=pr('rng'),pQ=pr('qv');
+    if(hasCnt){const pC=pr('cnt'); rows.forEach(o=>o.score=0.7*pR.get(o.s)+0.2*pC.get(o.s)+0.1*pQ.get(o.s));}
+    else rows.forEach(o=>o.score=0.75*pR.get(o.s)+0.25*pQ.get(o.s));   // у OKX нет счётчика сделок — вес уходит в оборот
+    rows.sort((a,b)=>b.score-a.score);
+    const top=rows.slice(0,30);
+    // майоры-ориентиры не должны выпадать из списка из-за низкой волатильности (ранг ведёт rng)
+    for(const s of ['BTC','ETH','SOL']){const o=rows.find(x=>x.s===s); if(o&&top.indexOf(o)<0)top.push(o);}
+    _tkMeta={}; top.forEach(o=>_tkMeta[o.s]={rng:o.rng,chg:o.chg,qv:o.qv,cnt:o.cnt||0});
+    _populateTickerList(top.map(o=>o.s));
   }
 
   // ── Hint tooltip toggle: делегирование (работает и для динамических «?») + умное позиционирование ──
