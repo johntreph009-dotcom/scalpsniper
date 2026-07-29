@@ -6174,9 +6174,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   // Самообучение по сегментам: связка «протокол × сегмент» с доказанным отрицательным матожиданием
   // перестаёт браться. Не гадание — только накопленная статистика самого движка.
+  // Блокировка НЕ ПОЖИЗНЕННАЯ. Иначе движок встаёт намертво: замер показал сегмент, где единственный
+  // проходящий протокол (SQUEEZE, фит 75) был заблокирован, а остальные не добирали порог фита — ноль сделок.
+  // Плюс статистика могла копиться на дефектной версии, поэтому связке нужен шанс переаттестации.
+  const AP_RETRY=2*3600e3;   // раз в 2 часа пропускаем пробную сделку по заблокированной связке
   function _segAllows(proto,seg){
     try{ const s=((_ap.seg||{})[seg]||{})[proto];
-      if(s&&s.n>=AP_SEGMIN&&(s.sum/s.n)<-1)return false;
+      if(s&&s.n>=AP_SEGMIN&&(s.sum/s.n)<-1){
+        if(Date.now()-(s.retryAt||0)>AP_RETRY){ s.retryAt=Date.now();
+          if(typeof _proc==='function')_proc('пробная сделка по заблокированной связке <b>'+proto+'</b> в '+seg+' — переаттестация');
+          return true; }
+        return false;
+      }
     }catch(e){}
     return true;
   }
@@ -6188,6 +6197,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     (_ap.log||[]).forEach(r=>_apArchive(r)); localStorage.setItem('msa_ap_arch_seeded','1');
   }catch(e){} },3000);
   try{_ap.seg=JSON.parse(localStorage.getItem(AP_SEGKEY)||'{}');}catch(e){}
+  // РАЗОВЫЙ СБРОС агрегатов сегментов: они копились, пока у SQUEEZE молча не срабатывала отмена
+  // (сделки ехали до стопа вместо раннего выхода). На этих данных заблокировано 13 связок — несправедливо.
+  // Полный архив сделок в IndexedDB НЕ трогаем, сбрасываем только счётчики, по которым идёт блокировка.
+  try{ if(!localStorage.getItem('msa_seg_reset_v2')){
+    _ap.seg={}; localStorage.removeItem(AP_SEGKEY); localStorage.setItem('msa_seg_reset_v2','1');
+    localStorage.removeItem('msa_aptune_v1');
+  } }catch(e){}
   function _apCtxF(){ // дневной контекст — тот же вектор, что кормит фит-радар
     const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):null;
     const tr=sym&&((_dayTrendCache[sym]||{}).val)||{};
@@ -6274,6 +6290,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         const kk=_apTuneK(seg);                                    // масштаб цели, выученный для этого сегмента
         if(kk!==1)plan={...plan,tpBps:+(plan.tpBps*kk).toFixed(1),tuned:kk};
         if(_evOk(plan))fired.push({k,plan,fit:S[k]||0}); }          // гейт матожидания проверяет УЖЕ подстроенный план
+      // Диагностика простоя: если ни один протокол не проходит — говорим ЧТО именно режет,
+      // иначе движок молча стоит и это выглядит как поломка.
+      if(!fired.length&&now-(_ap.idleAt||0)>60e3){
+        _ap.idleAt=now;
+        const why=Object.entries(PROTOCOLS).map(([k,v])=>{
+          if(!v.auto)return null;
+          if((S[k]||0)<AP_MINFIT)return k+' фит '+(S[k]||0);
+          let c=false; try{c=v.auto.ctx(m.f);}catch(e){}
+          if(!c)return k+' контекст';
+          if(!_segAllows(k,seg))return k+' сегмент закрыт';
+          return k+' нет триггера';
+        }).filter(Boolean).join(' · ');
+        if(typeof _proc==='function')_proc('<span class="gs-note">сделок нет · '+seg+' · '+why+'</span>');
+      }
       const win=_coreResolve(fired);
       // ПОДТВЕРЖДЕНИЕ: 60% старых сделок умирали по cancel за ~23с, оплачивая комиссию впустую.
       // Входим только если та же стратегия и сторона держатся AP_CONFIRM, а не по первому дрожанию.
