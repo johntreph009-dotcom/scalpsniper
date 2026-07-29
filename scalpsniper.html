@@ -6081,7 +6081,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         const r=_cpRunLadder(m1,+(base*f).toFixed(1),md);
         if(r)grid.push({шаг:+(base*f).toFixed(1),режим:md,...r});
       }));
-      grid.sort((a,b)=>b.итог-a.итог);
+      // Отбор РИСК-ВЗВЕШЕННЫЙ, а не по голому итогу: на живых данных вариант с итогом +6721 имел
+      // просадку −1555, а почти равный ему +6515 — всего −411. Второй лучше, хотя по итогу «хуже».
+      grid.forEach(r=>{ r.кэф=+(r.итог/Math.max(1,Math.abs(r.просадка)/100)).toFixed(1); });
+      grid.sort((a,b)=>b.кэф-a.кэф);
       const best=grid[0]||null;
       const res={at:Date.now(),sym,часовых:h1.length,минуток:m1.length,характер:prof,текущий:profM,
         перебор:grid.slice(0,4),лучшее:best};
@@ -6107,9 +6110,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(b){
       h+='<br>лучшее по истории: <b>'+(b.режим==='mo'?'МОМЕНТУМ':'усреднение')+'</b>, шаг <b>'+b.шаг+' bps</b>'
         +' → <b class="'+cls(b.итог)+'">'+_usd(b.итог)+'</b> <span class="gs-note">('+b.пары+' пар, '+b.хвосты+' хвостов, просадка '+_usd(b.просадка)+', висит '+b.висит+')</span>';
-      h+='<br><span class="gs-note">перебор параметров:</span>';
+      h+='<br><span class="gs-note">перебор (сортировка по доходу на единицу просадки):</span>';
       p.перебор.forEach(r=>{ h+='<br>&nbsp;&nbsp;'+(r.режим==='mo'?'момент.':'усредн.')+' шаг '+String(r.шаг).padStart(5)
-        +' → <b class="'+cls(r.итог)+'">'+_usd(r.итог)+'</b> <span class="gs-note">('+r.пары+' пар, просадка '+_usd(r.просадка)+')</span>'; });
+        +' → <b class="'+cls(r.итог)+'">'+_usd(r.итог)+'</b> <span class="gs-note">просадка '+_usd(r.просадка)+' · кэф '+r.кэф+' · '+r.пары+' пар</span>'; });
       h+='<br><b>применено:</b> '+(b.итог>0?'шаг лесенки <b>'+b.шаг+' bps</b> подставляется автоматически':'<span class="gs-dn">история в минусе — шаг из паспорта НЕ применяется, работает расчёт по окну</span>');
     } else h+='<br><span class="gs-note">данных для прогона лесенки не хватило</span>';
     h+='<br><span class="gs-note">протоколы стакана (стены, дельта, ликвидации) по свечам не восстановимы — здесь только то, что зависит от цены · виртуально, не гарантия</span>';
