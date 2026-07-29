@@ -5720,9 +5720,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // В РЕЙНДЖЕ это классика: ниже покупаем, выше продаём (усреднение к середине).
     // В ТРЕНДЕ (strength>=2) включается МОМЕНТУМ: уровни ставятся ПО ходу движения и открывают позицию
     // В СТОРОНУ импульса — падение продаём ниже, рост выкупаем выше. Так импульс отторговывается, а не пересиживается.
-    const mo=_str>=2&&(bias==='long'||bias==='short');
+    // Критерий моментума ДОЛЖЕН совпадать с проверкой смены режима в _gsTick (там — только сила тренда дня).
+    // Раньше здесь дополнительно требовался направленный bias (сумма тренд+поток+наклон ≥2), и при
+    // нейтральном потоке сборка не давала моментум, а _gsTick продолжал его требовать → пересборка каждые
+    // 20с по кругу: 83 перестройки за 30 минут наблюдения и ноль моментум-ног при тренде силой 3.
+    const moDir=(dt&&(dt.strength||0)>=2&&(dt.dir==='up'||dt.dir==='down'))?dt.dir:null;
+    const mo=!!moDir;
     if(mo){
-      const up=bias==='long';
+      const up=moDir==='up';
       for(let i=1;i<=5;i++)levels.push({px:up?px+step*i:px-step*i, side:up?'buy':'sell',
         cross:up?'up':'down', pos:up?'long':'short', kind:'mo', open:true});   // доливка по тренду
       for(let i=1;i<=3;i++)levels.push({px:up?px-step*i:px+step*i, side:up?'buy':'sell',
