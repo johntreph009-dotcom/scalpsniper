@@ -5983,6 +5983,40 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // Требуемый WR = потери/(выигрыш+потери). Если он выше потолка — сетап нерентабелен by design, не входим.
   function _beWR(plan){ const w=(+plan.tpBps||0)-AP_FEE, l=(+plan.stopBps||0)+AP_FEE; return (w<=0)?1:l/(w+l); }
   function _evOk(plan){ return _beWR(plan)<=AP_MAXBE; }
+  // ═══════════ АКТИВНОЕ САМООБУЧЕНИЕ: подбор размера цели под сегмент рынка ═══════════
+  // Пассивная часть (ниже) отключает заведомо убыточные связки. Активная — подстраивает ЦЕЛЬ:
+  // если в сегменте сделки massово доживают до лимита времени, не дойдя до тейка — цель слишком далеко;
+  // если тейк берётся легко и матожидание положительное — цель можно растянуть.
+  // Правила намеренно простые и медленные: шаг 10%, коридор 0.6–1.6, не чаще чем раз в 10 новых наблюдений.
+  const AP_TUNEMIN=12;
+  let _apTune={}; try{_apTune=JSON.parse(localStorage.getItem('msa_aptune_v1')||'{}')||{};}catch(e){_apTune={};}
+  function _apTuneK(seg){ const t=_apTune[seg]; return (t&&isFinite(t.k))?t.k:1; }
+  let _apLearnBusy=false;
+  async function _apLearn(){
+    if(_apLearnBusy)return; _apLearnBusy=true;
+    try{
+      const L=(await _apFullLog()).filter(r=>r.proto!=='GRID'&&r.seg);
+      const by={}; L.forEach(r=>{(by[r.seg]=by[r.seg]||[]).push(r);});
+      let changed=false;
+      Object.keys(by).forEach(seg=>{
+        const a=by[seg], n=a.length; if(n<AP_TUNEMIN)return;
+        const t=_apTune[seg]||(_apTune[seg]={k:1,n:0});
+        if(n-(t.n||0)<10)return;                                  // ждём 10 новых наблюдений между правками
+        const sh=x=>a.filter(r=>r.reason===x).length/n;
+        const ev=a.reduce((s,r)=>s+(r.bps+(r.fee==null?5:r.fee)-AP_FEE),0)/n;
+        const tp=sh('tp'), tm=sh('time'), old=t.k||1;
+        let k=old, why='';
+        if(tm>0.35&&tp<0.20){ k=old-0.1; why='цель далеко: '+Math.round(tm*100)+'% выходов по времени при '+Math.round(tp*100)+'% по тейку'; }
+        else if(tp>0.45&&ev>0){ k=old+0.1; why='цель близко: тейк берётся в '+Math.round(tp*100)+'% случаев при плюсовом матожидании'; }
+        k=Math.max(0.6,Math.min(1.6,+k.toFixed(2)));
+        t.n=n;
+        if(k!==old){ t.k=k; t.why=why; t.at=Date.now(); changed=true;
+          if(typeof _proc==='function')_proc('ядро подстроилось · <b>'+seg+'</b>: цель ×'+k.toFixed(2)+' <span class="gs-note">('+why+')</span>'); }
+      });
+      if(changed){ try{localStorage.setItem('msa_aptune_v1',JSON.stringify(_apTune));}catch(e){} }
+    }catch(e){}
+    _apLearnBusy=false;
+  }
   // Самообучение по сегментам: связка «протокол × сегмент» с доказанным отрицательным матожиданием
   // перестаёт браться. Не гадание — только накопленная статистика самого движка.
   function _segAllows(proto,seg){
@@ -6081,7 +6115,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       // собираем ВСЕ сработавшие триггеры и решаем в пространстве вариантов, а не «первый сверху»
       const fired=[];
       for(const [k,v] of cand){ let plan=null; try{plan=v.auto.trig(m);}catch(e){}
-        if(plan&&_evOk(plan))fired.push({k,plan,fit:S[k]||0}); }   // отсев планов, не отбивающих комиссию
+        if(!plan)continue;
+        const kk=_apTuneK(seg);                                    // масштаб цели, выученный для этого сегмента
+        if(kk!==1)plan={...plan,tpBps:+(plan.tpBps*kk).toFixed(1),tuned:kk};
+        if(_evOk(plan))fired.push({k,plan,fit:S[k]||0}); }          // гейт матожидания проверяет УЖЕ подстроенный план
       const win=_coreResolve(fired);
       // ПОДТВЕРЖДЕНИЕ: 60% старых сделок умирали по cancel за ~23с, оплачивая комиссию впустую.
       // Входим только если та же стратегия и сторона держатся AP_CONFIRM, а не по первому дрожанию.
@@ -6170,6 +6207,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{localStorage.setItem(AP_LOGKEY,JSON.stringify(_ap.log));localStorage.setItem(AP_SEGKEY,JSON.stringify(_ap.seg));}catch(e){}
     _ap.today.n++; if(bps>0)_ap.today.w++; _ap.today.sum=+(_ap.today.sum+bps).toFixed(1);
     _ap.pos=null; _ap.cdUntil=Date.now()+AP_COOLDOWN;
+    if(typeof _apLearn==='function')setTimeout(_apLearn,50);   // после каждой сделки ядро пересматривает настройку сегмента
     if(typeof _proc==='function')_proc('выход: '+p.proto+' ('+({tp:'тейк',stop:'стоп',time:'время',cancel:'отмена стратегии',manual:'вручную'}[reason]||reason)+') <b>'+(bps>=0?'+':'')+bps+' bps</b> за '+rec.hold+'с',bps>=0?'pr-up':'pr-dn');
   }
   function _apToggle(){
@@ -6254,6 +6292,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       h+='<br><span class="gs-note">по фиту на входе:</span>';
       [[0,60],[60,70],[70,80],[80,101]].forEach(([a,b])=>{const st=S(withFit.filter(r=>r.fit>=a&&r.fit<b)); h+=row('&nbsp;&nbsp;фит '+a+'–'+b+'%',st);});
     } else h+='<br><span class="gs-note">фит входа пишется с этой версии — срез появится после ~10 новых сделок</span>';
+    // что ядро подстроило само — с обоснованием, чтобы настройка не была чёрным ящиком
+    const tuned=Object.entries(_apTune||{}).filter(([s,t])=>t&&t.k!==1);
+    h+='<br><span class="gs-note">самонастройка ядра:</span>';
+    if(!tuned.length)h+=' <span class="gs-note">пока без правок — нужно '+AP_TUNEMIN+'+ наблюдений в сегменте</span>';
+    else tuned.sort((a,b)=>b[1].k-a[1].k).forEach(([s,t])=>{
+      h+='<br>&nbsp;&nbsp;'+s+': цель <b class="'+(t.k>=1?'gs-up':'gs-dn')+'">×'+t.k.toFixed(2)+'</b>'
+        +' <span class="gs-note">'+(t.why||'')+(t.at?' · '+new Date(t.at).toLocaleString('ru-RU'):'')+'</span>'; });
     const ev=S(dir);
     if(ev)h+='<br><b>вывод:</b> '+(ev.ev>0?'<span class="gs-up">матожидание положительное — машина зарабатывает</span>':'<span class="gs-dn">матожидание отрицательное — WR не спасёт, нужен другой отбор входов</span>')
       +' <span class="gs-note">· виртуально, не гарантия результата</span>';
