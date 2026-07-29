@@ -1467,6 +1467,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="dl-canvas-wrap"><canvas id="dlBook"></canvas></div>
     <div class="dld-bar"><button type="button" class="dld-btn" id="apBtn" onclick="_apToggle()">▶ автопилот</button><span class="dld-card" id="apCard"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Единый движок-диспетчер, всё ВИРТУАЛЬНО: сам определяет сегмент рынка и выбирает исполнение · РЕЙНДЖ → разворачивает сетку (спрей: buy ниже / sell выше, профит = шаг за шагом) · ТРЕНД/ПОТОК → сворачивает сетку по рынку и торгует направленными триггерами стратегий из реестра (стены с возрастом, съедание, дельта-развороты, фиб-откаты, кластеры ликвидаций) · комиссия 5 bps в PnL, исходы копятся по сегментам · реальные ордера НЕ открывает</span></span></div>
     <div id="apPanel" class="gs-panel" style="display:none"></div>
+    <div class="dl-canvas-lbl" style="margin-top:8px">РАЗБОР АВТОПИЛОТА <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Матожидание (среднее bps на сделку) по протоколам, сегментам рынка и причинам выхода. Считается по журналу движка при ТЕКУЩИХ издержках — старые записи пересчитываются к ним же. Матожидание важнее WR: высокий процент побед при отрицательном среднем — убыточная машина.</span></span> <button type="button" class="zf-refresh" onclick="_apAudit()">↻ Пересчитать</button> <button type="button" class="zf-refresh" onclick="_apExport()">⭳ Выгрузить журнал (CSV)</button></div>
+    <div id="apAudit" class="gs-panel"><span class="gs-note">нажми «Пересчитать» — покажу матожидание по протоколам и сегментам</span></div>
     <div id="gsPanel" class="gs-panel" style="display:none"></div>
     <div id="mktBg" class="gs-panel" style="display:none"></div>
     <div class="dl-canvas-lbl" style="margin-top:8px">ПРОЦЕССИНГ ДВИЖКА <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Живой лог решений: режимы диспетчера, входы/выходы стратегий, итоги сетки, сдвиги толпы/китов, новостные триггеры · наблюдение, не сигналы</span></span></div>
@@ -5352,7 +5354,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   let _dlWorker=null,_dlRAF=null,_dlSnap=null,_dlUps=0,_dlFrames=0,_dlLastSec=0,_dlRunning=false;
   let _dlCtx=null,_dlW=0,_dlH=0;
   let _dlModel=null,_dlRegime='FLAT_SCALPING',_dlCand=null,_dlCandT=0,_dlEngLast=0,_dlJournal=[];
-  let _dlMsgCount=0,_dlSrc='—',_dlDec=2;
+  let _dlMsgCount=0,_dlSrc='—',_dlDec=2,_dlStartedAt=0;
   let _dlHist=[],_dlPCtx=null,_dlPW=0,_dlPH=0,_dlTick=0;   // _dlTick — монотонный счётчик тиков: якорь событий сетки на оси X (сам _dlHist обрезается)
   let _sessHist=[],_sessPCtx=null,_sessPW=0,_sessPH=0;
   const DLJ_KEY='msa_demo_journal_v1';
@@ -5563,14 +5565,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const _se=document.getElementById('dlSym'); if(_se)_se.textContent=_sym;
       const _dt=document.getElementById('demoTicker'); if(_dt&&document.activeElement!==_dt)_dt.value=_raw;
     }catch(err){ const r=document.getElementById('dlRate'); if(r)r.textContent='worker N/A'; }
-    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dldRenderHist(); _dldRenderBtn(); _dlSetRegime(_dlRegime,true); _bgStart();
+    _dlStartedAt=Date.now(); _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dldRenderHist(); _dldRenderBtn(); _dlSetRegime(_dlRegime,true); _bgStart();
     _dlLastSec=performance.now(); _dlFrames=0; _dlEngLast=0;
     const loop=ts=>{ if(!_dlRunning)return; _dlDraw(); _dlDrawPrice(); _dlFrames++;
       if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); }
       if(ts-_dlLastSec>=1000){ const fps=Math.round(_dlFrames*1000/(ts-_dlLastSec)); _dlFrames=0; _dlLastSec=ts;
         const r=document.getElementById('dlRate'); if(r)r.textContent=fps+' FPS';
         const u=document.getElementById('dlUps'); if(u)u.textContent=_dlMsgCount; _dlMsgCount=0;
-        const sc=document.getElementById('dlSrc'); if(sc)sc.textContent=(_dlSrc==='poll'?'REST':(_dlSrc&&_dlSrc!=='—')?('live · '+_dlSrc):'подключение…'); }
+        const sc=document.getElementById('dlSrc');
+        // Молчание дольше 12с почти всегда = такого символа нет ни на одной площадке (опечатка вроде BTC/USDT1).
+        // Раньше это выглядело как вечное «подключение…» — теперь говорим прямо.
+        if(sc){ const dead=(!_dlMsgCount&&_dlStartedAt&&Date.now()-_dlStartedAt>12000);
+          sc.textContent=(_dlSrc==='poll'?'REST':(_dlSrc&&_dlSrc!=='—')?('live · '+_dlSrc):(dead?'символ не найден — проверь тикер':'подключение…'));
+          sc.className=dead?'gs-dn':''; } }
       _dlRAF=requestAnimationFrame(loop); };
     _dlRAF=requestAnimationFrame(loop);
   }
@@ -5813,8 +5820,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{localStorage.setItem('msa_ap_fee_v1',String(n));}catch(e){}
     if(typeof _proc==='function')_proc('издержки на круг: <b>'+n+' bps</b> — цели, гейт и шаг сетки пересчитаны');
   }
-  const AP_MINFIT=62, AP_COOLDOWN=45e3, AP_MAXHOLD=180e3;
-  const AP_CONFIRM=1200;      // мс удержания сетапа до входа — лечит вход «на дрожании»
+  const AP_MINFIT=55, AP_COOLDOWN=45e3, AP_MAXHOLD=180e3;   // 62 был взят «на глаз»: фит в журнале не писался, тюнить было не на чем
+  // Лёгкий дебаунс входа, а НЕ жёсткие ворота. Разбор журнала при нулевых издержках: быстрые отмены (<10с)
+  // дают −0.14 bps на сделку — это шум, а не утечка. Прежние 1200мс были обоснованы завышенной комиссией.
+  const AP_CONFIRM=400;
   const AP_MAXBE=0.50;        // потолок требуемого WR: план, которому для нуля нужно >50% побед, не берём
   const AP_SEGMIN=8;          // с какого числа наблюдений доверяем сегментной статистике
   // Экономика сделки ПОСЛЕ комиссии: победа = tp−FEE, поражение = stop+FEE.
@@ -5832,6 +5841,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   const AP_LOGKEY='msa_autopilot_v1', AP_SEGKEY='msa_segstats_v1';
   let _ap={on:false,pos:null,cdUntil:0,walls:{},dHist:[],tHist:[],log:[],seg:{},today:{n:0,w:0,sum:0}};
   try{_ap.log=JSON.parse(localStorage.getItem(AP_LOGKEY)||'[]');}catch(e){}
+  // разовый перенос уже накопленного окна в архив: до этой версии всё жило только в localStorage с обрезкой до 300
+  setTimeout(()=>{ try{ if(!_apIdb||localStorage.getItem('msa_ap_arch_seeded'))return;
+    (_ap.log||[]).forEach(r=>_apArchive(r)); localStorage.setItem('msa_ap_arch_seeded','1');
+  }catch(e){} },3000);
   try{_ap.seg=JSON.parse(localStorage.getItem(AP_SEGKEY)||'{}');}catch(e){}
   function _apCtxF(){ // дневной контекст — тот же вектор, что кормит фит-радар
     const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):null;
@@ -5923,7 +5936,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   // итог сеточной фазы → общий счёт и сегмент-статистика под ключом GRID
   function _apLogGrid(st,m){
-    const rec={t:Date.now(),proto:'GRID',side:'—',entry:0,exit:0,bps:st.net,seg:_apSegKey(m.f),reason:'mode',hold:st.dur,fills:st.fills,pairs:st.pairs};
+    const rec={t:Date.now(),proto:'GRID',side:'—',entry:0,exit:0,bps:st.net,seg:_apSegKey(m.f),reason:'mode',hold:st.dur,fills:st.fills,pairs:st.pairs,fee:AP_FEE};
+    _apArchive(rec);
     _ap.log.push(rec); if(_ap.log.length>300)_ap.log=_ap.log.slice(-300);
     const sg=_ap.seg[rec.seg]=_ap.seg[rec.seg]||{};
     const s=sg.GRID=sg.GRID||{n:0,w:0,sum:0};
@@ -5985,7 +5999,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // итог = зафиксированная часть (разгрузка 30%) + остаток объёма по цене выхода − комиссия круга
     const q=p.qty==null?1:p.qty;
     const bps=+((((px-p.entry)/p.entry*1e4)*dir)*q+(p.realBps||0)-AP_FEE).toFixed(1);
-    const rec={t:Date.now(),proto:p.proto,side:p.side,entry:+p.entry.toFixed(6),exit:+px.toFixed(6),bps,seg:p.seg,reason,hold:Math.round((Date.now()-p.t0)/1e3),part:!!p.part,conf:p.conf||[],against:p.against||[]};
+    // fit и fee пишем в запись: без них журнал нельзя честно разбирать задним числом
+    // (фит не логировался вообще → порог подбирать было не на чем; издержки менялись → старые bps несравнимы с новыми)
+    const rec={t:Date.now(),proto:p.proto,side:p.side,entry:+p.entry.toFixed(6),exit:+px.toFixed(6),bps,seg:p.seg,reason,hold:Math.round((Date.now()-p.t0)/1e3),part:!!p.part,conf:p.conf||[],against:p.against||[],fit:p.fit!=null?p.fit:null,fee:AP_FEE};
+    _apArchive(rec);                                   // полная копия в IDB — окно ниже обрезается, архив нет
     _ap.log.push(rec); if(_ap.log.length>300)_ap.log=_ap.log.slice(-300);
     const sg=_ap.seg[p.seg]=_ap.seg[p.seg]||{};
     const st=sg[p.proto]=sg[p.proto]||{n:0,w:0,sum:0};
@@ -6008,6 +6025,79 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(b){b.textContent='⏹ стоп автопилота';b.classList.add('on');}
     if(p){p.style.display='block';p.innerHTML='<span class="gs-note">сканирую поток…</span>';}
     if(typeof _proc==='function')_proc('автопилот запущен — сканирую сегмент рынка');
+  }
+  // ── ПОЛНЫЙ ЖУРНАЛ АВТОПИЛОТА В IndexedDB ──
+  // Было: localStorage + жёсткая обрезка до 300 записей. За 280 часов работы в сегментах накопилось
+  // 718 наблюдений, а в журнале осталось 300 — детали 418 сделок молча пропали, разбирать было нечего.
+  // Стало: localStorage остаётся быстрым окном для UI, а КАЖДАЯ запись дублируется в IDB без потолка.
+  const _apIdb=(typeof IdbStore==='function')?new IdbStore('scalpsniper','autopilot'):null;
+  function _apArchive(rec){
+    if(!_apIdb||!rec)return;
+    try{ _apIdb.put(Object.assign({id:(rec.t||Date.now())+'-'+Math.random().toString(36).slice(2,7)},rec)); }catch(e){}
+  }
+  // полная история = архив IDB + текущее окно localStorage, дубли по (t,proto,entry) отсеиваются
+  async function _apFullLog(){
+    let arch=[]; if(_apIdb){ try{ arch=await _apIdb.getAll(); }catch(e){} }
+    const seen=new Set(), out=[];
+    [...arch,...(_ap.log||[])].forEach(r=>{ const k=r.t+'|'+r.proto+'|'+(r.entry||0)+'|'+(r.bps||0);
+      if(seen.has(k))return; seen.add(k); out.push(r); });
+    return out.sort((a,b)=>(a.t||0)-(b.t||0));
+  }
+  // выгрузка полного журнала — чтобы отдать на разбор целиком, а не обрезок
+  async function _apExport(){
+    const L=await _apFullLog();
+    const cols=['t','время','proto','side','entry','exit','bps','fee','fit','seg','reason','hold','part','conf','against','fills','pairs'];
+    const esc=v=>{ const s=(v==null?'':Array.isArray(v)?v.join('+'):String(v)); return /[";\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+    const rows=[cols.join(';')].concat(L.map(r=>cols.map(c=>esc(c==='время'?new Date(r.t).toISOString():r[c])).join(';')));
+    const blob=new Blob(['﻿'+rows.join('\n')],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='scalpsniper-autopilot-'+new Date().toISOString().slice(0,10)+'.csv';
+    document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);
+    if(typeof _proc==='function')_proc('журнал автопилота выгружен: <b>'+L.length+'</b> записей');
+  }
+  // ── РАЗБОР АВТОПИЛОТА: матожидание по срезам журнала при ТЕКУЩИХ издержках ──
+  // Записи могли быть сделаны при другой комиссии, поэтому приводим к общей базе:
+  // валовый = bps + fee_записи (для направленных), затем вычитаем текущий AP_FEE.
+  async function _apAudit(){
+    const el=document.getElementById('apAudit'); if(!el)return;
+    el.innerHTML='<span class="gs-note">считаю по полному архиву…</span>';
+    const raw=await _apFullLog();                     // не 300 последних, а вся история из IDB
+    if(!raw.length){ el.innerHTML='<span class="gs-note">журнал пуст — движок ещё не торговал</span>'; return; }
+    const norm=r=>{ const f=(r.fee==null?5:r.fee);
+      if(r.proto==='GRID')return r.bps+f*(r.pairs||0)-AP_FEE*(r.pairs||0);   // у сетки комиссия бралась за пару
+      return r.bps+f-AP_FEE; };
+    const L=raw.map(r=>({...r,v:norm(r)}));
+    const dir=L.filter(r=>r.proto!=='GRID'), grid=L.filter(r=>r.proto==='GRID');
+    const S=a=>{const n=a.length; if(!n)return null; const s=a.reduce((x,y)=>x+y.v,0);
+      return {n,wr:Math.round(a.filter(x=>x.v>0).length/n*100),ev:+(s/n).toFixed(2),sum:Math.round(s)};};
+    const cls=v=>v>=0?'gs-up':'gs-dn', sg=v=>(v>=0?'+':'')+v;
+    const row=(name,st,extra)=>st?('<br>'+name+': <b>'+st.n+'</b> сд · WR '+st.wr+'% · матож. <b class="'+cls(st.ev)+'">'+sg(st.ev)+' bps</b> · итог <b class="'+cls(st.sum)+'">'+sg(st.sum)+'</b>'+(extra||'')):'';
+    const grp=(arr,key)=>{const m={};arr.forEach(r=>{const k=(typeof key==='function'?key(r):r[key])||'—';(m[k]=m[k]||[]).push(r);});
+      return Object.entries(m).map(([k,v])=>[k,S(v)]).filter(x=>x[1]).sort((a,b)=>b[1].ev-a[1].ev);};
+    let h='<b>РАЗБОР</b> при издержках <b>'+AP_FEE+' bps</b> · записей '+L.length
+      +' <span class="gs-note">(старые пересчитаны к текущим издержкам)</span>';
+    h+=row('ВСЕ направленные',S(dir));
+    h+=row('СЕТКА (сессии)',S(grid));
+    h+='<br><span class="gs-note">по протоколам — сортировка по матожиданию:</span>';
+    grp(dir,'proto').forEach(([k,st])=>{ h+=row('&nbsp;&nbsp;'+k,st,(st.n>=8&&st.ev<-1?' <span class="gs-dn">— кандидат на отключение</span>':'')); });
+    h+='<br><span class="gs-note">по причине выхода:</span>';
+    grp(dir,'reason').forEach(([k,st])=>{ h+=row('&nbsp;&nbsp;'+({tp:'тейк',stop:'стоп',time:'время',cancel:'отмена стратегии',manual:'вручную'}[k]||k),st); });
+    const segs=grp(dir,r=>r.seg+' · '+r.proto).filter(x=>x[1].n>=5);
+    if(segs.length){
+      h+='<br><span class="gs-note">связки «сегмент × протокол» (от 5 наблюдений) — худшие 5:</span>';
+      segs.slice(-5).reverse().forEach(([k,st])=>{ h+=row('&nbsp;&nbsp;'+k,st,(st.n>=AP_SEGMIN&&st.ev<-1?' <span class="gs-dn">— движок их уже не берёт</span>':'')); });
+      h+='<br><span class="gs-note">лучшие 3:</span>';
+      segs.slice(0,3).forEach(([k,st])=>{ h+=row('&nbsp;&nbsp;'+k,st); });
+    }
+    const withFit=dir.filter(r=>r.fit!=null);
+    if(withFit.length>=10){
+      h+='<br><span class="gs-note">по фиту на входе:</span>';
+      [[0,60],[60,70],[70,80],[80,101]].forEach(([a,b])=>{const st=S(withFit.filter(r=>r.fit>=a&&r.fit<b)); h+=row('&nbsp;&nbsp;фит '+a+'–'+b+'%',st);});
+    } else h+='<br><span class="gs-note">фит входа пишется с этой версии — срез появится после ~10 новых сделок</span>';
+    const ev=S(dir);
+    if(ev)h+='<br><b>вывод:</b> '+(ev.ev>0?'<span class="gs-up">матожидание положительное — машина зарабатывает</span>':'<span class="gs-dn">матожидание отрицательное — WR не спасёт, нужен другой отбор входов</span>')
+      +' <span class="gs-note">· виртуально, не гарантия результата</span>';
+    el.innerHTML=h;
   }
   function _apRender(m){
     const p=document.getElementById('apPanel'); if(!p||!_ap.on)return;
