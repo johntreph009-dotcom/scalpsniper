@@ -5716,8 +5716,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(bias==='long'){ nB=_str>=2?6:5; nS=_str>=2?2:3; }
     if(bias==='short'){ nB=_str>=2?2:3; nS=_str>=2?6:5; }
     const step=half*2/8, levels=[];
-    for(let i=1;i<=nB;i++)levels.push({px:px-step*i,side:'buy',open:true});
-    for(let i=1;i<=nS;i++)levels.push({px:px+step*i,side:'sell',open:true});
+    // cross — в какую сторону цена должна пересечь уровень, pos — какую позицию он открывает.
+    // В РЕЙНДЖЕ это классика: ниже покупаем, выше продаём (усреднение к середине).
+    // В ТРЕНДЕ (strength>=2) включается МОМЕНТУМ: уровни ставятся ПО ходу движения и открывают позицию
+    // В СТОРОНУ импульса — падение продаём ниже, рост выкупаем выше. Так импульс отторговывается, а не пересиживается.
+    const mo=_str>=2&&(bias==='long'||bias==='short');
+    if(mo){
+      const up=bias==='long';
+      for(let i=1;i<=5;i++)levels.push({px:up?px+step*i:px-step*i, side:up?'buy':'sell',
+        cross:up?'up':'down', pos:up?'long':'short', kind:'mo', open:true});   // доливка по тренду
+      for(let i=1;i<=3;i++)levels.push({px:up?px-step*i:px+step*i, side:up?'buy':'sell',
+        cross:up?'down':'up', pos:up?'long':'short', kind:'mo', open:true});   // откуп отката, тоже по тренду
+    } else {
+      for(let i=1;i<=nB;i++)levels.push({px:px-step*i,side:'buy',cross:'down',pos:'long',kind:'mr',open:true});
+      for(let i=1;i<=nS;i++)levels.push({px:px+step*i,side:'sell',cross:'up',pos:'short',kind:'mr',open:true});
+    }
     return {center:px,step,lo:px-step*(nB+0.5),hi:px+step*(nS+0.5),levels,bias,inv:[],fills:0,pairs:0,realized:0,rebuilds:0,t0:Date.now(),lastRb:Date.now(),lastPx:px};
   }
   // сетка управляется автопилотом-диспетчером (режим РЕЙНДЖ); ручного тумблера больше нет
@@ -5766,8 +5779,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if((px>_gs.hi||px<_gs.lo)&&Date.now()-(_gs.lastRb||0)>15000){ _gsReframe(px); return; }
     for(const L of _gs.levels){
       if(!L.open)continue;
-      if(L.side==='buy'&&prev>L.px&&px<=L.px){ L.open=false;_gs.fills++;_gs.inv.push({side:'long',entry:L.px,tp:L.px+_gs.step,lvl:L}); _ev('fill',L.px); }
-      else if(L.side==='sell'&&prev<L.px&&px>=L.px){ L.open=false;_gs.fills++;_gs.inv.push({side:'short',entry:L.px,tp:L.px-_gs.step,lvl:L}); _ev('fill',L.px); }
+      const cr=L.cross||(L.side==='buy'?'down':'up');
+      const hitL=(cr==='down')?(prev>L.px&&px<=L.px):(prev<L.px&&px>=L.px);
+      if(!hitL)continue;
+      const ps=L.pos||(L.side==='buy'?'long':'short'), d=(ps==='long'?1:-1);
+      // моментум-нога идёт за движением → цель дальше (3 шага) и подтягивается трейлом; MR-нога берёт свой шаг
+      const mult=(L.kind==='mo')?3:1;
+      L.open=false;_gs.fills++;
+      _gs.inv.push({side:ps,entry:L.px,tp:L.px+d*_gs.step*mult,lvl:L,kind:L.kind||'mr',peak:L.px});
+      _ev('fill',L.px);
     }
     // HFA-защита (ДО закрытия пар — иначе ногу заберёт лимитный тейк на шаг и весь рывок пройдёт мимо):
     // нога, которую вынесло в плюс на ≥100 bps (1%), снимается ПО РЫНКУ по фактической цене.
@@ -5806,9 +5826,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // риск гасится подтягиванием хвоста и сдвигом лесенки, а не сбросом книги по рынку.
     // Полное закрытие остаётся только по команде трейдера (стоп автопилота).
     // закрытие пар: тейк на шаг, уровень реоткрывается (как у реального грида)
+    // Трейл моментум-ног: пока импульс идёт — цель едет за ценой, откат на шаг забирает прибыль.
+    // Так движение отрабатывается целиком, а не отдаётся обратно ради фиксированного тейка.
+    _gs.inv.forEach(pp=>{ if(pp.kind!=='mo')return;
+      const d=pp.side==='long'?1:-1;
+      if(pp.peak==null)pp.peak=pp.entry;
+      if((px-pp.peak)*d>0)pp.peak=px;                       // новый экстремум в нашу сторону
+      const locked=pp.peak-d*_gs.step;                      // трейл на шаг от экстремума
+      if((locked-pp.entry)*d>0&&(locked-pp.tp)*d>0)pp.tp=locked;   // цель подтягиваем только вперёд и только в плюсе
+    });
     _gs.inv=_gs.inv.filter(pp=>{
       const hit=pp.side==='long'?px>=pp.tp:px<=pp.tp;
-      if(hit){ const g=_gs.step/pp.entry*10000;
+      if(hit){ const g=((pp.tp-pp.entry)/pp.entry*10000)*(pp.side==='long'?1:-1);   // фактический доход ноги (у моментума цель уехала по трейлу)
         _gs.pairs++; _gs.realized+=g; _gs.credit=(_gs.credit||0)+g;   // прибыль ноги идёт в «кредит» на выкуп хвоста
         if(pp.lvl)pp.lvl.open=true; _ev('pair',pp.tp,g); return false; }
       return true;
