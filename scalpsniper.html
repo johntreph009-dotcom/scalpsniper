@@ -5905,7 +5905,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function _usd(bps){ const v=(+bps||0)/1e4*AP_USD; const a=Math.abs(v);
     return (v>=0?'+':'−')+'$'+(a>=1000?(a/1000).toFixed(1)+'k':a>=10?a.toFixed(0):a.toFixed(2)); }
-  const AP_MINFIT=55, AP_COOLDOWN=45e3, AP_MAXHOLD=180e3;   // 62 был взят «на глаз»: фит в журнале не писался, тюнить было не на чем
+  const AP_MINFIT=55, AP_MAXHOLD=180e3;   // 62 был взят «на глаз»: фит в журнале не писался, тюнить было не на чем
+  // Пауза сканирования после закрытия сделки. Разбор журнала: 47% пауз между сделками упирались ровно
+  // в прежние 45с при медианном удержании сделки 18с — кулдаун был главным ограничителем частоты.
+  // Вынесен в настройку: слишком мало → повторные входы на одном и том же дрожании, слишком много → пропуск сетапов.
+  let AP_COOLDOWN=15e3; try{const _c=localStorage.getItem('msa_ap_cd_v1'); if(_c!=null&&isFinite(+_c)&&+_c>=0)AP_COOLDOWN=+_c*1000;}catch(e){}
+  function _apSetCd(){
+    const v=prompt('Пауза сканирования после сделки, секунд.\nМеньше — чаще входы и больше экспозиция; больше — реже, но чище отбор.',String(Math.round(AP_COOLDOWN/1000)));
+    if(v==null)return; const n=(typeof _pf==='function')?_pf(v):parseFloat(v);
+    if(!isFinite(n)||n<0)return; AP_COOLDOWN=n*1000;
+    try{localStorage.setItem('msa_ap_cd_v1',String(n));}catch(e){}
+    if(typeof _proc==='function')_proc('пауза сканирования: <b>'+n+'с</b>');
+  }
   // Лёгкий дебаунс входа, а НЕ жёсткие ворота. Разбор журнала при нулевых издержках: быстрые отмены (<10с)
   // дают −0.14 bps на сделку — это шум, а не утечка. Прежние 1200мс были обоснованы завышенной комиссией.
   const AP_CONFIRM=400;
@@ -6216,6 +6227,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     p.innerHTML='<b>АВТОПИЛОТ</b> · режим <b>'+mode+'</b> · сегмент <b>'+_apSegKey(m.f)+'</b> · лидер '+lead+' '+(S[lead]||0)+'%'
       +' · издержки <b class="ap-fee" onclick="_apSetFee()" title="Комиссия + проскальзывание на круг. От этого числа считаются цели, гейт и шаг сетки. Нажми, чтобы изменить">'+AP_FEE+' bps</b>'
       +' · объём <b class="ap-fee" onclick="_apSetUsd()" title="Виртуальный объём одной сделки/ноги. От него считаются суммы в долларах. Нажми, чтобы изменить">$'+AP_USD+'</b>'
+      +' · пауза <b class="ap-fee" onclick="_apSetCd()" title="Пауза сканирования после закрытия сделки. Нажми, чтобы изменить">'+Math.round(AP_COOLDOWN/1000)+'с</b>'
       +'<br>'+posHtml
       +'<br>сегодня: <b>'+_ap.today.n+'</b> сд · WR '+(wr==null?'—':wr+'%')+expHtml+' · <b class="'+cls(_ap.today.sum)+'">'+_usd(_ap.today.sum)+'</b>'+beTxt+(last?' · последние: '+last:'')
       +'<br><span class="gs-note">виртуально · комиссия '+AP_FEE+' bps в PnL · модель · тренажёр — реальные ордера не открывает</span>';
