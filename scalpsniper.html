@@ -5709,7 +5709,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const slope=(hh[hh.length-1]-hh[0])/hh[0];
     const sc=(dt?(dt.dir==='up'?1:dt.dir==='down'?-1:0):0)+(flow>0.22?1:flow<-0.22?-1:0)+(slope>0.0012?1:slope<-0.0012?-1:0);
     const bias=sc>=2?'long':sc<=-2?'short':'neutral';
-    let nB=4,nS=4; if(bias==='long'){nB=5;nS=3;} if(bias==='short'){nB=3;nS=5;}
+    // Лесенка идёт ЗА трендом, а не против него: в сильном тренде почти все уровни ставим со стороны движения
+    // (в падении — продажи выше на отскоках), чтобы не набирать инвентарь против импульса.
+    const _str=(dt&&dt.strength)||0;
+    let nB=4,nS=4;
+    if(bias==='long'){ nB=_str>=2?6:5; nS=_str>=2?2:3; }
+    if(bias==='short'){ nB=_str>=2?2:3; nS=_str>=2?6:5; }
     const step=half*2/8, levels=[];
     for(let i=1;i<=nB;i++)levels.push({px:px-step*i,side:'buy',open:true});
     for(let i=1;i<=nS;i++)levels.push({px:px+step*i,side:'sell',open:true});
@@ -5734,12 +5739,31 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const p=document.getElementById('gsPanel'); if(p)p.style.display='none';
     return st;
   }
+  // Пересборка лесенки вокруг текущей цены С СОХРАНЕНИЕМ инвентаря и статистики.
+  // Старые ноги остаются со своими тейками — они самодостаточны и закроются сами, когда цена вернётся.
+  function _gsReframe(px,keepFrozen){
+    if(!_gs)return;
+    const keep={inv:_gs.inv.map(x=>({side:x.side,entry:x.entry,tp:x.tp,lvl:null})),f:_gs.fills,p:_gs.pairs,
+      r:_gs.realized,rb:(_gs.rebuilds||0)+1,t0:_gs.t0,h:_gs.hfa||0,ev:_gs.ev||[]};
+    const ng=_gsBuild(px);
+    if(!ng)return;
+    ng.inv=keep.inv; ng.fills=keep.f; ng.pairs=keep.p; ng.realized=keep.r;
+    ng.rebuilds=keep.rb; ng.t0=keep.t0; ng.hfa=keep.h; ng.ev=keep.ev;
+    ng.credit=_gs.credit||0; ng.tail=_gs.tail||0; ng.lastRb=Date.now();   // кредит и счётчик хвоста переживают сдвиг лесенки
+    _gs=ng;
+    if(keepFrozen&&typeof _proc==='function')_proc('лесенка сдвинута за ценой (заморозка сохранена): центр '+px.toFixed(_dlDec)+', инвентарь '+ng.inv.length);
+  }
   function _gsTick(){
     if(!_gs)return; const hh=_dlHist, px=hh[hh.length-1]; if(!px)return;
     const prev=_gs.lastPx||px; _gs.lastPx=px;
     // филлы: цена пересекла уровень
     if(!_gs.ev)_gs.ev=[];
     const _ev=(t,p,v)=>{ _gs.ev.push({k:_dlTick,px:p,t,v:v||0}); if(_gs.ev.length>80)_gs.ev.shift(); };  // след фарма для графика
+    // УМНАЯ ЛЕСЕНКА. Ни заморозки, ни коллективных стопов: импульс — это то, что мы ОТТОРГОВЫВАЕМ,
+    // а не то, от чего прячемся. Позицию высиживаем, лесенка едет параллельно движению,
+    // а убыточный хвост подтягивается прибылью выигравших ног (см. блок «подтягивание хвоста» ниже).
+    // Лесенка идёт ЗА ценой: вышли из коробки — переносим уровни, инвентарь остаётся жить.
+    if((px>_gs.hi||px<_gs.lo)&&Date.now()-(_gs.lastRb||0)>15000){ _gsReframe(px); return; }
     for(const L of _gs.levels){
       if(!L.open)continue;
       if(L.side==='buy'&&prev>L.px&&px<=L.px){ L.open=false;_gs.fills++;_gs.inv.push({side:'long',entry:L.px,tp:L.px+_gs.step,lvl:L}); _ev('fill',L.px); }
@@ -5760,24 +5784,33 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // Число ног само по себе НЕ признак беды: набирать инвентарь — штатное дыхание сетки, на этом она и зарабатывает.
     // Режем по РИСКУ и РЕЖИМУ, а не по счётчику ног. Чем больше сетка уже заработала, тем длиннее поводок.
     const _fl=_gs.inv.reduce((s,x)=>s+((px-x.entry)/x.entry*1e4)*(x.side==='long'?1:-1),0);
-    const earned=Math.max(0,_gs.realized);
-    const giveBack=_fl<=-Math.max(120,earned*1.5);                       // отдаёт больше, чем заработала
-    const outBand=px>_gs.hi||px<_gs.lo;
-    const trendKill=outBand&&_fl<0&&(()=>{try{const f=_apCtxF();return f.str>=2&&((f.dir==='up'&&_gs.inv.some(x=>x.side==='short'))||(f.dir==='down'&&_gs.inv.some(x=>x.side==='long')));}catch(e){return false;}})();
-    if(giveBack||trendKill||(_gs.realized+_fl)<=-Math.max(200,earned*2)){
-      const why=trendKill?('цена вышла за диапазон, тренд идёт против инвентаря (флоут '+_fl.toFixed(0)+' bps)')
-        :giveBack?('отдаёт больше заработанного: флоут '+_fl.toFixed(0)+' bps при реализованных '+_gs.realized.toFixed(0))
-        :('лимит убытка сессии '+(_gs.realized+_fl).toFixed(0)+' bps');
-      _gs.realized+=_fl; _gs.inv=[];                       // режем инвентарь по рынку, не усредняемся дальше
-      if(typeof _ap!=='undefined'){_ap.gridBlockUntil=Date.now()+120e3; _ap.gridOn=false;}   // пауза 2 мин: тренд не для сетки
-      if(typeof _gsStop==='function')_gsStop();
-      if(typeof _proc==='function')_proc('СЕТКА ОСТАНОВЛЕНА: '+why+' — тренд против сетки, пауза 2 мин','pr-dn');
-      return;
+    // ── ПОДТЯГИВАНИЕ ХВОСТА: поэтапное закрытие вместо стопа ──
+    // Каждая закрытая с прибылью нога кладёт свой доход в «кредит». Как только кредита хватает,
+    // чтобы перекрыть САМУЮ убыточную ногу — закрываем её, гасив убыток этой прибылью.
+    // Позиция не режется по рынку и не ждёт полного возврата: хвост подтягивается ступенями.
+    if((_gs.credit||0)>0&&_gs.inv.length){
+      let worst=null,wl=0;
+      _gs.inv.forEach(pp=>{ const b=((px-pp.entry)/pp.entry*1e4)*(pp.side==='long'?1:-1); if(b<wl){wl=b;worst=pp;} });
+      if(worst&&(_gs.credit+wl)>=0){                       // кредита достаточно, чтобы закрыть хвост в ноль или плюс
+        _gs.credit+=wl; _gs.realized+=wl; _gs.pairs++;
+        _gs.tail=(_gs.tail||0)+1;
+        if(worst.lvl)worst.lvl.open=true;
+        _gs.inv=_gs.inv.filter(x=>x!==worst);
+        _ev('tail',px,wl);
+        if(typeof _proc==='function')_proc('хвост подтянут: убыточная нога от '+worst.entry.toFixed(_dlDec)+' закрыта за счёт прибыли ('+wl.toFixed(0)+' bps), кредит остался '+_gs.credit.toFixed(0),'pr-up');
+      }
     }
+    const earned=Math.max(0,_gs.realized);
+    // Ни заморозки, ни авто-ликвидации по убытку. Тест показал: предохранитель срабатывал НА ДНЕ импульса
+    // и фиксировал −413 даже там, где цена возвращалась к точке входа. Позицию высиживаем,
+    // риск гасится подтягиванием хвоста и сдвигом лесенки, а не сбросом книги по рынку.
+    // Полное закрытие остаётся только по команде трейдера (стоп автопилота).
     // закрытие пар: тейк на шаг, уровень реоткрывается (как у реального грида)
     _gs.inv=_gs.inv.filter(pp=>{
       const hit=pp.side==='long'?px>=pp.tp:px<=pp.tp;
-      if(hit){ _gs.pairs++; _gs.realized+=_gs.step/pp.entry*10000; if(pp.lvl)pp.lvl.open=true; _ev('pair',pp.tp,_gs.step/pp.entry*10000); return false; }
+      if(hit){ const g=_gs.step/pp.entry*10000;
+        _gs.pairs++; _gs.realized+=g; _gs.credit=(_gs.credit||0)+g;   // прибыль ноги идёт в «кредит» на выкуп хвоста
+        if(pp.lvl)pp.lvl.open=true; _ev('pair',pp.tp,g); return false; }
       return true;
     });
     // перестройка: выход за диапазон, устойчивый дрейф от центра или срабатывание HFA (сдвиг за ликвидностью)
@@ -5802,8 +5835,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const cls=v=>v>=0?'gs-up':'gs-dn', sg=v=>(v>=0?'+':'')+v.toFixed(1);
     p.style.display='block';
     p.innerHTML='<b>СЕТКА</b> '+_gs.levels.length+' ур × '+stepBps+' bps · '+_gs.lo.toFixed(dec)+'–'+_gs.hi.toFixed(dec)+' · <b>'+modeTxt+'</b> · '+mm+':'+ss
-      +'<br>филлы <b>'+_gs.fills+'</b> · пары <b>'+_gs.pairs+'</b> · реализовано <b class="'+cls(_gs.realized)+'">'+sg(_gs.realized)+' bps</b> · инвентарь <b>'+_gs.inv.length+'</b> ур (<span class="'+cls(fl)+'">'+sg(fl)+'</span>) · итог <b class="'+cls(net)+'">'+sg(net)+'</b> · перестроек '+_gs.rebuilds+(_gs.hfa?' · <b title="ноги, снятые HFA-защитой на +100 bps">HFA '+_gs.hfa+'</b>':'')
-      +'<br><span class="gs-note">'+(_gs.inv.length>=3?'⚠ копит инвентарь против движения — так сетку убивает тренд, и так её вычисляют':'собирает шаг в рейндже — штатный режим сеточника')+' · модель · тренажёр</span>';
+      +'<br>филлы <b>'+_gs.fills+'</b> · пары <b>'+_gs.pairs+'</b> · реализовано <b class="'+cls(_gs.realized)+'">'+_usd(_gs.realized)+'</b> · инвентарь <b>'+_gs.inv.length+'</b> ур (<span class="'+cls(fl)+'">'+_usd(fl)+'</span>) · итог <b class="'+cls(net)+'">'+_usd(net)+'</b> <span class="gs-note">('+sg(net)+' bps)</span> · перестроек '+_gs.rebuilds+(_gs.hfa?' · <b>HFA '+_gs.hfa+'</b>':'')
+      +(_gs.credit||_gs.tail?'<br>кредит на выкуп хвоста <b class="'+cls(_gs.credit||0)+'">'+_usd(_gs.credit||0)+'</b> · хвостов подтянуто <b>'+(_gs.tail||0)+'</b>':'')
+      +'<br><span class="gs-note">'+(_gs.inv.length>=3?'высиживает инвентарь — стопов нет, хвост гасится прибылью выигравших ног':'собирает шаг — лесенка едет за ценой')+' · модель · тренажёр</span>';
   }
 
   // ═══════════ АВТОПИЛОТ (демо) — стратегии из реестра сами открывают ВИРТУАЛЬНЫЕ сделки ═══════════
@@ -5820,6 +5854,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{localStorage.setItem('msa_ap_fee_v1',String(n));}catch(e){}
     if(typeof _proc==='function')_proc('издержки на круг: <b>'+n+' bps</b> — цели, гейт и шаг сетки пересчитаны');
   }
+  // Виртуальный объём одной ноги/сделки в USDT — чтобы показывать результат в ДЕНЬГАХ, а не в bps.
+  // $ = bps/10000 × объём. Меняется кликом, хранится локально.
+  let AP_USD=1000; try{const _u=localStorage.getItem('msa_ap_usd_v1'); if(_u!=null&&isFinite(+_u)&&+_u>0)AP_USD=+_u;}catch(e){}
+  function _apSetUsd(){
+    const v=prompt('Виртуальный объём одной сделки/ноги сетки в USDT.\nОт него считается результат в долларах.',String(AP_USD));
+    if(v==null)return; const n=(typeof _pf==='function')?_pf(v):parseFloat(v);
+    if(!isFinite(n)||n<=0)return; AP_USD=n;
+    try{localStorage.setItem('msa_ap_usd_v1',String(n));}catch(e){}
+    if(typeof _proc==='function')_proc('объём сделки: <b>'+n+' USDT</b> — суммы пересчитаны');
+  }
+  function _usd(bps){ const v=(+bps||0)/1e4*AP_USD; const a=Math.abs(v);
+    return (v>=0?'+':'−')+'$'+(a>=1000?(a/1000).toFixed(1)+'k':a>=10?a.toFixed(0):a.toFixed(2)); }
   const AP_MINFIT=55, AP_COOLDOWN=45e3, AP_MAXHOLD=180e3;   // 62 был взят «на глаз»: фит в журнале не писался, тюнить было не на чем
   // Лёгкий дебаунс входа, а НЕ жёсткие ворота. Разбор журнала при нулевых издержках: быстрые отмены (<10с)
   // дают −0.14 bps на сделку — это шум, а не утечка. Прежние 1200мс были обоснованы завышенной комиссией.
@@ -5905,9 +5951,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const now=Date.now();
       if(_ap.gridOn!==rangeMode && now-(_ap.modeSince||0)>60e3 && !_ap.pos){ // гистерезис 60с, не дёргаем при открытой позиции
         _ap.modeSince=now; _ap.gridOn=rangeMode;
-        if(rangeMode){ _gsStart(); if(typeof _proc==='function')_proc('режим → СЕТКА: сегмент '+_apSegKey(m.f)+' — разворачиваю спрей'); }
-        else{ const st=_gsStop(); if(st&&st.fills>0)_apLogGrid(st,m);
-          if(typeof _proc==='function')_proc('режим → НАПРАВЛЕННЫЙ: сегмент '+_apSegKey(m.f)+(st&&st.fills>0?' — сетка свёрнута: '+(st.net>=0?'+':'')+st.net+' bps ('+st.fills+' филлов)':''),st&&st.net<0?'pr-dn':''); }
+        if(rangeMode){
+          if(_gs){ _gsReframe(m.px); if(typeof _proc==='function')_proc('режим → СЕТКА: лесенка пересобрана вокруг цены, инвентарь сохранён ('+_gs.inv.length+' ног)'); }
+          else { _gsStart(); if(typeof _proc==='function')_proc('режим → СЕТКА: сегмент '+_apSegKey(m.f)+' — разворачиваю спрей'); }
+        }
+        else{
+          // Раньше здесь стоял _gsStop(): импульс ломал рейндж → диспетчер сбрасывал ВСЕ ноги по рынку
+          // на экстремуме движения. Это и был «стоп сетки в момент импульса».
+          // Теперь лесенка продолжает работать и в тренде: едет за ценой и отторговывает импульс.
+          if(typeof _proc==='function')_proc('режим → НАПРАВЛЕННЫЙ: лесенка продолжает работу и едет за движением'+(_gs?(' · инвентарь '+_gs.inv.length):''));
+        }
       }
       if(_ap.gridOn){ if(!_gs)_gsStart(); _apRender(m); return; } // сетка торгует, направленные молчат
       if(_ap.pos){_apManage(m);_apRender(m);return;}
@@ -6071,7 +6124,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const S=a=>{const n=a.length; if(!n)return null; const s=a.reduce((x,y)=>x+y.v,0);
       return {n,wr:Math.round(a.filter(x=>x.v>0).length/n*100),ev:+(s/n).toFixed(2),sum:Math.round(s)};};
     const cls=v=>v>=0?'gs-up':'gs-dn', sg=v=>(v>=0?'+':'')+v;
-    const row=(name,st,extra)=>st?('<br>'+name+': <b>'+st.n+'</b> сд · WR '+st.wr+'% · матож. <b class="'+cls(st.ev)+'">'+sg(st.ev)+' bps</b> · итог <b class="'+cls(st.sum)+'">'+sg(st.sum)+'</b>'+(extra||'')):'';
+    const row=(name,st,extra)=>st?('<br>'+name+': <b>'+st.n+'</b> сд · WR '+st.wr+'% · матож. <b class="'+cls(st.ev)+'">'+_usd(st.ev)+'</b>/сд · итог <b class="'+cls(st.sum)+'">'+_usd(st.sum)+'</b>'+(extra||'')):'';
     const grp=(arr,key)=>{const m={};arr.forEach(r=>{const k=(typeof key==='function'?key(r):r[key])||'—';(m[k]=m[k]||[]).push(r);});
       return Object.entries(m).map(([k,v])=>[k,S(v)]).filter(x=>x[1]).sort((a,b)=>b[1].ev-a[1].ev);};
     let h='<b>РАЗБОР</b> при издержках <b>'+AP_FEE+' bps</b> · записей '+L.length
@@ -6108,23 +6161,24 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(_ap.gridOn&&_gs){
       const fl=_gs.inv.reduce((s,x)=>s+((m.px-x.entry)/x.entry*1e4)*(x.side==='long'?1:-1),0);
       const net=_gs.realized+fl-5*_gs.pairs-5*_gs.inv.length;
-      posHtml='сетка: пары <b>'+_gs.pairs+'</b> · инвентарь <b>'+_gs.inv.length+'</b> · нетто <b class="'+cls(net)+'">'+sg(net)+' bps</b> <span class="gs-note">(с комиссией, детали ниже)</span>';
+      posHtml='сетка: пары <b>'+_gs.pairs+'</b> · инвентарь <b>'+_gs.inv.length+'</b> · нетто <b class="'+cls(net)+'">'+_usd(net)+'</b> <span class="gs-note">(с издержками, детали ниже)</span>';
     }else if(_ap.pos){
       const dir=_ap.pos.side==='long'?1:-1;
       const fl=((m.px-_ap.pos.entry)/_ap.pos.entry*1e4)*dir-AP_FEE;
-      posHtml='<b>'+_ap.pos.proto+'</b> '+(_ap.pos.side==='long'?'LONG':'SHORT')+' @ '+_ap.pos.entry.toFixed(_dlDec)+' · флоут <b class="'+cls(fl)+'">'+sg(fl)+' bps</b> · '+Math.round((Date.now()-_ap.pos.t0)/1e3)+'с · фит входа '+_ap.pos.fit+'%';
+      posHtml='<b>'+_ap.pos.proto+'</b> '+(_ap.pos.side==='long'?'LONG':'SHORT')+' @ '+_ap.pos.entry.toFixed(_dlDec)+' · флоут <b class="'+cls(fl)+'">'+_usd(fl)+'</b> · '+Math.round((Date.now()-_ap.pos.t0)/1e3)+'с · фит входа '+_ap.pos.fit+'%';
     }
     const last=_ap.log.slice(-5).reverse().map(r=>'<span class="'+cls(r.bps)+'">'+sg(r.bps)+'</span>').join(' · ');
     const wr=_ap.today.n?Math.round(_ap.today.w/_ap.today.n*100):null;
     // матожидание рядом с WR: высокий WR при отрицательном среднем — ловушка, её видно только так
     const exp=_ap.today.n?(_ap.today.sum/_ap.today.n):null;
     const beTxt=_ap.pos?(' · безубыток этой сделки '+Math.round(_beWR({tpBps:(_ap.pos.tp-_ap.pos.entry)/_ap.pos.entry*1e4*(_ap.pos.side==='long'?1:-1),stopBps:Math.abs((_ap.pos.entry-_ap.pos.stop)/_ap.pos.entry*1e4)})*100)+'% WR'):'';
-    const expHtml=exp==null?'':(' · матожидание <b class="'+cls(exp)+'">'+sg(exp)+' bps/сделку</b>'+(wr!=null&&exp<0&&wr>=50?' <span class="gs-note">(WR высокий, но минус — ловушка)</span>':''));
+    const expHtml=exp==null?'':(' · матожидание <b class="'+cls(exp)+'">'+_usd(exp)+'/сделку</b>'+(wr!=null&&exp<0&&wr>=50?' <span class="gs-note">(WR высокий, но минус — ловушка)</span>':''));
     const mode=_ap.gridOn?'СЕТКА (рейндж)':'НАПРАВЛЕННЫЙ (тренд/поток)';
     p.innerHTML='<b>АВТОПИЛОТ</b> · режим <b>'+mode+'</b> · сегмент <b>'+_apSegKey(m.f)+'</b> · лидер '+lead+' '+(S[lead]||0)+'%'
       +' · издержки <b class="ap-fee" onclick="_apSetFee()" title="Комиссия + проскальзывание на круг. От этого числа считаются цели, гейт и шаг сетки. Нажми, чтобы изменить">'+AP_FEE+' bps</b>'
+      +' · объём <b class="ap-fee" onclick="_apSetUsd()" title="Виртуальный объём одной сделки/ноги. От него считаются суммы в долларах. Нажми, чтобы изменить">$'+AP_USD+'</b>'
       +'<br>'+posHtml
-      +'<br>сегодня: <b>'+_ap.today.n+'</b> сд · WR '+(wr==null?'—':wr+'%')+expHtml+' · <b class="'+cls(_ap.today.sum)+'">'+sg(_ap.today.sum)+' bps</b>'+beTxt+(last?' · последние: '+last:'')
+      +'<br>сегодня: <b>'+_ap.today.n+'</b> сд · WR '+(wr==null?'—':wr+'%')+expHtml+' · <b class="'+cls(_ap.today.sum)+'">'+_usd(_ap.today.sum)+'</b>'+beTxt+(last?' · последние: '+last:'')
       +'<br><span class="gs-note">виртуально · комиссия '+AP_FEE+' bps в PnL · модель · тренажёр — реальные ордера не открывает</span>';
   }
 
