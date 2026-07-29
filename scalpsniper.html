@@ -6371,9 +6371,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!reason&&!p.part){
       const den=dir>0?(p.tp-p.entry):(p.entry-p.tp);
       const prog=den>0?(dir>0?(m.px-p.entry):(p.entry-m.px))/den:0;
-      if(prog>=0.3){
+      // ЧЕСТНЫЙ РЫЧАГ ПОД WR: фиксируем часть раньше (четверть пути вместо трети) и сразу уводим стоп в БУ.
+      // Это поднимает долю плюсовых сделок И режет убытки — сделка, дошедшая до БУ, перестаёт быть проигрышной.
+      // В отличие от сжатия цели (которое поднимает WR и убивает матожидание), здесь растут ОБА показателя.
+      if(prog>=0.25){
         const bps=((m.px-p.entry)/p.entry*1e4)*dir;
-        p.realBps=(p.realBps||0)+bps*0.3; p.qty=0.7; p.part=true; p.stop=p.entry;   // BU: дальше хуже нуля не станет
+        p.realBps=(p.realBps||0)+bps*0.35; p.qty=0.65; p.part=true; p.stop=p.entry;   // BU: дальше хуже нуля не станет
         if(typeof _proc==='function')_proc('разгрузка 30%: <b>'+p.proto+'</b> @ '+m.px.toFixed(_dlDec)+' · +'+bps.toFixed(1)+' bps зафиксировано · стоп в безубыток','pr-up');
       }
     }
