@@ -3372,7 +3372,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           if(long?m.deltaSlope<=0:m.deltaSlope>=0)return null;
           return {side:long?'long':'short',stopBps:5,tpBps:Math.max(10,5+2*AP_FEE),ref:w.key};   // при 0 издержек — родные 10, при 5 — 15
         },
-        cancel:(m,pos)=>{const w=m.walls.find(x=>x.key===pos.ref);return !!w&&w.s>=w.s0*0.8;} // refill = спуф
+        // Отмена: стена восстановилась (спуф) ИЛИ стену вообще потеряли из виду.
+        // Замер живых данных: у SQUEEZE отмена срабатывала лишь в 7% (было 57%), а стопы выросли 16%→61%.
+        // Причина — условие требовало НАЙТИ стену; когда она уходила из окна отслеживания (±25 bps),
+        // отмена молча не срабатывала и позиция ехала до полного стопа без раннего выхода.
+        // Потеря опорной стены = тезис пробоя больше не проверяем → выходим, как это делает VALENTINI.
+        cancel:(m,pos)=>{const w=m.walls.find(x=>x.key===pos.ref);return !w||w.s>=w.s0*0.8;}
       }},
     SHOTGUN:{name:'Shotgun',sub:'liq basket',aliases:['shotgun','shot','liq','liqbasket'],base:20,
       checks:[
