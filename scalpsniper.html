@@ -1480,6 +1480,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <label>пауза с<input type="number" id="cfgCd" min="0" step="5" oninput="_apCfg('cd',this.value)"></label>
       <span class="ap-cfg-out" id="cfgOut"></span>
     </div>
+    <div class="dl-canvas-lbl" style="margin-top:8px">ПАСПОРТ МОНЕТЫ <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Прогон по истории инструмента: характер монеты (трендовость, волатильность, возврат к уровню) на месяцах часовых свечей + достоверный прогон лесенки по минуткам с перебором шага и режима. Найденный шаг подставляется автоматически. Протоколы стакана по истории НЕ восстановимы — свечи не хранят стены и дельту.</span></span> <button type="button" class="zf-refresh" onclick="_cpRender(true)">↻ Прогнать историю</button></div>
+    <div id="cpPanel" class="gs-panel"><span class="gs-note">нажми «Прогнать историю» — соберу паспорт текущего инструмента</span></div>
     <div id="apPanel" class="gs-panel" style="display:none"></div>
     <div class="dl-canvas-lbl" style="margin-top:8px">РАЗБОР АВТОПИЛОТА <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Матожидание (среднее bps на сделку) по протоколам, сегментам рынка и причинам выхода. Считается по журналу движка при ТЕКУЩИХ издержках — старые записи пересчитываются к ним же. Матожидание важнее WR: высокий процент побед при отрицательном среднем — убыточная машина.</span></span> <button type="button" class="zf-refresh" onclick="_apAudit()">↻ Пересчитать</button> <button type="button" class="zf-refresh" onclick="_apExport()">⭳ Выгрузить журнал (CSV)</button></div>
     <div id="apAudit" class="gs-panel"><span class="gs-note">нажми «Пересчитать» — покажу матожидание по протоколам и сегментам</span></div>
@@ -5715,8 +5717,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // Было: мин. полудиапазон 8 bps → шаг 2 bps против комиссии 5 → КАЖДАЯ пара в минус.
     // Разбор журнала: сессия со 150 закрытыми парами (конверсия 92%) дала −654 bps — фарм работал, экономика нет.
     // Теперь шаг не меньше 2×FEE: пара приносит минимум столько же, сколько стоит.
+    // Шаг из ПАСПОРТА МОНЕТЫ, если история его подобрала: решение опирается на то, что на этой
+    // монете реально работало, а не только на окно последних свечей.
+    let passStep=0;
+    try{ const p=_cpCache[(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):''];
+      if(p&&p.лучшее&&p.лучшее.итог>0)passStep=px*p.лучшее.шаг/1e4; }catch(e){}
     const minHalf=px*Math.max(0.0008, AP_FEE*2*4/1e4);   // step=half/4 → half=minStep*4; при нулевых издержках остаётся родной пол 8 bps
-    const half=Math.max((wh-wl)*0.9, minHalf);
+    const half=passStep?Math.max(passStep*4,minHalf):Math.max((wh-wl)*0.9, minHalf);
     const sym=document.getElementById('dlSym')?.textContent||'';
     const dt=(_dayTrendCache[sym]&&_dayTrendCache[sym].val)||null;
     const flow=_dlModel?(_dlModel.pUp-_dlModel.pDown):0;
@@ -5983,6 +5990,131 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // Требуемый WR = потери/(выигрыш+потери). Если он выше потолка — сетап нерентабелен by design, не входим.
   function _beWR(plan){ const w=(+plan.tpBps||0)-AP_FEE, l=(+plan.stopBps||0)+AP_FEE; return (w<=0)?1:l/(w+l); }
   function _evOk(plan){ return _beWR(plan)<=AP_MAXBE; }
+  // ═══════════ ПАСПОРТ МОНЕТЫ: история как фундамент решения ДО сделки ═══════════
+  // Два горизонта: часовые свечи на месяцы дают ХАРАКТЕР монеты, минутки за несколько суток —
+  // актуальный режим и подбор параметров лесенки. Лесенка зависит ТОЛЬКО от траектории цены,
+  // поэтому по истории воспроизводится достоверно. Протоколы стакана (стены, дельта, ликвидации)
+  // по свечам НЕ восстановимы — по ним считаем лишь, как часто выполнялся их контекстный фильтр.
+  const CP_KEY='msa_coinpass_v1', CP_TTL=6*3600e3;
+  let _cpCache={}; try{_cpCache=JSON.parse(localStorage.getItem(CP_KEY)||'{}')||{};}catch(e){_cpCache={};}
+  let _cpBusy=false;
+  async function _cpHistory(inst,bar,pages){
+    let out=[],after=null;
+    for(let i=0;i<pages;i++){
+      const u='https://www.okx.com/api/v5/market/history-candles?instId='+inst+'&bar='+bar+'&limit=100'+(after?'&after='+after:'');
+      let d=null; try{ const r=await fetch(u,{cache:'no-store'}); if(!r.ok)break; d=(await r.json()).data; }catch(e){ break; }
+      if(!d||!d.length)break;
+      out=out.concat(d); after=d[d.length-1][0];
+    }
+    return out.map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]})).sort((a,b)=>a.t-b.t);
+  }
+  // характер монеты: доля трендового времени, типичный импульс, возврат к уровню, волатильность
+  function _cpProfile(c){
+    if(c.length<50)return null;
+    const n=c.length, atr=[];
+    for(let i=1;i<n;i++)atr.push(Math.max(c[i].h-c[i].l,Math.abs(c[i].h-c[i-1].c),Math.abs(c[i].l-c[i-1].c))/c[i].c*1e4);
+    atr.sort((a,b)=>a-b);
+    const med=atr[Math.floor(atr.length/2)]||0;
+    // трендовость: доля окон, где |смещение| заметно больше суммарного пути (эффективность хода)
+    let trendW=0,tot=0;
+    for(let i=20;i<n;i+=5){ const w=c.slice(i-20,i); let path=0; for(let j=1;j<w.length;j++)path+=Math.abs(w[j].c-w[j-1].c);
+      const net=Math.abs(w[w.length-1].c-w[0].c); tot++; if(path>0&&net/path>0.34)trendW++; }
+    // возврат к уровню: как часто цена возвращается к close через ≤30 баров (основа «высиживания»)
+    let ret=0,retTot=0;
+    for(let i=0;i<n-31;i+=3){ const p=c[i].c, tol=p*med/1e4*0.5; retTot++;
+      for(let j=i+1;j<=i+30;j++){ if(Math.abs(c[j].c-p)<=tol){ret++;break;} } }
+    return {баров:n,волатильность_bps:+med.toFixed(1),
+      трендовость:+(trendW/Math.max(1,tot)).toFixed(2),
+      возвратКУровню:+(ret/Math.max(1,retTot)).toFixed(2)};
+  }
+  // ДОСТОВЕРНЫЙ прогон лесенки по истории: та же механика, что в бою (наливы, тейки, хвост, сдвиг)
+  function _cpRunLadder(c,stepBps,mode){
+    if(c.length<60)return null;
+    const mk=(px)=>{ const st=px*stepBps/1e4, L=[];
+      if(mode==='mo'){ for(let i=1;i<=5;i++)L.push({px:px+st*i,cross:'up',pos:'long',kind:'mo',open:true});
+                       for(let i=1;i<=5;i++)L.push({px:px-st*i,cross:'down',pos:'short',kind:'mo',open:true}); }
+      else { for(let i=1;i<=4;i++){L.push({px:px-st*i,cross:'down',pos:'long',kind:'mr',open:true});
+                                  L.push({px:px+st*i,cross:'up',pos:'short',kind:'mr',open:true});} }
+      return {center:px,step:st,lo:px-st*4.5,hi:px+st*4.5,levels:L,inv:[],real:0,credit:0,pairs:0,tail:0,lastRb:0}; };
+    let g=mk(c[0].c), prev=c[0].c, maxDD=0;
+    for(let i=1;i<c.length;i++){
+      const px=c[i].c;
+      if((px>g.hi||px<g.lo)&&i-g.lastRb>3){ const keep=g.inv,r=g.real,cr=g.credit,p=g.pairs,tl=g.tail;
+        g=mk(px); g.inv=keep; g.real=r; g.credit=cr; g.pairs=p; g.tail=tl; g.lastRb=i; prev=px; continue; }
+      for(const L of g.levels){ if(!L.open)continue;
+        const hit=L.cross==='down'?(prev>L.px&&px<=L.px):(prev<L.px&&px>=L.px); if(!hit)continue;
+        const d=L.pos==='long'?1:-1; L.open=false;
+        g.inv.push({side:L.pos,entry:L.px,tp:L.px+d*g.step*(L.kind==='mo'?3:1),kind:L.kind,peak:L.px,lvl:L}); }
+      g.inv.forEach(pp=>{ if(pp.kind!=='mo')return; const d=pp.side==='long'?1:-1;
+        if((px-pp.peak)*d>0)pp.peak=px; const lk=pp.peak-d*g.step;
+        if((lk-pp.entry)*d>0&&(lk-pp.tp)*d>0)pp.tp=lk; });
+      g.inv=g.inv.filter(pp=>{ const d=pp.side==='long'?1:-1, hit=d>0?px>=pp.tp:px<=pp.tp;
+        if(hit){ const gain=((pp.tp-pp.entry)/pp.entry*1e4)*d; g.real+=gain; g.credit+=gain; g.pairs++;
+          if(pp.lvl)pp.lvl.open=true; return false; } return true; });
+      if(g.credit>0&&g.inv.length){ let w=null,wl=0;
+        g.inv.forEach(pp=>{ const b=((px-pp.entry)/pp.entry*1e4)*(pp.side==='long'?1:-1); if(b<wl){wl=b;w=pp;} });
+        if(w&&(g.credit+wl)>=0){ g.credit+=wl; g.real+=wl; g.pairs++; g.tail++;
+          if(w.lvl)w.lvl.open=true; g.inv=g.inv.filter(x=>x!==w); } }
+      const fl=g.inv.reduce((s,x)=>s+((px-x.entry)/x.entry*1e4)*(x.side==='long'?1:-1),0);
+      if(g.real+fl<maxDD)maxDD=g.real+fl;
+      prev=px;
+    }
+    const px=c[c.length-1].c;
+    const fl=g.inv.reduce((s,x)=>s+((px-x.entry)/x.entry*1e4)*(x.side==='long'?1:-1),0);
+    return {итог:+(g.real+fl).toFixed(0),реализовано:+g.real.toFixed(0),флоут:+fl.toFixed(0),
+      пары:g.pairs,хвосты:g.tail,висит:g.inv.length,просадка:+maxDD.toFixed(0)};
+  }
+  async function _coinPassport(sym,force){
+    if(_cpBusy)return null; const key=sym;
+    const c0=_cpCache[key];
+    if(!force&&c0&&Date.now()-c0.at<CP_TTL)return c0;
+    _cpBusy=true;
+    try{
+      const inst=(typeof _okxInst==='function')?_okxInst(sym):sym.replace(/USDT$/,'')+'-USDT-SWAP';
+      const [h1,m1]=await Promise.all([_cpHistory(inst,'1H',8),_cpHistory(inst,'1m',12)]);  // ~месяц + ~сутки
+      if(!m1.length){ _cpBusy=false; return null; }
+      const prof=_cpProfile(h1.length>=50?h1:m1), profM=_cpProfile(m1);
+      // перебор шага и режима по минуткам — на чём эта монета исторически работала
+      const base=Math.max(2,(profM&&profM.волатильность_bps)||10);
+      const grid=[];
+      [0.6,1,1.6,2.5].forEach(f=>['mr','mo'].forEach(md=>{
+        const r=_cpRunLadder(m1,+(base*f).toFixed(1),md);
+        if(r)grid.push({шаг:+(base*f).toFixed(1),режим:md,...r});
+      }));
+      grid.sort((a,b)=>b.итог-a.итог);
+      const best=grid[0]||null;
+      const res={at:Date.now(),sym,часовых:h1.length,минуток:m1.length,характер:prof,текущий:profM,
+        перебор:grid.slice(0,4),лучшее:best};
+      _cpCache[key]=res; try{localStorage.setItem(CP_KEY,JSON.stringify(_cpCache));}catch(e){}
+      _cpBusy=false; return res;
+    }catch(e){ _cpBusy=false; return null; }
+  }
+  async function _cpRender(force){
+    const el=document.getElementById('cpPanel'); if(!el)return;
+    const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'';
+    if(!sym){el.innerHTML='<span class="gs-note">не выбран инструмент</span>';return;}
+    el.innerHTML='<span class="gs-note">тяну историю '+sym+' и прогоняю лесенку…</span>';
+    const p=await _coinPassport(sym,force);
+    if(!p){el.innerHTML='<span class="gs-note">история недоступна для '+sym+'</span>';return;}
+    const ch=p.характер||{}, cur=p.текущий||{}, b=p.лучшее;
+    const cls=v=>v>=0?'gs-up':'gs-dn', sg=v=>(v>=0?'+':'')+v;
+    const char=ch.трендовость>=0.5?'трендовая':ch.трендовость>=0.35?'смешанная':'рейнджевая';
+    let h='<b>ПАСПОРТ '+sym+'</b> <span class="gs-note">'+p.часовых+' часовых · '+p.минуток+' минуток</span>'
+      +'<br>характер: <b>'+char+'</b> <span class="gs-note">(трендовость '+ch.трендовость+')</span>'
+      +' · волатильность <b>'+cur.волатильность_bps+' bps</b>/мин'
+      +' · возврат к уровню за 30 мин <b>'+Math.round((cur.возвратКУровню||0)*100)+'%</b>'
+      +' <span class="gs-note">— чем выше, тем надёжнее высиживание позиции</span>';
+    if(b){
+      h+='<br>лучшее по истории: <b>'+(b.режим==='mo'?'МОМЕНТУМ':'усреднение')+'</b>, шаг <b>'+b.шаг+' bps</b>'
+        +' → <b class="'+cls(b.итог)+'">'+_usd(b.итог)+'</b> <span class="gs-note">('+b.пары+' пар, '+b.хвосты+' хвостов, просадка '+_usd(b.просадка)+', висит '+b.висит+')</span>';
+      h+='<br><span class="gs-note">перебор параметров:</span>';
+      p.перебор.forEach(r=>{ h+='<br>&nbsp;&nbsp;'+(r.режим==='mo'?'момент.':'усредн.')+' шаг '+String(r.шаг).padStart(5)
+        +' → <b class="'+cls(r.итог)+'">'+_usd(r.итог)+'</b> <span class="gs-note">('+r.пары+' пар, просадка '+_usd(r.просадка)+')</span>'; });
+      h+='<br><b>применено:</b> '+(b.итог>0?'шаг лесенки <b>'+b.шаг+' bps</b> подставляется автоматически':'<span class="gs-dn">история в минусе — шаг из паспорта НЕ применяется, работает расчёт по окну</span>');
+    } else h+='<br><span class="gs-note">данных для прогона лесенки не хватило</span>';
+    h+='<br><span class="gs-note">протоколы стакана (стены, дельта, ликвидации) по свечам не восстановимы — здесь только то, что зависит от цены · виртуально, не гарантия</span>';
+    el.innerHTML=h;
+  }
   // ═══════════ АКТИВНОЕ САМООБУЧЕНИЕ: подбор размера цели под сегмент рынка ═══════════
   // Пассивная часть (ниже) отключает заведомо убыточные связки. Активная — подстраивает ЦЕЛЬ:
   // если в сегменте сделки massово доживают до лимита времени, не дойдя до тейка — цель слишком далеко;
