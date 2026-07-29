@@ -5754,17 +5754,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   // Пересборка лесенки вокруг текущей цены С СОХРАНЕНИЕМ инвентаря и статистики.
   // Старые ноги остаются со своими тейками — они самодостаточны и закроются сами, когда цена вернётся.
-  function _gsReframe(px,keepFrozen){
+  function _gsReframe(px){
     if(!_gs)return;
-    const keep={inv:_gs.inv.map(x=>({side:x.side,entry:x.entry,tp:x.tp,lvl:null})),f:_gs.fills,p:_gs.pairs,
-      r:_gs.realized,rb:(_gs.rebuilds||0)+1,t0:_gs.t0,h:_gs.hfa||0,ev:_gs.ev||[]};
+    // ВАЖНО: у ноги переносим kind и peak — иначе после сдвига моментум-нога теряет трейл и превращается в обычную
+    const keep={inv:_gs.inv.map(x=>({side:x.side,entry:x.entry,tp:x.tp,kind:x.kind||'mr',peak:(x.peak!=null?x.peak:x.entry),lvl:null})),
+      f:_gs.fills,p:_gs.pairs,r:_gs.realized,rb:(_gs.rebuilds||0)+1,t0:_gs.t0,h:_gs.hfa||0,ev:_gs.ev||[],
+      cr:_gs.credit||0,tl:_gs.tail||0};
     const ng=_gsBuild(px);
     if(!ng)return;
     ng.inv=keep.inv; ng.fills=keep.f; ng.pairs=keep.p; ng.realized=keep.r;
     ng.rebuilds=keep.rb; ng.t0=keep.t0; ng.hfa=keep.h; ng.ev=keep.ev;
-    ng.credit=_gs.credit||0; ng.tail=_gs.tail||0; ng.lastRb=Date.now();   // кредит и счётчик хвоста переживают сдвиг лесенки
+    ng.credit=keep.cr; ng.tail=keep.tl; ng.lastRb=Date.now();   // кредит и счётчик хвоста переживают сдвиг лесенки
     _gs=ng;
-    if(keepFrozen&&typeof _proc==='function')_proc('лесенка сдвинута за ценой (заморозка сохранена): центр '+px.toFixed(_dlDec)+', инвентарь '+ng.inv.length);
   }
   function _gsTick(){
     if(!_gs)return; const hh=_dlHist, px=hh[hh.length-1]; if(!px)return;
@@ -5842,13 +5843,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         if(pp.lvl)pp.lvl.open=true; _ev('pair',pp.tp,g); return false; }
       return true;
     });
-    // перестройка: выход за диапазон, устойчивый дрейф от центра или срабатывание HFA (сдвиг за ликвидностью)
+    // перестройка: выход за диапазон, дрейф от центра, HFA — ИЛИ смена рыночного режима.
+    // Живое наблюдение вскрыло: лесенка перестраивалась только по цене, поэтому при усилении тренда
+    // оставалась усредняющей и моментум не включался никогда. Теперь следим и за режимом.
     const out=px>_gs.hi||px<_gs.lo;
     const drift=Math.abs(px-_gs.center)>_gs.step*2.4 && Date.now()-_gs.lastRb>15000;
-    if(out||drift||hfa){
-      const keep={inv:_gs.inv.map(x=>({side:x.side,entry:x.entry,tp:x.tp,lvl:null})),f:_gs.fills,p:_gs.pairs,r:_gs.realized,rb:_gs.rebuilds+1,t0:_gs.t0,h:_gs.hfa||0,ev:_gs.ev||[]};
-      const ng=_gsBuild(px);
-      if(ng){ ng.inv=keep.inv; ng.fills=keep.f; ng.pairs=keep.p; ng.realized=keep.r; ng.rebuilds=keep.rb; ng.t0=keep.t0; ng.hfa=keep.h; ng.ev=keep.ev; _gs=ng; }
+    const isMo=_gs.levels.some(l=>l.kind==='mo');
+    let wantMo=false; try{const f=_apCtxF(); wantMo=(f.str>=2&&(f.dir==='up'||f.dir==='down'));}catch(e){}
+    const regimeFlip=(isMo!==wantMo)&&Date.now()-(_gs.lastRb||0)>20000;
+    if(out||drift||hfa||regimeFlip){
+      _gsReframe(px);   // единая точка пересборки: переносит инвентарь, кредит, хвост, статистику и события
+      if(regimeFlip&&typeof _proc==='function')_proc('лесенка переключена: '+(wantMo?'МОМЕНТУМ — доливаем по ходу импульса':'усреднение — рынок в рейндже'));
     }
     _gsRender(px);
   }
