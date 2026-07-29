@@ -6362,10 +6362,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _apManage(m){
     const p=_ap.pos, dir=p.side==='long'?1:-1;
     let reason=null;
-    if(dir>0?m.px<=p.stop:m.px>=p.stop)reason='stop';
-    else if(dir>0?m.px>=p.tp:m.px<=p.tp)reason='tp';
-    else if(Date.now()-p.t0>AP_MAXHOLD)reason='time';
-    else{const a=(PROTOCOLS[p.proto]||{}).auto;if(a&&a.cancel){let c=false;try{c=a.cancel(m,p);}catch(e){}if(c)reason='cancel';}}
+    // ПОРЯДОК ПРОВЕРОК ВАЖЕН. Тейк — первым (заслуженный выход не отменяем).
+    // Затем ОТМЕНА: если тезис умер, выходим по текущей цене, НЕ дожидаясь стопа.
+    // Замер: стоп без разгрузки стоит −5.56, стоп в безубытке −0.58. Раньше стоп проверялся первым
+    // и отмена не срабатывала ни разу (0% выходов) — ранний дешёвый выход простаивал.
+    if(dir>0?m.px>=p.tp:m.px<=p.tp)reason='tp';
+    if(!reason){const a=(PROTOCOLS[p.proto]||{}).auto;
+      if(a&&a.cancel){let c=false;try{c=a.cancel(m,p);}catch(e){}
+        // отменяем только пока не хуже стопа: если цена уже за стопом — это честный стоп, а не «отмена»
+        if(c&&(dir>0?m.px>p.stop:m.px<p.stop))reason='cancel';}}
+    if(!reason&&(dir>0?m.px<=p.stop:m.px>=p.stop))reason='stop';
+    if(!reason&&Date.now()-p.t0>AP_MAXHOLD)reason='time';
     // многоступенчатая разгрузка: треть пути до тейка → фиксируем 30% объёма, стоп в безубыток,
     // остаток 70% ведём до полного тейка. Считается только если позиция ещё жива.
     if(!reason&&!p.part){
