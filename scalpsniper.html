@@ -248,7 +248,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .ai-scen-item:first-child{border-left-color:var(--accent);color:var(--text)}
   .quick-status{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-top:6px;min-height:12px;letter-spacing:.2px}
   .wh-ex{opacity:.55;font-size:7px;letter-spacing:.4px}
-  .ap-fee{cursor:pointer;text-decoration:underline dotted;color:var(--accent)}
+  .ap-fee{color:var(--accent)}
+  .ap-cfg{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:6px 0 10px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim)}
+  .ap-cfg-t{color:var(--accent);font-weight:700;letter-spacing:.5px}
+  .ap-cfg label{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .ap-cfg input{width:64px;background:var(--bg-soft,#111);border:1px solid var(--line);border-radius:4px;color:var(--text);font-family:inherit;font-size:11px;padding:4px 6px;text-align:right}
+  .ap-cfg input:focus{outline:none;border-color:var(--accent)}
+  .ap-cfg-out{flex:1;min-width:180px;text-align:right;color:var(--text-faint)}
   .zones-fresh{display:flex;align-items:center;gap:8px;margin:2px 0 8px;font-size:10px;font-family:'JetBrains Mono',monospace;letter-spacing:.2px}
   #zonesFreshTxt{flex:1}
   .zones-fresh.fresh #zonesFreshTxt{color:var(--green)}
@@ -1466,6 +1472,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="dl-canvas-lbl">Стакан <span id="dlSym">—</span> · <span id="dlSrc">подключение…</span> · <span id="dlUps">0</span> упд/с</div>
     <div class="dl-canvas-wrap"><canvas id="dlBook"></canvas></div>
     <div class="dld-bar"><button type="button" class="dld-btn" id="apBtn" onclick="_apToggle()">▶ автопилот</button><span class="dld-card" id="apCard"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Единый движок-диспетчер, всё ВИРТУАЛЬНО: сам определяет сегмент рынка и выбирает исполнение · РЕЙНДЖ → разворачивает сетку (спрей: buy ниже / sell выше, профит = шаг за шагом) · ТРЕНД/ПОТОК → сворачивает сетку по рынку и торгует направленными триггерами стратегий из реестра (стены с возрастом, съедание, дельта-развороты, фиб-откаты, кластеры ликвидаций) · комиссия 5 bps в PnL, исходы копятся по сегментам · реальные ордера НЕ открывает</span></span></div>
+    <div class="ap-cfg" id="apCfg">
+      <span class="ap-cfg-t">ПАРАМЕТРЫ ОРДЕРА</span>
+      <label>маржа $<input type="number" id="cfgMargin" min="1" step="10" oninput="_apCfg('margin',this.value)"></label>
+      <label>плечо ×<input type="number" id="cfgLev" min="1" step="1" oninput="_apCfg('lev',this.value)"></label>
+      <label>издержки bps<input type="number" id="cfgFee" min="0" step="0.5" oninput="_apCfg('fee',this.value)"></label>
+      <label>пауза с<input type="number" id="cfgCd" min="0" step="5" oninput="_apCfg('cd',this.value)"></label>
+      <span class="ap-cfg-out" id="cfgOut"></span>
+    </div>
     <div id="apPanel" class="gs-panel" style="display:none"></div>
     <div class="dl-canvas-lbl" style="margin-top:8px">РАЗБОР АВТОПИЛОТА <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Матожидание (среднее bps на сделку) по протоколам, сегментам рынка и причинам выхода. Считается по журналу движка при ТЕКУЩИХ издержках — старые записи пересчитываются к ним же. Матожидание важнее WR: высокий процент побед при отрицательном среднем — убыточная машина.</span></span> <button type="button" class="zf-refresh" onclick="_apAudit()">↻ Пересчитать</button> <button type="button" class="zf-refresh" onclick="_apExport()">⭳ Выгрузить журнал (CSV)</button></div>
     <div id="apAudit" class="gs-panel"><span class="gs-note">нажми «Пересчитать» — покажу матожидание по протоколам и сегментам</span></div>
@@ -5924,15 +5938,30 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function _usd(bps){ const v=(+bps||0)/1e4*_apNotional(); const a=Math.abs(v);
     return (v>=0?'+':'−')+'$'+(a>=1000?(a/1000).toFixed(1)+'k':a>=10?a.toFixed(0):a.toFixed(2)); }
-  // Клики по настройкам — ЧЕРЕЗ ДЕЛЕГАЦИЮ: панель автопилота перерисовывается ~10 раз в секунду,
-  // и inline-onclick не успевал сработать — элемент подменялся между нажатием и кликом.
-  document.addEventListener('click',function(e){
-    const b=e.target.closest&&e.target.closest('[data-apset]'); if(!b)return;
-    e.preventDefault(); e.stopPropagation();
-    const k=b.getAttribute('data-apset');
-    if(k==='fee')_apSetFee(); else if(k==='margin')_apSetMargin();
-    else if(k==='lev')_apSetLev(); else if(k==='cd')_apSetCd();
-  },true);
+  // Настройки — обычные поля ввода в статическом блоке, БЕЗ prompt() и вне панели автопилота.
+  // Причины: панель рисуется только при включённом движке (до запуска настроить было нельзя),
+  // а диалоги браузер блокирует, если пользователь однажды отметил «не показывать больше».
+  function _apCfg(k,v){
+    const n=(typeof _pf==='function')?_pf(v):parseFloat(v);
+    if(!isFinite(n))return;
+    if(k==='margin'&&n>0){AP_MARGIN=n;try{localStorage.setItem('msa_ap_margin_v1',String(n));}catch(e){}}
+    else if(k==='lev'&&n>0){AP_LEV=n;try{localStorage.setItem('msa_ap_lev_v1',String(n));}catch(e){}}
+    else if(k==='fee'&&n>=0){AP_FEE=n;try{localStorage.setItem('msa_ap_fee_v1',String(n));}catch(e){}}
+    else if(k==='cd'&&n>=0){AP_COOLDOWN=n*1000;try{localStorage.setItem('msa_ap_cd_v1',String(n));}catch(e){}}
+    else return;
+    _apCfgOut();
+  }
+  function _apCfgOut(){
+    const o=document.getElementById('cfgOut'); if(!o)return;
+    o.innerHTML='номинал <b>$'+_apNotional()+'</b> · до ликвидации ~<b>'+(100/AP_LEV).toFixed(2)+'%</b>'
+      +' · шаг сетки от <b>'+(Math.max(0.0008,AP_FEE*2*4/1e4)/4*1e4).toFixed(1)+' bps</b>';
+  }
+  function _apCfgInit(){
+    const set=(id,v)=>{const el=document.getElementById(id); if(el&&document.activeElement!==el)el.value=v;};
+    set('cfgMargin',AP_MARGIN); set('cfgLev',AP_LEV); set('cfgFee',AP_FEE); set('cfgCd',Math.round(AP_COOLDOWN/1000));
+    _apCfgOut();
+  }
+  setTimeout(_apCfgInit,300);
   const AP_MINFIT=55, AP_MAXHOLD=180e3;   // 62 был взят «на глаз»: фит в журнале не писался, тюнить было не на чем
   // Пауза сканирования после закрытия сделки. Разбор журнала: 47% пауз между сделками упирались ровно
   // в прежние 45с при медианном удержании сделки 18с — кулдаун был главным ограничителем частоты.
@@ -6253,11 +6282,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const expHtml=exp==null?'':(' · матожидание <b class="'+cls(exp)+'">'+_usd(exp)+'/сделку</b>'+(wr!=null&&exp<0&&wr>=50?' <span class="gs-note">(WR высокий, но минус — ловушка)</span>':''));
     const mode=_ap.gridOn?'СЕТКА (рейндж)':'НАПРАВЛЕННЫЙ (тренд/поток)';
     p.innerHTML='<b>АВТОПИЛОТ</b> · режим <b>'+mode+'</b> · сегмент <b>'+_apSegKey(m.f)+'</b> · лидер '+lead+' '+(S[lead]||0)+'%'
-      +'<br><span class="gs-note">ордер:</span> маржа <b class="ap-fee" data-apset="margin" title="Маржа на один ордер. Номинал = маржа × плечо. Нажми, чтобы изменить">$'+AP_MARGIN+'</b>'
-      +' × плечо <b class="ap-fee" data-apset="lev" title="Плечо на ордер. Ликвидация ориентировочно при движении 100/плечо % против позиции. Нажми, чтобы изменить">'+AP_LEV+'×</b>'
-      +' = номинал <b>$'+_apNotional()+'</b> <span class="gs-note">(запас до ликвидации ~'+(100/AP_LEV).toFixed(2)+'%)</span>'
-      +' · издержки <b class="ap-fee" data-apset="fee" title="Комиссия + проскальзывание на круг. От этого числа считаются цели, гейт и шаг сетки. Нажми, чтобы изменить">'+AP_FEE+' bps</b>'
-      +' · пауза <b class="ap-fee" data-apset="cd" title="Пауза сканирования после закрытия сделки. Нажми, чтобы изменить">'+Math.round(AP_COOLDOWN/1000)+'с</b>'
+      +'<br><span class="gs-note">ордер:</span> <b class="ap-fee">$'+AP_MARGIN+' × '+AP_LEV+'×</b> = номинал <b>$'+_apNotional()+'</b>'
+      +' · издержки <b class="ap-fee">'+AP_FEE+' bps</b> · пауза <b class="ap-fee">'+Math.round(AP_COOLDOWN/1000)+'с</b>'
+      +' <span class="gs-note">(меняется в блоке «Параметры ордера» выше)</span>'
       +'<br>'+posHtml
       +'<br>сегодня: <b>'+_ap.today.n+'</b> сд · WR '+(wr==null?'—':wr+'%')+expHtml+' · <b class="'+cls(_ap.today.sum)+'">'+_usd(_ap.today.sum)+'</b>'+beTxt+(last?' · последние: '+last:'')
       +'<br><span class="gs-note">виртуально · комиссия '+AP_FEE+' bps в PnL · модель · тренажёр — реальные ордера не открывает</span>';
