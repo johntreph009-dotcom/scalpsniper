@@ -5375,7 +5375,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   let _dlWorker=null,_dlRAF=null,_dlSnap=null,_dlUps=0,_dlFrames=0,_dlLastSec=0,_dlRunning=false;
   let _dlCtx=null,_dlW=0,_dlH=0;
   let _dlModel=null,_dlRegime='FLAT_SCALPING',_dlCand=null,_dlCandT=0,_dlEngLast=0,_dlJournal=[];
-  let _dlMsgCount=0,_dlSrc='—',_dlDec=2,_dlStartedAt=0;
+  let _dlMsgCount=0,_dlSrc='—',_dlDec=2,_dlStartedAt=0,_dlLastSnap=0,_dlWatch=null;
+  // ВТОРОЙ РУБЕЖ: сторож главного потока. Если умер сам воркер (а не сокет внутри него),
+  // внутренний сторож не поможет — перезапускаем воркер целиком. Ночное зависание лечится здесь.
+  function _dlWatchdog(){
+    if(_dlWatch)clearInterval(_dlWatch);
+    _dlWatch=setInterval(()=>{
+      if(!_dlRunning||document.hidden)return;
+      if(_dlLastSnap&&Date.now()-_dlLastSnap>90000){
+        if(typeof _proc==='function')_proc('поток молчал 90с — перезапускаю движок данных','pr-dn');
+        _dlLastSnap=Date.now();
+        try{ if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} }catch(e){}
+        try{ _demoStart(); }catch(e){}
+      }
+    },30000);
+  }
   let _dlHist=[],_dlPCtx=null,_dlPW=0,_dlPH=0,_dlTick=0;   // _dlTick — монотонный счётчик тиков: якорь событий сетки на оси X (сам _dlHist обрезается)
   let _sessHist=[],_sessPCtx=null,_sessPW=0,_sessPH=0;
   const DLJ_KEY='msa_demo_journal_v1';
@@ -5392,7 +5406,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     let depthWS=null, tradeWS=null, pollT=null, mxWS=null, mxPing=null, lastMx=0;
     let okWS=null, okPing=null, lastOk=0, lastBinTrade=0, srcName='—';
     self.onmessage=function(e){ if(e.data&&e.data.cmd==='init'){ symbol=e.data.symbol||'BTCUSDT'; startStreams(); } };
+    // СТОРОЖ ПЕРЕПОДКЛЮЧЕНИЯ. Обработчики ошибок были пустыми, onclose не было вовсе:
+    // упавший ночью сокет никто не поднимал — воркер молча замолкал, движок «зависал» до утра.
+    // Раз в 10с проверяем, приходили ли данные; после 45с тишины пересобираем все потоки.
+    function closeAll(){
+      try{if(mxPing)clearInterval(mxPing);}catch(e){} try{if(okPing)clearInterval(okPing);}catch(e){}
+      [mxWS,okWS,depthWS,tradeWS].forEach(function(w){ try{ if(w){w.onclose=null;w.onerror=null;w.onmessage=null;w.close();} }catch(e){} });
+      mxWS=okWS=depthWS=tradeWS=null;
+      try{if(pollT){clearInterval(pollT);pollT=null;}}catch(e){}
+    }
+    var lastAny=Date.now(), reconn=0;
+    setInterval(function(){
+      var quiet=Date.now()-Math.max(lastAny,lastMx,lastOk);
+      if(quiet>45000){ reconn++; srcName='переподключение'; closeAll(); startStreams();
+        self.postMessage({t:'reconn',n:reconn}); }
+    },10000);
     function startStreams(){
+      closeAll();
       const s=symbol.toLowerCase();
       // основной источник — родная перп-книга (WS, полный топ-20)
       try{
@@ -5402,7 +5432,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           mxPing=setInterval(function(){ try{mxWS.send(JSON.stringify({method:'ping'}));}catch(e){} },15000); };
         mxWS.onmessage=function(ev){ try{ var d=JSON.parse(ev.data);
           if(d.channel==='push.depth.full'&&d.data&&d.data.asks&&d.data.asks.length){ lastMx=Date.now(); srcName='перп A'; applyDepth({asks:d.data.asks,bids:d.data.bids||[]}); } }catch(e){} };
-        mxWS.onerror=function(){};
+        mxWS.onerror=function(){}; mxWS.onclose=function(){ lastMx=0; };   // упал — сторож поднимет
       }catch(e){}
       // вторая опора — перп OKX. Список инструментов в приложении берётся из вселенной OKX,
       // и многих пар просто НЕТ на первой бирже: без этого источника стакан молчит на таких тикерах.
@@ -5417,7 +5447,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           else if(d.arg.channel==='trades'){ if(Date.now()-lastBinTrade<3000)return;   // чтобы дельта не считалась дважды
             for(var i=0;i<d.data.length;i++){ var t=d.data[i]; tradeCount++; cumDelta=cumDelta*0.999+(t.side==='sell'? -(+t.sz):(+t.sz)); } }
         }catch(e){} };
-        okWS.onerror=function(){};
+        okWS.onerror=function(){}; okWS.onclose=function(){ lastOk=0; };
       }catch(e){}
       // фолбэк — спот-книга; применяется только если перп молчит >3с
       setTimeout(function(){
@@ -5476,6 +5506,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(midEma&&mid)midEma+=(mid-midEma)*0.05;
       tapeEmaPrev=tapeEma; tapeEma=tapeEma*0.8+tradeCount*0.2; tradeCount=0;
       if(!asks.length||!bids.length)return;
+      lastAny=Date.now();                                  // поток жив — сторожу перезапуск не нужен
       const b=snap(); self.postMessage({t:'snap',buf:b.buffer,m:model(),src:(pollT?'poll':srcName)},[b.buffer]);
     }
   `; }
@@ -5579,14 +5610,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(_dlRunning)return; _dlRunning=true;
     try{ const blob=new Blob([_dlWorkerCode()],{type:'application/javascript'});
       _dlWorker=new Worker(URL.createObjectURL(blob));
-      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); _dlTick++; if(_dlHist.length>180)_dlHist.shift();} if(typeof _apOnSnap==='function')_apOnSnap(); } };
+      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); _dlTick++; _dlLastSnap=Date.now(); if(_dlHist.length>180)_dlHist.shift();} if(typeof _apOnSnap==='function')_apOnSnap(); } };
       const _raw=(document.getElementById('ticker')&&document.getElementById('ticker').value)||'BTC/USDT';
       const _sym=(typeof _symFromTicker==='function')?_symFromTicker(_raw):'BTCUSDT';
       _dlWorker.postMessage({cmd:'init',symbol:_sym});
       const _se=document.getElementById('dlSym'); if(_se)_se.textContent=_sym;
       const _dt=document.getElementById('demoTicker'); if(_dt&&document.activeElement!==_dt)_dt.value=_raw;
     }catch(err){ const r=document.getElementById('dlRate'); if(r)r.textContent='worker N/A'; }
-    _dlStartedAt=Date.now(); _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dldRenderHist(); _dldRenderBtn(); _dlSetRegime(_dlRegime,true); _bgStart();
+    _dlStartedAt=Date.now(); _dlLastSnap=Date.now(); _dlWatchdog();
+    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dldRenderHist(); _dldRenderBtn(); _dlSetRegime(_dlRegime,true); _bgStart();
     _dlLastSec=performance.now(); _dlFrames=0; _dlEngLast=0;
     const loop=ts=>{ if(!_dlRunning)return; _dlDraw(); _dlDrawPrice(); _dlFrames++;
       if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); }
