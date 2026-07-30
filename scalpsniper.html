@@ -2105,12 +2105,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // Подготовка — это ДЕЙСТВИЕ (разметить план), а не режим работы. Поэтому она сворачивается
   // в кнопку внутри Сессии. Блок #prepPhase переносится в ящик целиком: id и логика сохранены,
   // renderReadinessScore/quickAnalyze/parseZones продолжают работать как были.
-  let _prepMoved=false;
+  let _prepMoved=false, _prepZtHome=null;
   function _prepInit(){
     if(_prepMoved)return;
     const src=document.getElementById('prepPhase'), dst=document.getElementById('prepDrawerBody');
     if(!src||!dst)return;
-    src.classList.remove('hide'); dst.appendChild(src); _prepMoved=true;
+    src.classList.remove('hide'); dst.appendChild(src);
+    // Инструменты ввода зон (вставка разбора, ручное добавление, депозит/риск) живут в правой колонке
+    // Сессии. Ящик накрывает экран целиком, поэтому переносим их сюда же — иначе они окажутся под ним.
+    const zt=document.getElementById('zoneTools');
+    if(zt){ _prepZtHome=zt.parentNode; dst.appendChild(zt); }
+    _prepMoved=true;
   }
   function _prepOpen(){
     _prepInit();
@@ -7381,6 +7386,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if((!fr||Date.now()-fr>10*60*1000)&&typeof quickAnalyze==='function'&&!_quickBusy)quickAnalyze(); }catch(e){} },2500);
   try{const d=JSON.parse(localStorage.getItem('msa_dep')||'{}');if(d.d)document.getElementById('deposit').value=d.d;if(d.r)document.getElementById('depRisk').value=d.r;}catch(e){}
   renderZones();recalc();
+  // Сессия — стартовый экран. Раньше первой фазой была Подготовка и показывалась прямо из HTML;
+  // теперь её место занял ящик разметки, поэтому Сессию нужно раскрыть явно при загрузке.
+  try{ setPhase('live'); }catch(e){}
   if(typeof autoEvalZones==='function')setTimeout(()=>autoEvalZones({force:true}),1500);
 
   // ── PWA: установка как приложение + офлайн-кэш ──
