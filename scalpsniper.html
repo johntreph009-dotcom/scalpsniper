@@ -724,8 +724,29 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     box-shadow:inset 0 0 90px rgba(255,60,66,calc(var(--pain,0) * .55));
     opacity:calc(var(--pain,0));animation:painBeat 4.2s ease-in-out infinite}
   @keyframes painBeat{0%,100%{filter:brightness(.75)}50%{filter:brightness(1.35)}}
+  /* РАЗВЁРТКА СКАНЕРА — идёт, пока движок ищет вход. Нашёл — развёртки нет, есть карточка позиции.
+     Видно не «что-то работает», а ЧТО именно: поиск или захват. */
+  .ap-scan{position:relative;overflow:hidden;padding:5px 8px;border-radius:6px;border:1px solid var(--line-soft)}
+  .ap-scan::after{content:'';position:absolute;top:0;bottom:0;width:38%;left:-38%;
+    background:linear-gradient(90deg,transparent,rgba(255,122,24,.14),transparent);
+    animation:apSweep calc(var(--breath,3.2s) * 2) linear infinite}
+  @keyframes apSweep{to{left:110%}}
+  html[data-vibe="still"] .ap-scan::after{animation-duration:11s;opacity:.5}
+  html[data-vibe="storm"] .ap-scan::after{animation-duration:2.2s}
+  /* ТЕПЛО ДАННЫХ: свежее событие подсвечено по --warm, старое остывает до нейтрали */
+  .proc-row{background:rgba(255,122,24,calc(var(--warm,0) * 0.055))}
+  .proc-row .proc-ic{filter:brightness(calc(0.7 + var(--warm,0) * 0.6))}
+  /* ДЫХАНИЕ АКТИВНОЙ ЗОНЫ: чем ближе цена, тем туже и чаще. На «захвате» — смыкание. */
+  .live-card{animation:zBreath var(--zbreath,4s) ease-in-out infinite}
+  @keyframes zBreath{0%,100%{box-shadow:0 0 0 1px var(--line),0 0 calc(10px + var(--near,0) * 16px) rgba(255,122,24,calc(var(--near,0) * .18))}
+    50%{box-shadow:0 0 0 1px var(--accent-dim),0 0 calc(16px + var(--near,0) * 30px) rgba(255,122,24,calc(var(--near,0) * .34))}}
+  html[data-near="lock"] .live-card{border-color:var(--accent)}
+  html[data-near="far"] .live-card{animation:none}
+  /* в бурю дыхание зоны выключается — она становится неподвижным якорем (см. выше) */
+  html[data-vibe="storm"] .live-card{animation:none!important}
   @media(prefers-reduced-motion:reduce){
-    .ap-pulse,.hub-dot.live,#painFrame{animation:none}
+    .ap-pulse,.hub-dot.live,#painFrame,.live-card{animation:none}
+    .ap-scan::after{animation:none;display:none}
     .proc-new{animation:none}
   }
   .ap-pos{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;
@@ -6325,6 +6346,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const st=storm?'storm':rush?'rush':still?'still':'calm';
       if(st!==_vibe){ _vibe=st; root.dataset.vibe=st; }
       // глубина боли — отдельной переменной, ею живёт «сердцебиение риска»
+      // БЛИЗОСТЬ К ЗОНЕ → дыхание плашки. Чем ближе цена к размеченному уровню, тем туже и чаще.
+      // Точка решения ощущается периферийно, без чтения процентов.
+      try{
+        const lp=(typeof _pf==='function')?_pf(document.getElementById('livePrice')?.value||''):0;
+        let near=0, tight=0;
+        if(lp>0&&typeof zones!=='undefined'&&zones){
+          const act=zones.filter(z=>!z.closed&&!z.expired&&+z.px>0);
+          if(act.length){
+            const d=Math.min.apply(null,act.map(z=>Math.abs(+z.px-lp)/lp*1e4));  // дистанция в bps
+            near=Math.max(0,Math.min(1,1-d/40));        // 40 bps — за этим порогом уже «далеко»
+            tight=near;
+          }
+        }
+        root.style.setProperty('--near',near.toFixed(2));
+        root.style.setProperty('--zbreath',(near>0.75?'0.9s':near>0.45?'1.6s':near>0.15?'2.6s':'4s'));
+        root.dataset.near=near>0.75?'lock':near>0.45?'close':near>0.15?'approach':'far';
+      }catch(e){}
       root.style.setProperty('--pain',pain.toFixed(2));
       root.style.setProperty('--breath',(st==='storm'?'1.1s':st==='rush'?'1.8s':st==='still'?'5.5s':'3.2s'));
     }catch(e){}
@@ -6863,12 +6901,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _procArr.unshift({t:Date.now(),txt,cls:cls||'',k:kd.k,i:kd.i,l:kd.l,fresh:1});
     if(_procArr.length>40)_procArr.pop();
     const el=document.getElementById('procFeed'); if(!el)return;
-    el.innerHTML=_procArr.map((e,idx)=>
-      '<div class="proc-row pk-'+e.k+' '+e.cls+(idx===0&&e.fresh?' proc-new':'')+'">'
+    // ТЕПЛО ДАННЫХ: свежее светится, старое остывает. Постоянное лёгкое движение в ленте
+    // рождается настоящими событиями, а не таймером.
+    const nowP=Date.now();
+    el.innerHTML=_procArr.map((e,idx)=>{
+      const age=(nowP-e.t)/1000;
+      const warm=Math.max(0,Math.min(1,1-age/90));           // остывает за 90с
+      const dim=Math.max(.38,1-idx*0.055);                    // и тускнеет вглубь истории
+      return '<div class="proc-row pk-'+e.k+' '+e.cls+(idx===0&&e.fresh?' proc-new':'')+'"'
+      +' style="opacity:'+dim.toFixed(2)+';--warm:'+warm.toFixed(2)+'">'
       +'<span class="proc-ic">'+e.i+'</span>'
       +'<span class="proc-t">'+new Date(e.t).toLocaleTimeString('ru-RU')+'</span>'
       +(e.l?'<span class="proc-tag">'+e.l+'</span>':'')
-      +'<span class="proc-tx">'+e.txt+'</span></div>').join('');
+      +'<span class="proc-tx">'+e.txt+'</span></div>';}).join('');
     if(_procArr[0])_procArr[0].fresh=0;
   }
   async function _bgTick(){
