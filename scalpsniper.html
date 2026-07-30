@@ -255,6 +255,34 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .ap-cfg input{width:64px;background:var(--bg-soft,#111);border:1px solid var(--line);border-radius:4px;color:var(--text);font-family:inherit;font-size:11px;padding:4px 6px;text-align:right}
   .ap-cfg input:focus{outline:none;border-color:var(--accent)}
   .ap-cfg-out{flex:1;min-width:180px;text-align:right;color:var(--text-faint)}
+  /* ── МОБИЛЬНАЯ АДАПТАЦИЯ блоков, добавленных последними (настройки ордера, паспорт, разбор, панели движка).
+     Общая беда: длинные строки с разделителями «·» и узкие инпуты в flex-ряд — на телефоне разъезжаются. ── */
+  @media(max-width:640px){
+    /* панели движка: перенос длинных строк вместо горизонтальной прокрутки */
+    .gs-panel{padding:8px 10px;font-size:10px;line-height:1.7;overflow-wrap:anywhere;word-break:break-word}
+    .gs-panel b{white-space:nowrap}
+    /* параметры ордера: сетка 2×2 вместо ряда, поля во всю ширину ячейки */
+    .ap-cfg{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;padding:10px;align-items:center}
+    .ap-cfg-t{grid-column:1/-1;font-size:9px}
+    .ap-cfg label{justify-content:space-between;gap:6px;font-size:9px}
+    .ap-cfg input{width:100%;max-width:96px;font-size:16px;padding:8px 6px}  /* 16px — iOS не зумит поле при фокусе */
+    .ap-cfg-out{grid-column:1/-1;text-align:left;min-width:0;font-size:9px;line-height:1.6}
+    /* заголовки с кнопками (паспорт, разбор) — перенос, крупнее тап-таргет */
+    .dl-canvas-lbl{display:flex;flex-wrap:wrap;align-items:center;gap:6px;line-height:1.6}
+    .zf-refresh{padding:7px 11px;font-size:10px}
+    /* график лесенки: ниже, чтобы не съедал экран */
+    #dlPriceChart{height:120px}
+    /* лента китов: метка биржи мельче, строка не ломается */
+    .wh-ex{font-size:6.5px}
+    .wh-row{font-size:9px}
+    /* процессинг движка — компактнее и с переносом */
+    .proc-feed{font-size:9.5px;line-height:1.65;overflow-wrap:anywhere}
+  }
+  @media(max-width:400px){
+    .ap-cfg{grid-template-columns:1fr}          /* совсем узкие экраны — в одну колонку */
+    .ap-cfg input{max-width:120px}
+    .gs-panel{font-size:9.5px}
+  }
   .zones-fresh{display:flex;align-items:center;gap:8px;margin:2px 0 8px;font-size:10px;font-family:'JetBrains Mono',monospace;letter-spacing:.2px}
   #zonesFreshTxt{flex:1}
   .zones-fresh.fresh #zonesFreshTxt{color:var(--green)}
