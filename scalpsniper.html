@@ -5605,7 +5605,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const a=Math.abs(mid); return a>=100?2:a>=1?4:a>=0.01?6:8;
   }
   function _dlWorkerCode(){ return `
-    let symbol='BTCUSDT', N=12;
+    let symbol='BTCUSDT', N=20;   // было 12 — 12 уровней покрывали 0.6 bps, никакой глубины не видно
     let asks=[], bids=[], mid=0, midEma=0, cumDelta=0, tapeEma=0, tapeEmaPrev=0, tradeCount=0, gotDepth=false;
     let depthWS=null, tradeWS=null, pollT=null, mxWS=null, mxPing=null, lastMx=0;
     let okWS=null, okPing=null, lastOk=0, lastBinTrade=0, srcName='—';
@@ -5714,7 +5714,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const b=snap(); self.postMessage({t:'snap',buf:b.buffer,m:model(),src:(pollT?'poll':srcName)},[b.buffer]);
     }
   `; }
-  let _dlRows=[], _dlHover=null, _dlBookBound=false;
+  let _dlRows=[], _dlHover=null, _dlBookBound=false, _dlSm=null;   // _dlSm — сглаженные объёмы корзин
   function _dlBindBook(cv){
     if(_dlBookBound||!cv)return; _dlBookBound=true;
     const yOf=e=>{const r=cv.getBoundingClientRect(); return (('touches' in e&&e.touches[0])?e.touches[0].clientY:e.clientY)-r.top;};
@@ -5814,15 +5814,37 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const aP=[],aS=[],bP=[],bS=[];
     for(let i=0;i<n;i++)aP.push(s[k++]); for(let i=0;i<n;i++)aS.push(s[k++]);
     for(let i=0;i<n;i++)bP.push(s[k++]); for(let i=0;i<n;i++)bS.push(s[k++]);
-    let mx=1; for(let i=0;i<n;i++){ if(aS[i]>mx)mx=aS[i]; if(bS[i]>mx)mx=bS[i]; }
     _dlDec=_dlComputeDec(aP,bP,n,mid);
+    // ═══ ГЛУБИНА НА ФИКСИРОВАННОЙ ЦЕНОВОЙ СЕТКЕ ═══
+    // Замер живой книги вскрыл три причины, почему глаз не мог успокоиться:
+    // 1) шкала уезжала на 37 строк за 6с (строки привязаны к плывущему mid) — теперь корзины
+    //    привязаны к АБСОЛЮТНОЙ ценовой сетке и не двигаются, скользит только метка mid;
+    // 2) разброс объёмов 46:1 — при линейной шкале медиана невидима → корень вместо линейной;
+    // 3) 37% уровней резко меняются между кадрами → сглаживание EMA, книга перестаёт мерцать.
+    const rawStep=Math.max((aP[0]-bP[n-1])/Math.max(1,n*2),mid*2e-6);
+    const step=(()=>{const t=mid*1.2e-5; const m=Math.pow(10,Math.floor(Math.log10(t)));
+      const q=t/m; return (q<1.5?1:q<3.5?2:q<7.5?5:10)*m;})();   // «круглый» шаг корзины ~1.2 bps
+    const buck=(arr,px,sgn)=>{const m=new Map();
+      for(let i=0;i<n;i++){ const key=Math.round(px[i]/step)*step; m.set(key,(m.get(key)||0)+arr[i]); }
+      return [...m.entries()].map(([p,v])=>({p,v})).sort((x,y)=>sgn*(y.p-x.p));};
+    let A=buck(aS,aP,1), B=buck(bS,bP,-1);
+    // сглаживание: объём корзины подтягивается к новому значению, а не прыгает
+    if(!_dlSm)_dlSm={};
+    const smooth=(rows)=>rows.map(r=>{const k=r.p.toFixed(8); const prev=_dlSm[k];
+      const v=prev==null?r.v:prev+(r.v-prev)*0.35; _dlSm[k]=v; return {p:r.p,v};});
+    A=smooth(A); B=smooth(B);
+    const keep=new Set([...A,...B].map(r=>r.p.toFixed(8)));
+    Object.keys(_dlSm).forEach(k=>{ if(!keep.has(k))delete _dlSm[k]; });
+    let mx=1; A.concat(B).forEach(r=>{ if(r.v>mx)mx=r.v; });
+    const scale=v=>Math.sqrt(Math.max(0,v)/mx);        // корень: медиана становится видимой
     // ЕДИНАЯ ЧИТАЮЩАЯ СТРОКА: цена → полоса → сценарий, всё слева направо от общей базы.
     // Раньше цена стояла у левого края, а полоса шла от центра — взгляд прыгал через пустоту,
     // и при живой книге понять, какой уровень стоит за стеной, было почти невозможно.
     const rowH=Math.min(13,(H-34)/(2*n)), midY=H*0.5;
     const PX_R=64, BASE=70, LBL=118, bwMax=Math.max(40,W-BASE-LBL), cx=BASE;
     ctx.font='10px JetBrains Mono, monospace'; ctx.textBaseline='middle';
-    const avg=(aS.reduce((s,x)=>s+x,0)+bS.reduce((s,x)=>s+x,0))/(2*n)||1;
+    const allV=A.concat(B).map(r=>r.v).filter(v=>v>0).sort((x,y)=>x-y);
+    const avg=allV.length?allV[Math.floor(allV.length/2)]:1;   // медиана устойчивее среднего к выбросам
     const bps=p=>((p-mid)/mid*1e4);
     _dlRows=[];   // зоны наведения: строим при отрисовке, читаем в обработчиках мыши
     // мои размеченные зоны — отмечаем прямо в книге, чтобы не сверять глазами с другой панелью
@@ -5845,7 +5867,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       }catch(e){return null;}
     };
     const row=(p,sz,y,side)=>{
-      const bw=Math.max(1.5,(sz/mx)*bwMax);
+      const bw=Math.max(1.5,scale(sz)*bwMax);
       const rel=sz/avg;
       const wall=rel>=1.8, big=!wall&&rel>=1.0;
       const c=side<0?'226,75,74':'29,158,117';
@@ -5875,8 +5897,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(hov){ ctx.fillStyle='rgba(255,255,255,.55)'; ctx.textAlign='right'; ctx.font='9px JetBrains Mono, monospace';
         ctx.fillText(Math.abs(bps(p)).toFixed(1)+'bp',W-3,y+rowH/2); ctx.font='10px JetBrains Mono, monospace'; }
     };
-    for(let i=0;i<n;i++)row(aP[i],aS[i],midY-14-(i+1)*rowH,-1);
-    for(let i=0;i<n;i++)row(bP[i],bS[i],midY+14+i*rowH,1);
+    const rowsA=Math.min(A.length,Math.floor((midY-16)/rowH)), rowsB=Math.min(B.length,Math.floor((midY-16)/rowH));
+    for(let i=0;i<rowsA;i++)row(A[i].p,A[i].v,midY-14-(rowsA-i)*rowH,-1);   // дальние сверху, ближние у mid
+    for(let i=0;i<rowsB;i++)row(B[i].p,B[i].v,midY+14+i*rowH,1);
     // mid со спредом — сразу видно цену входа и её стоимость
     // ЯКОРЬ ВЗГЛЯДА: плотная плашка mid со спредом. От неё глаз расходится вверх и вниз.
     const spr=(aP[0]&&bP[0])?((aP[0]-bP[0])/mid*1e4):0;
