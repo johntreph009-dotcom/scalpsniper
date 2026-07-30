@@ -255,22 +255,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .ap-cfg input{width:64px;background:var(--bg-soft,#111);border:1px solid var(--line);border-radius:4px;color:var(--text);font-family:inherit;font-size:11px;padding:4px 6px;text-align:right}
   .ap-cfg input:focus{outline:none;border-color:var(--accent)}
   .ap-cfg-out{flex:1;min-width:180px;text-align:right;color:var(--text-faint)}
-  /* ── ЯЩИК РАЗМЕТКИ: Подготовка поверх Сессии, а не отдельный экран ── */
-  .prep-drawer{position:fixed;inset:0;z-index:9990;background:rgba(6,7,9,.94);backdrop-filter:blur(3px);
-    display:none;flex-direction:column}
-  .prep-drawer.open{display:flex;animation:pdIn .22s ease-out}
-  @keyframes pdIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-  .pd-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 18px;
-    border-bottom:1px solid var(--accent-dim);background:rgba(255,122,24,.05);flex-shrink:0}
-  .pd-title{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;letter-spacing:1.6px;color:var(--accent)}
-  .pd-close{margin-left:auto;background:transparent;border:1px solid var(--line);color:var(--text-dim);
-    font-family:'JetBrains Mono',monospace;font-size:10px;padding:7px 12px;border-radius:5px;cursor:pointer}
-  .pd-close:hover{border-color:var(--accent);color:var(--accent)}
-  .pd-body{flex:1;overflow-y:auto;padding:14px 18px 40px}
-  .ph-prep{background:transparent;border:1px solid var(--accent-dim);color:var(--accent);
-    font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:1px;cursor:pointer}
-  .ph-prep:hover{background:var(--accent-soft);border-color:var(--accent)}
-  @media(max-width:640px){ .pd-head{padding:10px 12px} .pd-body{padding:10px 12px 30px} .pd-title{font-size:14px} }
+  /* ── ПЛАН РАСТВОРЁН В СЕССИИ: блок разворачивается на месте, ничего не перекрывает ── */
+  .prep-inline{display:none;margin:0 0 12px}
+  .prep-inline.show{display:block;animation:piIn .2s ease-out}
+  @keyframes piIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  /* компактная кнопка входа в план — рядом с обновлением зон, где она нужна по смыслу */
+  .zf-plan{background:rgba(255,122,24,.08);border:1px solid var(--accent-dim);color:var(--accent);
+    font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:3px 9px;border-radius:4px;
+    cursor:pointer;white-space:nowrap;transition:all .12s}
+  .zf-plan:hover{background:var(--accent-soft);border-color:var(--accent)}
   /* ── МОБИЛЬНАЯ АДАПТАЦИЯ блоков, добавленных последними (настройки ордера, паспорт, разбор, панели движка).
      Общая беда: длинные строки с разделителями «·» и узкие инпуты в flex-ряд — на телефоне разъезжаются. ── */
   @media(max-width:640px){
@@ -1365,19 +1358,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     </div>
   </div>
   <div class="phase-nav" id="phaseNav">
-    <!-- СЕГМЕНТ 3 СЛИЯНИЯ: Подготовка больше не фаза, а выдвижной ящик.
-         Содержимое #prepPhase переносится сюда целиком при инициализации — разметка и логика не тронуты. -->
-    <div class="prep-drawer" id="prepDrawer" aria-hidden="true">
-      <div class="pd-head">
-        <span class="pd-title">РАЗМЕТКА ЗОН</span>
-        <span class="gs-note">план принимается здесь — до сессии</span>
-        <button type="button" class="pd-close" onclick="_prepClose()">✕ Закрыть</button>
-      </div>
-      <div class="pd-body" id="prepDrawerBody"></div>
-    </div>
     <div class="phase">
-      <!-- Подготовка больше не режим: это действие, открывающее ящик разметки поверх Сессии -->
-      <button class="ph-prep" type="button" onclick="_prepOpen()" title="Разметка зон: быстрые зоны из стакана, разбор из чата, ручной ввод">◈ РАЗМЕТКА</button>
+      <!-- Подготовка убрана из навигации: она не режим работы, а действие.
+           Вход в ящик разметки — компактной кнопкой рядом с «Обновить зоны», где он и нужен по смыслу. -->
       <button data-ph="live" onclick="setPhase('live')">② СЕССИЯ</button>
       <button data-ph="journal" onclick="setPhase('journal')">③ ЖУРНАЛ</button>
       <button class="ph-demo" data-ph="demo" onclick="setPhase('demo')">ТРЕНАЖЕР</button>
@@ -1598,7 +1581,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div class="t-side">
   <!-- ===== ZONES (shared, always visible) ===== -->
   <div class="section-title" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация зоны по времени · Клик по цене внутри карточки зоны копирует её в буфер</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
-  <div class="zones-fresh" id="zonesFresh"><span id="zonesFreshTxt"></span><button class="zf-refresh" onclick="quickAnalyze()" title="Пересобрать зоны из стакана Binance (без скринов)">↻ Обновить</button></div>
+  <div class="zones-fresh" id="zonesFresh"><span id="zonesFreshTxt"></span><button class="zf-plan" onclick="_prepToggle()" title="План: протоколы с фитом, чеклист входа, готовность — разворачивается на месте">◈ план</button><button class="zf-refresh" onclick="quickAnalyze()" title="Пересобрать зоны из стакана (без скринов)">↻ Обновить</button></div>
   <div id="dayTrend" class="day-trend" style="display:none"></div>
   <div id="dayCtx" class="day-ctx" style="display:none"></div>
   <div id="mpChip" class="day-ctx" style="display:none" title="Max Pain ближайшей опционной экспирации: страйк, где продавцы опционов теряют меньше всего (данные открытого интереса). Гравитация — дистанция цены до уровня. Наблюдение, не прогноз."></div>
@@ -2105,34 +2088,38 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // Подготовка — это ДЕЙСТВИЕ (разметить план), а не режим работы. Поэтому она сворачивается
   // в кнопку внутри Сессии. Блок #prepPhase переносится в ящик целиком: id и логика сохранены,
   // renderReadinessScore/quickAnalyze/parseZones продолжают работать как были.
-  let _prepMoved=false, _prepZtHome=null;
+  let _prepMoved=false;
+  // ПЕРЕСМОТРЕНО. Модальное окно оказалось лишним: кнопка обновления зон уже есть в Сессии,
+  // готовность видна чипами, депозит ставится раз в день, а инструменты ввода зон и так жили
+  // в правой колонке рядом с лестницей. Большое окно ради мелкого содержимого только мешало.
+  // Подготовка РАСТВОРЯЕТСЯ в Сессии: полезное живёт на месте, ничего не всплывает.
   function _prepInit(){
     if(_prepMoved)return;
-    const src=document.getElementById('prepPhase'), dst=document.getElementById('prepDrawerBody');
-    if(!src||!dst)return;
-    src.classList.remove('hide'); dst.appendChild(src);
-    // Инструменты ввода зон (вставка разбора, ручное добавление, депозит/риск) живут в правой колонке
-    // Сессии. Ящик накрывает экран целиком, поэтому переносим их сюда же — иначе они окажутся под ним.
-    const zt=document.getElementById('zoneTools');
-    if(zt){ _prepZtHome=zt.parentNode; dst.appendChild(zt); }
+    const src=document.getElementById('prepPhase');
+    if(!src)return;
+    // блок протоколов и чеклиста встаёт под чипами готовности, свёрнутым по умолчанию
+    const host=document.getElementById('livePhase');
+    if(host){ src.classList.remove('hide'); src.classList.add('prep-inline'); host.insertBefore(src,host.firstChild); }
     _prepMoved=true;
   }
+  // «Открыть разметку» = развернуть блок плана на месте и прокрутить к нему. Без перекрытий.
   function _prepOpen(){
     _prepInit();
-    const d=document.getElementById('prepDrawer'); if(!d)return;
-    d.classList.add('open'); d.setAttribute('aria-hidden','false');
-    const zt=document.getElementById('zoneTools'); if(zt)zt.classList.add('open');   // инструменты ввода раскрыты
+    const src=document.getElementById('prepPhase'); if(!src)return;
+    src.classList.add('show');
+    const zt=document.getElementById('zoneTools'); if(zt)zt.classList.add('open');
     if(typeof renderReadinessScore==='function')renderReadinessScore();
-    document.body.style.overflow='hidden';
+    try{ src.scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){}
   }
   function _prepClose(){
-    const d=document.getElementById('prepDrawer'); if(!d)return;
-    d.classList.remove('open'); d.setAttribute('aria-hidden','true');
-    document.body.style.overflow='';
+    const src=document.getElementById('prepPhase'); if(src)src.classList.remove('show');
     if(typeof renderZones==='function')renderZones();
     if(typeof renderLadder==='function')renderLadder();
   }
-  document.addEventListener('keydown',e=>{ if(e.key==='Escape')_prepClose(); });
+  function _prepToggle(){
+    const src=document.getElementById('prepPhase');
+    if(src&&src.classList.contains('show'))_prepClose(); else _prepOpen();
+  }
   function setPhase(p){
     phase=p;
     document.querySelectorAll('.phase button').forEach(b=>b.classList.toggle('on',b.dataset.ph===p));
