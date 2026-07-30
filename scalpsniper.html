@@ -1693,8 +1693,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="whale-panel" id="whaleDemo"></div>
     <div class="whale-panel" id="liqDemo"></div>
     <div class="dl-swipes">
-      <div class="dl-swipe up" id="dlLong">↑ свайп / тап — вирт-лонг</div>
-      <div class="dl-swipe dn" id="dlShort">↓ свайп / тап — вирт-шорт</div>
+      <!-- кнопки свайпов убраны по решению трейдера: тренажёр ведёт автопилот, ручные гипотезы не нужны.
+           Свайп по стакану (touch) и функция _dlTrade сохранены — журнал и замеры исходов не ломаются. -->
     </div>
     <div class="dl-trades" id="dlTrades">вирт-сделок: 0</div>
     <div class="dl-feedback" id="dlFeedback"></div>
@@ -5939,7 +5939,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(_dlRunning)return; _dlRunning=true;
     try{ const blob=new Blob([_dlWorkerCode()],{type:'application/javascript'});
       _dlWorker=new Worker(URL.createObjectURL(blob));
-      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); _dlTick++; _dlLastSnap=Date.now(); if(_dlHist.length>180)_dlHist.shift();} if(typeof _apOnSnap==='function')_apOnSnap(); } };
+      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); _dlTick++; _dlLastSnap=Date.now(); if(_dlHist.length>180)_dlHist.shift();}
+        // Трекер стен нужен ВСЕГДА: на нём держатся сценарии в стакане (отскок / пробой / разъедают).
+        // При включённом автопилоте микро считает сам _apOnSnap; при выключенном — ведём его отдельно.
+        if(typeof _ap!=='undefined'&&_ap.on){ if(typeof _apOnSnap==='function')_apOnSnap(); }
+        else if(typeof _apMicro==='function'){ try{_apMicro();}catch(e){} } } };
       const _raw=(document.getElementById('ticker')&&document.getElementById('ticker').value)||'BTC/USDT';
       const _sym=(typeof _symFromTicker==='function')?_symFromTicker(_raw):'BTCUSDT';
       _dlWorker.postMessage({cmd:'init',symbol:_sym});
