@@ -1645,7 +1645,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <div class="dl-prob-seg fl" id="dlProbFl" style="width:20%">↔ 20%</div>
     </div>
     <div class="dl-regime"><span class="dl-regime-chip" id="dlRegime">РЕЖИМ: FLAT_SCALPING</span><span class="dl-regime-note" id="dlEngNote">гистерезис 3с</span></div>
-    <div class="dl-price"><span class="dl-price-now" id="dlPriceNow">—</span><span class="dl-price-chg" id="dlPriceChg"></span><span class="dl-price-lbl">цена · live</span></div>
+    <!-- ДВЕ ЦЕНЫ — РАЗНЫЕ ВЕЛИЧИНЫ, не дубли: композит бирж нужен для решений по зонам,
+         mid стакана — для чтения микроструктуры. При слиянии экранов НЕ сводить в одну. -->
+    <div class="dl-price"><span class="dl-price-now" id="dlPriceNow">—</span><span class="dl-price-chg" id="dlPriceChg"></span><span class="dl-price-lbl">mid стакана · live</span></div>
     <div class="dl-pchart-wrap"><canvas id="dlPriceChart"></canvas></div>
     <div class="dl-canvas-lbl">Стакан <span id="dlSym">—</span> · <span id="dlSrc">подключение…</span> · <span id="dlUps">0</span> упд/с</div>
     <div class="dl-canvas-wrap"><canvas id="dlBook"></canvas></div>
@@ -4126,9 +4128,26 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{
       const el=document.getElementById('sessWalls');
       const books=[];
-      if(_mxBook&&_mxBook.sym===_mxSym()&&now-_mxBook.ts<8000&&_mxBook.bids.length){
-        books.push({asks:_mxBook.asks.map(x=>[+x[0],+x[1]]),bids:_mxBook.bids.map(x=>[+x[0],+x[1]])});
-      } else if(typeof _mxWsStart==='function')_mxWsStart();
+      // СЕГМЕНТ 2 СЛИЯНИЯ: книгу берём из СНАПА ДЕМО-ВОРКЕРА, если он живой.
+      // Раньше стены Сессии держали ОТДЕЛЬНОЕ соединение к бирже, и после объединения фаз
+      // на один инструмент открывалось бы два коннекта. Воркер уже приносит ту же книгу.
+      let fromWorker=false;
+      try{
+        if(_dlSnap&&_dlRunning&&(Date.now()-(_dlLastSnap||0))<8000){
+          const s=_dlSnap, nn=s[1]|0; let k=2; const aP=[],aS=[],bP=[],bS=[];
+          for(let i=0;i<nn;i++)aP.push(s[k++]); for(let i=0;i<nn;i++)aS.push(s[k++]);
+          for(let i=0;i<nn;i++)bP.push(s[k++]); for(let i=0;i<nn;i++)bS.push(s[k++]);
+          if(nn>0&&aP[0]>0){
+            books.push({asks:aP.map((p,i)=>[p,aS[i]]),bids:bP.map((p,i)=>[p,bS[i]])});
+            fromWorker=true;
+          }
+        }
+      }catch(e){}
+      if(!fromWorker){
+        if(_mxBook&&_mxBook.sym===_mxSym()&&now-_mxBook.ts<8000&&_mxBook.bids.length){
+          books.push({asks:_mxBook.asks.map(x=>[+x[0],+x[1]]),bids:_mxBook.bids.map(x=>[+x[0],+x[1]])});
+        } else if(typeof _mxWsStart==='function')_mxWsStart();
+      }
       try{
         const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'BTCUSDT';
         const d=await fetch('https://api.binance.com/api/v3/depth?symbol='+sym+'&limit=20',{cache:'no-store'}).then(r=>r.json());
