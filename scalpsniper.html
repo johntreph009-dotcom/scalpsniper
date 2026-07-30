@@ -5825,41 +5825,64 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     let myZ=[]; try{ if(typeof zones!=='undefined'&&zones)myZ=zones.filter(z=>!z.closed&&!z.expired).map(z=>+z.px); }catch(e){}
     const zoneNear=p=>myZ.some(z=>Math.abs(z-p)<=(mid*0.00012));
     // накопленная глубина фоном: видно, где реально сосредоточена ликвидность
-    const drawCum=(arr,side)=>{ let acc=0; const tot=arr.reduce((s,x)=>s+x,0)||1;
-      ctx.beginPath(); ctx.moveTo(cx,midY+(side<0?-14:14));
-      for(let i=0;i<n;i++){ acc+=arr[i]; const y=side<0?(midY-14-(i+1)*rowH):(midY+14+i*rowH);
-        ctx.lineTo(cx+side*(acc/tot)*bwMax*0.9,y+rowH/2); }
-      ctx.lineTo(cx,side<0?(midY-14-n*rowH):(midY+14+n*rowH)); ctx.closePath();
-      ctx.fillStyle=side<0?'rgba(226,75,74,.10)':'rgba(29,158,117,.10)'; ctx.fill(); };
-    drawCum(aS,-1); drawCum(bS,1);
+    // ЧИТАЕМОСТЬ = ИЕРАРХИЯ ЧЕРЕЗ ВЫЧИТАНИЕ. Раньше всё кричало одинаково громко: яркие полосы,
+    // подписи на каждой строке, фоновая кривая. Глазу не за что зацепиться.
+    // Теперь три уровня громкости: фон (тихо) → заметное → СТЕНА (единственное яркое).
     const row=(p,sz,y,side)=>{
-      const bw=Math.max(1,(sz/mx)*bwMax), wall=sz>=avg*1.8, x0=side<0?cx:cx-bw;
-      // градиент плотности вместо плоской заливки — крупное читается объёмнее
-      const g=ctx.createLinearGradient(cx,0,cx+side*bw,0);
+      const bw=Math.max(1,(sz/mx)*bwMax);
+      const rel=sz/avg;
+      const wall=rel>=1.8, big=!wall&&rel>=1.0;
       const c=side<0?'226,75,74':'29,158,117';
-      g.addColorStop(0,'rgba('+c+',.92)'); g.addColorStop(1,'rgba('+c+',.30)');
-      ctx.fillStyle=g; ctx.fillRect(side<0?cx:cx-bw,y,bw,rowH-2);
-      if(wall){ // стена: янтарная засечка + доля от книги
-        ctx.fillStyle='rgba(255,122,24,.95)'; ctx.fillRect(side<0?cx+bw-2:cx-bw,y,2,rowH-2);
-        ctx.fillStyle='rgba(255,122,24,.9)'; ctx.textAlign=side<0?'left':'right';
-        ctx.fillText('◧'+(sz/(avg*2*n)*100).toFixed(0)+'%',side<0?cx+bw+5:cx-bw-5,y+rowH/2);
+      const hov=_dlHover!=null&&_dlHover>=y&&_dlHover<=y+rowH;
+      // тонкая линия сетки — задаёт ритм строк, глаз скользит ровно
+      if(!(side<0?(y/rowH|0)%2:(y/rowH|0)%2)){ ctx.fillStyle='rgba(255,255,255,.014)'; ctx.fillRect(0,y,W,rowH-2); }
+      // громкость по значимости: мелочь почти не видна, стена — в полную силу
+      const a=wall?0.95:big?0.55:0.26;
+      ctx.fillStyle='rgba('+c+','+a+')';
+      ctx.fillRect(side<0?cx:cx-bw,y,bw,rowH-2);
+      if(wall){
+        // стена — ЕДИНСТВЕННОЕ яркое: янтарный торец, объём и дистанция. Взгляд цепляется сразу.
+        ctx.fillStyle='#ff7a18'; ctx.fillRect(side<0?cx+bw-2.5:cx-bw,y,2.5,rowH-2);
+        ctx.font='bold 10px JetBrains Mono, monospace';
+        ctx.fillStyle='#ffb020'; ctx.textAlign=side<0?'left':'right';
+        const vol=sz>=1e6?(sz/1e6).toFixed(1)+'M':sz>=1e3?(sz/1e3).toFixed(0)+'k':sz.toFixed(0);
+        ctx.fillText(vol+'  '+Math.abs(bps(p)).toFixed(0)+'bp',side<0?cx+bw+6:cx-bw-6,y+rowH/2);
+        ctx.font='10px JetBrains Mono, monospace';
       }
-      ctx.fillStyle=zoneNear(p)?'#ff7a18':'#8a8f98'; ctx.textAlign='left';
-      ctx.fillText((zoneNear(p)?'◆':' ')+p.toFixed(_dlDec),3,y+rowH/2);
-      ctx.fillStyle='rgba(255,255,255,.22)'; ctx.textAlign='right';
-      ctx.fillText(Math.abs(bps(p)).toFixed(1),W-4,y+rowH/2);
-      _dlRows.push({y,h:rowH,p,sz,side});
-      if(_dlHover&&Math.abs(_dlHover-y-rowH/2)<rowH/2){   // подсветка строки под курсором
-        ctx.fillStyle='rgba(255,255,255,.06)'; ctx.fillRect(0,y,W,rowH-2); }
+      // цена: моноширинно и по правому краю колонки — цифры выстраиваются в столбик
+      const zn=zoneNear(p);
+      ctx.fillStyle=zn?'#ff7a18':(wall?'#d8dbe0':'rgba(138,143,152,.62)');
+      ctx.textAlign='right'; ctx.fillText(p.toFixed(_dlDec),58,y+rowH/2);
+      if(zn){ ctx.fillStyle='#ff7a18'; ctx.fillRect(2,y+rowH/2-2.5,5,5); }   // моя зона — компактная метка
+      _dlRows.push({y,h:rowH,p,sz,side,rel});
+      if(hov){ ctx.fillStyle='rgba(255,255,255,.07)'; ctx.fillRect(0,y,W,rowH-2);
+        ctx.fillStyle='rgba(255,255,255,.5)'; ctx.textAlign='right';
+        ctx.fillText(Math.abs(bps(p)).toFixed(1)+' bp',W-4,y+rowH/2); }
     };
     for(let i=0;i<n;i++)row(aP[i],aS[i],midY-14-(i+1)*rowH,-1);
     for(let i=0;i<n;i++)row(bP[i],bS[i],midY+14+i*rowH,1);
     // mid со спредом — сразу видно цену входа и её стоимость
+    // ЯКОРЬ ВЗГЛЯДА: плотная плашка mid со спредом. От неё глаз расходится вверх и вниз.
     const spr=(aP[0]&&bP[0])?((aP[0]-bP[0])/mid*1e4):0;
-    ctx.strokeStyle='rgba(255,122,24,.55)'; ctx.setLineDash([4,4]);
-    ctx.beginPath(); ctx.moveTo(0,midY); ctx.lineTo(W,midY); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle='rgba(255,122,24,.10)'; ctx.fillRect(0,midY-11,W,22);
+    ctx.strokeStyle='rgba(255,122,24,.45)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,midY-11); ctx.lineTo(W,midY-11);
+    ctx.moveTo(0,midY+11); ctx.lineTo(W,midY+11); ctx.stroke();
+    ctx.font='bold 11px JetBrains Mono, monospace';
     ctx.fillStyle='#ff7a18'; ctx.textAlign='center';
-    ctx.fillText(mid.toFixed(_dlDec)+'  ·  спред '+spr.toFixed(1)+' bps',cx,midY);
+    ctx.fillText(mid.toFixed(_dlDec),cx,midY-1);
+    ctx.font='9px JetBrains Mono, monospace'; ctx.fillStyle='rgba(255,176,32,.75)';
+    ctx.fillText('спред '+spr.toFixed(1)+' bps',cx,midY+7);
+    ctx.font='10px JetBrains Mono, monospace';
+    // вертикальная ось у центра — вторая точка опоры
+    ctx.strokeStyle='rgba(255,255,255,.07)';
+    ctx.beginPath(); ctx.moveTo(cx,0); ctx.lineTo(cx,H); ctx.stroke();
+    // счётчик стен: сколько крупных лимиток с каждой стороны — оценка без вглядывания
+    const wA=aS.filter(x=>x>=avg*1.8).length, wB=bS.filter(x=>x>=avg*1.8).length;
+    ctx.font='9px JetBrains Mono, monospace'; ctx.textAlign='right';
+    ctx.fillStyle='rgba(226,75,74,.8)'; ctx.fillText('стен ↑ '+wA,W-4,12);
+    ctx.fillStyle='rgba(29,158,117,.8)'; ctx.fillText('стен ↓ '+wB,W-4,H-8);
+    ctx.font='10px JetBrains Mono, monospace';
     // накопленный объём до уровня под курсором
     if(_dlHover!=null){
       const hit=_dlRows.find(r=>_dlHover>=r.y&&_dlHover<=r.y+r.h);
