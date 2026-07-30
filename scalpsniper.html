@@ -6079,7 +6079,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       else { for(let i=1;i<=4;i++){L.push({px:px-st*i,cross:'down',pos:'long',kind:'mr',open:true});
                                   L.push({px:px+st*i,cross:'up',pos:'short',kind:'mr',open:true});} }
       return {center:px,step:st,lo:px-st*4.5,hi:px+st*4.5,levels:L,inv:[],real:0,credit:0,pairs:0,tail:0,lastRb:0}; };
-    let g=mk(c[0].c), prev=c[0].c, maxDD=0;
+    let g=mk(c[0].c), prev=c[0].c, maxDD=0, worstFl=0, peak=0;
     for(let i=1;i<c.length;i++){
       const px=c[i].c;
       if((px>g.hi||px<g.lo)&&i-g.lastRb>3){ const keep=g.inv,r=g.real,cr=g.credit,p=g.pairs,tl=g.tail;
@@ -6099,13 +6099,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         if(w&&(g.credit+wl)>=0){ g.credit+=wl; g.real+=wl; g.pairs++; g.tail++;
           if(w.lvl)w.lvl.open=true; g.inv=g.inv.filter(x=>x!==w); } }
       const fl=g.inv.reduce((s,x)=>s+((px-x.entry)/x.entry*1e4)*(x.side==='long'?1:-1),0);
-      if(g.real+fl<maxDD)maxDD=g.real+fl;
+      // Просадку меряем ДВУМЯ способами. Прежний (провал кривой итога ниже нуля) показывал +$0.00
+      // при 633 закрытых парах — итог рос быстрее, чем проваливался, и риск в метрике не отражался вовсе.
+      // Теперь главная величина — МАКСИМАЛЬНЫЙ МИНУС ОТКРЫТОГО ИНВЕНТАРЯ: сколько позиция реально
+      // держала против себя. Именно она говорит, переживём ли мы это при своём плече.
+      if(fl<worstFl)worstFl=fl;
+      if(g.real+fl>peak)peak=g.real+fl;
+      if((g.real+fl)-peak<maxDD)maxDD=(g.real+fl)-peak;   // и классическая просадка от пика
       prev=px;
     }
     const px=c[c.length-1].c;
     const fl=g.inv.reduce((s,x)=>s+((px-x.entry)/x.entry*1e4)*(x.side==='long'?1:-1),0);
     return {итог:+(g.real+fl).toFixed(0),реализовано:+g.real.toFixed(0),флоут:+fl.toFixed(0),
-      пары:g.pairs,хвосты:g.tail,висит:g.inv.length,просадка:+maxDD.toFixed(0)};
+      пары:g.pairs,хвосты:g.tail,висит:g.inv.length,просадка:+maxDD.toFixed(0),
+      худшийМинус:+worstFl.toFixed(0)};   // сколько инвентарь держал против себя — это и есть реальный риск
   }
   async function _coinPassport(sym,force){
     if(_cpBusy)return null; const key=sym;
@@ -6126,7 +6133,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       }));
       // Отбор РИСК-ВЗВЕШЕННЫЙ, а не по голому итогу: на живых данных вариант с итогом +6721 имел
       // просадку −1555, а почти равный ему +6515 — всего −411. Второй лучше, хотя по итогу «хуже».
-      grid.forEach(r=>{ r.кэф=+(r.итог/Math.max(1,Math.abs(r.просадка)/100)).toFixed(1); });
+      // риск = худшее из двух: провал кривой итога и максимальный минус открытого инвентаря
+      grid.forEach(r=>{ const risk=Math.max(Math.abs(r.просадка),Math.abs(r.худшийМинус||0));
+        r.риск=+risk.toFixed(0); r.кэф=+(r.итог/Math.max(1,risk/100)).toFixed(1); });
       grid.sort((a,b)=>b.кэф-a.кэф);
       const best=grid[0]||null;
       const res={at:Date.now(),sym,часовых:h1.length,минуток:m1.length,характер:prof,текущий:profM,
@@ -6152,10 +6161,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       +' <span class="gs-note">— чем выше, тем надёжнее высиживание позиции</span>';
     if(b){
       h+='<br>лучшее по истории: <b>'+(b.режим==='mo'?'МОМЕНТУМ':'усреднение')+'</b>, шаг <b>'+b.шаг+' bps</b>'
-        +' → <b class="'+cls(b.итог)+'">'+_usd(b.итог)+'</b> <span class="gs-note">('+b.пары+' пар, '+b.хвосты+' хвостов, просадка '+_usd(b.просадка)+', висит '+b.висит+')</span>';
+        +' → <b class="'+cls(b.итог)+'">'+_usd(b.итог)+'</b> <span class="gs-note">('+b.пары+' пар, '+b.хвосты+' хвостов, висит '+b.висит+')</span>'
+        +'<br>риск: инвентарь держал против себя до <b class="gs-dn">'+_usd(b.худшийМинус||0)+'</b> ('+Math.abs(b.худшийМинус||0)+' bps)'
+        +' <span class="gs-note">— при плече '+AP_LEV+'× ликвидация на '+(1e4/AP_LEV).toFixed(0)+' bps, запас '+((1e4/AP_LEV+(b.худшийМинус||0))/100).toFixed(2)+'%</span>'
+        +((Math.abs(b.худшийМинус||0)>=1e4/AP_LEV*0.6)?' <b class="gs-dn">⚠ близко к ликвидации при текущем плече</b>':'');
       h+='<br><span class="gs-note">перебор (сортировка по доходу на единицу просадки):</span>';
       p.перебор.forEach(r=>{ h+='<br>&nbsp;&nbsp;'+(r.режим==='mo'?'момент.':'усредн.')+' шаг '+String(r.шаг).padStart(5)
-        +' → <b class="'+cls(r.итог)+'">'+_usd(r.итог)+'</b> <span class="gs-note">просадка '+_usd(r.просадка)+' · кэф '+r.кэф+' · '+r.пары+' пар</span>'; });
+        +' → <b class="'+cls(r.итог)+'">'+_usd(r.итог)+'</b> <span class="gs-note">риск '+_usd(-(r.риск||0))+' · кэф '+r.кэф+' · '+r.пары+' пар</span>'; });
       h+='<br><b>применено:</b> '+(b.итог>0?'шаг лесенки <b>'+b.шаг+' bps</b> подставляется автоматически':'<span class="gs-dn">история в минусе — шаг из паспорта НЕ применяется, работает расчёт по окну</span>');
     } else h+='<br><span class="gs-note">данных для прогона лесенки не хватило</span>';
     h+='<br><span class="gs-note">протоколы стакана (стены, дельта, ликвидации) по свечам не восстановимы — здесь только то, что зависит от цены · виртуально, не гарантия</span>';
