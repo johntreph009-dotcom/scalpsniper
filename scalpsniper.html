@@ -2005,10 +2005,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(p==='demo')document.getElementById('phaseDesc').textContent='ТРЕНАЖЕР — реальный стакан и поток сделок по выбранному тикеру (источник выбирается автоматически из доступных бирж). Модель считает гипотезу, сделки виртуальные. Сетка автопилота видна прямо на графике. Решения и реальный вход — за тобой.';
     if(p==='demo'){ if(typeof _demoStart==='function')_demoStart(); } else { if(typeof _demoStop==='function')_demoStop(); }
     if(p==='live'){ if(typeof _mxWsStart==='function')_mxWsStart(); } else { if(typeof _mxWsStop==='function')_mxWsStop(); }
-    // В Сессии ленты идут сами. В Тренажёре ими управляют вкладки единого окна — иначе они
-    // стартовали бы фоном мимо переключателей и жгли поток на невидимых панелях.
-    if(p==='live'){ if(typeof _whStart==='function')_whStart(_symFromTicker(_tkKey())); if(typeof _liqStart==='function')_liqStart(); }
-    else if(p!=='demo'){ if(typeof _whStop==='function')_whStop(); if(typeof _liqStop==='function')_liqStop(); }
+    // Ленты работают в обеих боевых фазах НЕПРЕРЫВНО и не зависят от выбранной вкладки.
+    // Остановить их можно только явной кнопкой в единомокне — так поток не пропадает незаметно.
+    if(p==='live'||p==='demo'){ if(typeof _whStart==='function')_whStart(_symFromTicker(_tkKey())); if(typeof _liqStart==='function')_liqStart(); }
+    else { if(typeof _whStop==='function')_whStop(); if(typeof _liqStop==='function')_liqStop(); }
     if(p==='live'){
       const lpEl=document.getElementById('livePrice');
       const prepPx=document.getElementById('price').value;
@@ -6286,24 +6286,35 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     document.querySelectorAll('.hub-tab').forEach(b=>b.classList.toggle('on',b.getAttribute('data-hub')===k));
     const map={proc:'hubProc',audit:'hubAudit',pass:'hubPass',whale:'hubWhale',liq:'hubLiq'};
     Object.entries(map).forEach(([n,id])=>{const p=document.getElementById(id); if(p)p.classList.toggle('on',n===k);});
-    // потоки включаем только на своей вкладке
-    try{
-      if(k==='whale'){ if(typeof _whStart==='function')_whStart(_symFromTicker(_tkKey())); }
-      else if(typeof _whStop==='function')_whStop();
-      if(k==='liq'){ if(typeof _liqStart==='function')_liqStart(); }
-      else if(typeof _liqStop==='function')_liqStop();
-    }catch(e){}
-    const dw=document.getElementById('hubDotW'), dl=document.getElementById('hubDotL');
-    if(dw)dw.classList.toggle('live',k==='whale'); if(dl)dl.classList.toggle('live',k==='liq');
+    // ПОТОКИ НЕ ЗАВИСЯТ ОТ ВКЛАДКИ. Переключение — это только смена того, что ты СМОТРИШЬ.
+    // Ленты питают не только свою панель (маркеры на графике сессии, будущий «Аквариум»),
+    // поэтому глушить их при уходе нельзя. Управление — явными кнопками ниже.
+    _hubDots();
     // кнопки действий переносим в шапку окна — они разные для каждой вкладки
     const act=document.getElementById('hubAct'); if(!act)return;
+    const whOn=(typeof _whWorker!=='undefined'&&!!_whWorker), lqOn=(typeof _liqWs!=='undefined'&&!!_liqWs);
     act.innerHTML=(k==='audit')
       ? '<button type="button" class="zf-refresh" onclick="_apAudit()">↻ Пересчитать</button> <button type="button" class="zf-refresh" onclick="_apExport()">⭳ CSV</button>'
       : (k==='pass') ? '<button type="button" class="zf-refresh" onclick="_cpRender(true)">↻ Прогнать историю</button>'
-      : (k==='whale') ? '<span class="gs-note">крупные принты спот+перп с доступных бирж · наблюдение</span>'
-      : (k==='liq') ? '<span class="gs-note">вынужденные закрытия по рынку · наблюдение</span>'
-      : '<span class="gs-note">живой лог решений движка</span>';
+      : (k==='whale') ? '<button type="button" class="zf-refresh'+(whOn?' on':'')+'" onclick="_whToggle()">'+(whOn?'⏹ Остановить ленту':'▶ Включить ленту')+'</button> <span class="gs-note">работает и на других вкладках</span>'
+      : (k==='liq') ? '<button type="button" class="zf-refresh'+(lqOn?' on':'')+'" onclick="_liqToggle()">'+(lqOn?'⏹ Остановить фид':'▶ Включить фид')+'</button> <span class="gs-note">работает и на других вкладках</span>'
+      : '<span class="gs-note">живой лог решений движка · пишется всегда, даже когда вкладка закрыта</span>';
   }
+  // индикаторы отражают РЕАЛЬНОЕ состояние потоков, а не выбранную вкладку
+  function _hubDots(){
+    const dw=document.getElementById('hubDotW'), dl=document.getElementById('hubDotL');
+    if(dw)dw.classList.toggle('live',typeof _whWorker!=='undefined'&&!!_whWorker);
+    if(dl)dl.classList.toggle('live',typeof _liqWs!=='undefined'&&!!_liqWs);
+  }
+  function _whToggle(){
+    try{ if(_whWorker){_whStop();} else {_whStart(_symFromTicker(_tkKey()));} }catch(e){}
+    _hubDots(); _hubGo(_hubCur);
+  }
+  function _liqToggle(){
+    try{ if(typeof _liqWs!=='undefined'&&_liqWs){_liqStop();} else {_liqStart();} }catch(e){}
+    _hubDots(); _hubGo(_hubCur);
+  }
+  setInterval(()=>{ if(_hubReady)_hubDots(); },3000);   // индикаторы живут своей жизнью — поток мог упасть сам
   async function _cpRender(force){
     const el=document.getElementById('cpPanel'); if(!el)return;
     const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'';
