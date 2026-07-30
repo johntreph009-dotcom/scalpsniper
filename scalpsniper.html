@@ -5714,8 +5714,25 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const b=snap(); self.postMessage({t:'snap',buf:b.buffer,m:model(),src:(pollT?'poll':srcName)},[b.buffer]);
     }
   `; }
+  let _dlRows=[], _dlHover=null, _dlBookBound=false;
+  function _dlBindBook(cv){
+    if(_dlBookBound||!cv)return; _dlBookBound=true;
+    const yOf=e=>{const r=cv.getBoundingClientRect(); return (('touches' in e&&e.touches[0])?e.touches[0].clientY:e.clientY)-r.top;};
+    cv.addEventListener('mousemove',e=>{_dlHover=yOf(e);});
+    cv.addEventListener('mouseleave',()=>{_dlHover=null;});
+    cv.addEventListener('touchstart',e=>{_dlHover=yOf(e);},{passive:true});
+    // клик по уровню — цена в буфер: мост из книги в ордер на бирже
+    cv.addEventListener('click',e=>{
+      const y=yOf(e); const hit=_dlRows.find(r=>y>=r.y&&y<=r.y+r.h); if(!hit)return;
+      const txt=hit.p.toFixed(_dlDec);
+      try{ if(navigator.clipboard)navigator.clipboard.writeText(txt); }catch(x){}
+      if(typeof _proc==='function')_proc('уровень скопирован: <b>'+txt+'</b> ('+(hit.side<0?'ask':'bid')+')');
+    });
+    cv.style.cursor='crosshair';
+  }
   function _dlSetupCanvas(){
     const cv=document.getElementById('dlBook'); if(!cv)return;
+    _dlBindBook(cv);
     const dpr=window.devicePixelRatio||1; const rect=cv.getBoundingClientRect();
     const w=rect.width||cv.clientWidth||320, h=300;
     cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
@@ -5799,16 +5816,60 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     for(let i=0;i<n;i++)bP.push(s[k++]); for(let i=0;i<n;i++)bS.push(s[k++]);
     let mx=1; for(let i=0;i<n;i++){ if(aS[i]>mx)mx=aS[i]; if(bS[i]>mx)mx=bS[i]; }
     _dlDec=_dlComputeDec(aP,bP,n,mid);
-    const rowH=Math.min(11,(H-30)/(2*n)), cx=W*0.5, midY=H*0.5, bwMax=W*0.46;
+    const rowH=Math.min(13,(H-34)/(2*n)), cx=W*0.5, midY=H*0.5, bwMax=W*0.42;
     ctx.font='10px JetBrains Mono, monospace'; ctx.textBaseline='middle';
-    for(let i=0;i<n;i++){ const y=midY-14-(i+1)*rowH, bw=(aS[i]/mx)*bwMax;
-      ctx.fillStyle='rgba(226,75,74,.85)'; ctx.fillRect(cx,y,bw,rowH-2);
-      ctx.fillStyle='#8a8f98'; ctx.textAlign='left'; ctx.fillText(aP[i].toFixed(_dlDec),4,y+rowH/2); }
-    for(let i=0;i<n;i++){ const y=midY+14+i*rowH, bw=(bS[i]/mx)*bwMax;
-      ctx.fillStyle='rgba(29,158,117,.85)'; ctx.fillRect(cx-bw,y,bw,rowH-2);
-      ctx.fillStyle='#8a8f98'; ctx.textAlign='left'; ctx.fillText(bP[i].toFixed(_dlDec),4,y+rowH/2); }
-    ctx.strokeStyle='rgba(255,122,24,.5)'; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(0,midY); ctx.lineTo(W,midY); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle='#ff7a18'; ctx.textAlign='center'; ctx.fillText(mid.toFixed(_dlDec)+' · mid',cx,midY);
+    const avg=(aS.reduce((s,x)=>s+x,0)+bS.reduce((s,x)=>s+x,0))/(2*n)||1;
+    const bps=p=>((p-mid)/mid*1e4);
+    _dlRows=[];   // зоны наведения: строим при отрисовке, читаем в обработчиках мыши
+    // мои размеченные зоны — отмечаем прямо в книге, чтобы не сверять глазами с другой панелью
+    let myZ=[]; try{ if(typeof zones!=='undefined'&&zones)myZ=zones.filter(z=>!z.closed&&!z.expired).map(z=>+z.px); }catch(e){}
+    const zoneNear=p=>myZ.some(z=>Math.abs(z-p)<=(mid*0.00012));
+    // накопленная глубина фоном: видно, где реально сосредоточена ликвидность
+    const drawCum=(arr,side)=>{ let acc=0; const tot=arr.reduce((s,x)=>s+x,0)||1;
+      ctx.beginPath(); ctx.moveTo(cx,midY+(side<0?-14:14));
+      for(let i=0;i<n;i++){ acc+=arr[i]; const y=side<0?(midY-14-(i+1)*rowH):(midY+14+i*rowH);
+        ctx.lineTo(cx+side*(acc/tot)*bwMax*0.9,y+rowH/2); }
+      ctx.lineTo(cx,side<0?(midY-14-n*rowH):(midY+14+n*rowH)); ctx.closePath();
+      ctx.fillStyle=side<0?'rgba(226,75,74,.10)':'rgba(29,158,117,.10)'; ctx.fill(); };
+    drawCum(aS,-1); drawCum(bS,1);
+    const row=(p,sz,y,side)=>{
+      const bw=Math.max(1,(sz/mx)*bwMax), wall=sz>=avg*1.8, x0=side<0?cx:cx-bw;
+      // градиент плотности вместо плоской заливки — крупное читается объёмнее
+      const g=ctx.createLinearGradient(cx,0,cx+side*bw,0);
+      const c=side<0?'226,75,74':'29,158,117';
+      g.addColorStop(0,'rgba('+c+',.92)'); g.addColorStop(1,'rgba('+c+',.30)');
+      ctx.fillStyle=g; ctx.fillRect(side<0?cx:cx-bw,y,bw,rowH-2);
+      if(wall){ // стена: янтарная засечка + доля от книги
+        ctx.fillStyle='rgba(255,122,24,.95)'; ctx.fillRect(side<0?cx+bw-2:cx-bw,y,2,rowH-2);
+        ctx.fillStyle='rgba(255,122,24,.9)'; ctx.textAlign=side<0?'left':'right';
+        ctx.fillText('◧'+(sz/(avg*2*n)*100).toFixed(0)+'%',side<0?cx+bw+5:cx-bw-5,y+rowH/2);
+      }
+      ctx.fillStyle=zoneNear(p)?'#ff7a18':'#8a8f98'; ctx.textAlign='left';
+      ctx.fillText((zoneNear(p)?'◆':' ')+p.toFixed(_dlDec),3,y+rowH/2);
+      ctx.fillStyle='rgba(255,255,255,.22)'; ctx.textAlign='right';
+      ctx.fillText(Math.abs(bps(p)).toFixed(1),W-4,y+rowH/2);
+      _dlRows.push({y,h:rowH,p,sz,side});
+      if(_dlHover&&Math.abs(_dlHover-y-rowH/2)<rowH/2){   // подсветка строки под курсором
+        ctx.fillStyle='rgba(255,255,255,.06)'; ctx.fillRect(0,y,W,rowH-2); }
+    };
+    for(let i=0;i<n;i++)row(aP[i],aS[i],midY-14-(i+1)*rowH,-1);
+    for(let i=0;i<n;i++)row(bP[i],bS[i],midY+14+i*rowH,1);
+    // mid со спредом — сразу видно цену входа и её стоимость
+    const spr=(aP[0]&&bP[0])?((aP[0]-bP[0])/mid*1e4):0;
+    ctx.strokeStyle='rgba(255,122,24,.55)'; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(0,midY); ctx.lineTo(W,midY); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle='#ff7a18'; ctx.textAlign='center';
+    ctx.fillText(mid.toFixed(_dlDec)+'  ·  спред '+spr.toFixed(1)+' bps',cx,midY);
+    // накопленный объём до уровня под курсором
+    if(_dlHover!=null){
+      const hit=_dlRows.find(r=>_dlHover>=r.y&&_dlHover<=r.y+r.h);
+      if(hit){ const same=_dlRows.filter(r=>r.side===hit.side);
+        const upto=same.filter(r=>(hit.side<0?r.p<=hit.p:r.p>=hit.p)).reduce((s,r)=>s+r.sz,0);
+        ctx.fillStyle='rgba(13,12,10,.92)'; ctx.fillRect(cx-72,hit.y-16,144,15);
+        ctx.strokeStyle='rgba(255,122,24,.5)'; ctx.strokeRect(cx-72,hit.y-16,144,15);
+        ctx.fillStyle='#fff'; ctx.textAlign='center';
+        ctx.fillText('до уровня: '+(upto>=1e6?(upto/1e6).toFixed(1)+'M':upto>=1e3?(upto/1e3).toFixed(0)+'k':upto.toFixed(0)),cx,hit.y-8); }
+    }
   }
   function _demoStart(){
     if(_dlRunning)return; _dlRunning=true;
