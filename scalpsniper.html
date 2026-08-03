@@ -1478,9 +1478,25 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
   @media(max-width:720px){
     /* на телефоне шапка обязана быть узкой: замер — развёрнутая занимает ~40% экрана */
-    .hdr-stick{max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+    .hdr-stick{max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+      margin:-6px -8px 8px;padding:6px 8px 8px}
     .hdr-stick.is-folded{max-height:none;overflow:visible}
     .fold-btn{width:26px;height:26px;font-size:12px}   /* палец, не курсор */
+
+    /* СТРОКА СВЕЖЕСТИ. #zonesFreshTxt объявлен как flex:1, то есть flex-basis:0 —
+       на десктопе он забирал остаток, а на 390px четыре кнопки съедали почти всю
+       ширину, тексту доставалось ~90px, и «обновлено 1 мин назад» вставало
+       вертикальной колонкой из огрызков слов. Замер на iPhone это и показал.
+       Лечение: текст занимает СВОЮ строку целиком, кнопки идут рядом ниже. */
+    .zones-fresh{flex-wrap:wrap;row-gap:6px;align-items:stretch}
+    #zonesFreshTxt{flex:1 1 100%;min-width:0;line-height:1.45}
+    .zones-fresh .zf-plan,.zones-fresh .zf-refresh{flex:1 1 auto;min-width:0;
+      padding:8px 6px;font-size:10px;text-align:center;white-space:nowrap}
+    /* кнопка — палец: 8px по вертикали даёт ~32px высоты, ниже промахиваешься */
+
+    /* Заголовки внутри шапки на телефоне лишние: они съедают высоту,
+       а что это за блок, видно по содержимому. */
+    .hdr-stick .section-title{margin:6px 0 6px;font-size:11px}
   }
   /* заметка больше не растягивается: место нужно шкале */
   .zl-note{flex:0 1 auto;min-width:0}
