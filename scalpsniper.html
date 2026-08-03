@@ -1108,7 +1108,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .shot.has-img .obs-ta,.shot.obs-open .obs-ta,.obs-ta.filled{max-height:180px;min-height:32px;padding:8px 11px;border-width:1px;resize:vertical;overflow-y:auto}
 
   /* ── session zone ladder ── */
-  .zone-ladder{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+  .zone-ladder{display:flex;flex-direction:column;gap:2px;margin-bottom:12px}
+/* ПЛОТНОСТЬ ЛЕСТНИЦЫ. Замер: строка 1380px, из них .zl-note получала 1093px — место
+   было, но JS резал заметку на 30 символов, и 2/3 ширины простаивали. Обрез убран.
+   Высота строки 32px под шрифт 10px — воздух ради воздуха: на 30 зонах это лишние
+   пол-экрана прокрутки. Плотнее строки = больше уровней в поле зрения без скролла,
+   а это и есть цель панели: увидеть весь план разом. */
+.zl-row{padding:3px 10px}
+.zl-note{font-size:10.5px}
   .zl-row{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:6px;border:1px solid var(--line-soft);font-size:11px;transition:all .15s;cursor:default;background:var(--glass-bg);backdrop-filter:var(--glass-blur-sm);-webkit-backdrop-filter:var(--glass-blur-sm)}
   .zl-row.zl-active{border-color:rgba(255,122,24,.45);background:rgba(255,122,24,.07);box-shadow:0 0 12px rgba(255,122,24,.12)}
   .zl-row.zl-above{border-color:rgba(240,69,74,.2)}
@@ -2348,7 +2355,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <span class="zone-kind ${k.cls}" style="font-size:8px">${k.lbl}</span>
         <span class="zl-px">${z.px}</span>
         ${stars}${bar}
-        <span class="zl-note">${z.note?escapeHtml(z.note.slice(0,30)):''}</span>
+        <span class="zl-note">${z.note?escapeHtml(z.note):''}</span>
         ${vb}
         ${lp?`<span class="${distCls}">${distTxt}</span>`:''}
       </div>`;
