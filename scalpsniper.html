@@ -6245,9 +6245,27 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const bestA=+j.asks[0][0], bestB=+j.bids[0][0], mid=(bestA+bestB)/2;
       const within=mid*0.006;                        // ±60 bps: с запасом на перекорзинивание
       const take=(arr,lo,hi)=>{ const out=[]; for(const [p,q] of arr){ const P=+p; if(P<lo||P>hi)continue; out.push([P,+q]); } return out; };
-      _dlDeep={t:Date.now(),mid,
-        asks:take(j.asks,mid,mid+within),
-        bids:take(j.bids,mid-within,mid)};
+      const asks=take(j.asks,mid,mid+within), bids=take(j.bids,mid-within,mid);
+      // ═══ ШИРИНА КАДРА ПО ПЛОТНОСТИ КНИГИ, А НЕ ПО КОНСТАНТЕ ═══
+      // Замер четырёх инструментов показал, что фиксированный кадр не годится:
+      //   BTC — 20 уровней это 0.9 bps, а 1000 уровней упираются в потолок API уже внутри 40 bps;
+      //   ETH — 2.3 bps на 20 уровнях, ~490 уровней в 40 bps;
+      //   SOL — 20 уровней уже 52.7 bps;
+      //   BICO — 218.6 bps, в 40 bps всего 7 уровней.
+      // Один и тот же шаг корзины дал бы на BTC щель, а на BICO — пустую сетку.
+      // Берём дистанцию, внутри которой лежит 80% денег книги: это и есть
+      // «где реально стоит ликвидность» для ЭТОГО инструмента.
+      const span=(rows,dir)=>{
+        let tot=0; for(const [p,q] of rows)tot+=p*q;
+        if(!tot)return null;
+        let acc=0; for(const [p,q] of rows){ acc+=p*q;
+          if(acc>=tot*0.8)return Math.abs(p-mid)/mid*1e4; }
+        return null;
+      };
+      const sA=span(asks), sB=span(bids);
+      const raw=Math.max(sA||0,sB||0);
+      const spanBps=Math.max(8,Math.min(60,raw||24));   // пол и потолок: кадр не уже 8 и не шире 60 bps
+      _dlDeep={t:Date.now(),mid,asks,bids,spanBps};
       _deepErr=0;
     }catch(e){ _deepErr++; if(_deepErr>=3)_dlDeep=null; }   // три подряд — молча падаем на быстрый тир
     finally{ _deepBusy=false; }
@@ -6276,7 +6294,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // Оставить мелкий шаг на глубоких данных значило бы получить ту же щель,
     // только с большим числом пустых строк.
     const _deepNow=_dlDeep&&(Date.now()-_dlDeep.t)<9000;
-    const step=(()=>{const t=mid*(_deepNow?6e-5:1.2e-5); const m=Math.pow(10,Math.floor(Math.log10(t)));
+    // Шаг = ширина кадра / 7 строк в полполя. На глубоком тире ширину задаёт
+    // сама книга (spanBps, 80% денег), на быстром остаётся прежние ~1.2 bps.
+    const step=(()=>{
+      const t=_deepNow ? mid*(_dlDeep.spanBps||24)/1e4/7 : mid*1.2e-5;
+      const m=Math.pow(10,Math.floor(Math.log10(t)));
       const q=t/m; return (q<1.5?1:q<3.5?2:q<7.5?5:10)*m;})();
     const buck=(arr,px,sgn)=>{const m=new Map();
       for(let i=0;i<n;i++){ const key=Math.round(px[i]/step)*step; m.set(key,(m.get(key)||0)+arr[i]); }
