@@ -1513,7 +1513,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
             <div class="ticker-dd" id="tickerDD"></div>
           </div>
         </div>
-        <div><span class="label">Таймфрейм</span><select id="tf" onchange="_tfChanged()"><option>1m</option><option selected>5m</option><option>15m</option><option>1h</option><option>4h</option></select></div>
+        <div><span class="label">Таймфрейм</span><select id="tf" onchange="_tfChanged()"><option value="1m">1m</option><option value="3m">3m</option><option value="5m" selected>5m</option><option value="15m">15m</option><option value="30m">30m</option><option value="1h">1h</option><option value="4h">4h</option><option value="1d">1D</option></select></div>
         <div><span class="label">Плечо ×</span><input id="lev" type="number" value="1" min="1" oninput="saveSettings()"></div>
         <div><span class="label">Текущая цена <span id="pxLiveInd" style="font-size:9px;letter-spacing:.3px;font-family:'JetBrains Mono',monospace;color:var(--text-faint);vertical-align:middle">○</span></span><input id="price" type="number" placeholder="103450"></div>
       </div>
@@ -6203,8 +6203,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // ЕДИНАЯ ЧИТАЮЩАЯ СТРОКА: цена → полоса → сценарий, всё слева направо от общей базы.
     // Раньше цена стояла у левого края, а полоса шла от центра — взгляд прыгал через пустоту,
     // и при живой книге понять, какой уровень стоит за стеной, было почти невозможно.
-    const rowH=Math.min(13,(H-34)/(2*n)), midY=H*0.5;
-    const PX_R=64, BASE=70, LBL=118, bwMax=Math.max(40,W-BASE-LBL), cx=BASE;
+    // ═══ КОМПОНОВКА: ЦЕНА В ЦЕНТРЕ, ОБЪЁМЫ КРЫЛЬЯМИ В ОБЕ СТОРОНЫ ═══
+    // Было: цена мелким шрифтом у левого края, полосы от единой базы вправо.
+    // Числа 10px при шаге сетки в сотые доли читались только вглядыванием —
+    // а стакан смотрят боковым зрением, между делом. Цена, которую надо
+    // выглядывать, не работает.
+    // Стало: колонка цены по центру крупным шрифтом, объём зеркалится влево и
+    // вправо от неё. Крыло тем длиннее, чем крупнее лимитка — размер читается
+    // формой, а не подписью. Справа оставлен карман под объём и сценарий, чтобы
+    // подписи стояли столбцом и не плясали по концам полос.
+    const midY=H*0.5;
+    const RG=150;                                   // правый карман: объём + сценарий
+    const rowH=Math.max(14,Math.min(20,(midY-18)/9));
+    const PW=Math.max(88,Math.min(120,rowH*6.4));   // ширина колонки цены
+    const cxc=(W-RG)/2;                             // центр ПОЛЯ ОБЪЁМОВ, не канваса
+    const pxL=cxc-PW/2, pxR=cxc+PW/2;
+    const half=Math.max(40,Math.min(pxL-6,(W-RG)-pxR));   // крылья одинаковой длины
+    const PX_FONT=Math.max(12,Math.round(rowH-4));
     ctx.font='10px JetBrains Mono, monospace'; ctx.textBaseline='middle';
     const allV=A.concat(B).map(r=>r.v).filter(v=>v>0).sort((x,y)=>x-y);
     const avg=allV.length?allV[Math.floor(allV.length/2)]:1;   // медиана устойчивее среднего к выбросам
@@ -6233,13 +6248,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       // пустой уровень сетки: рисуем только цену бледно, без полосы —
       // разрыв в книге должен быть виден, но не кричать
       if(!(sz>0)){
-        ctx.font='10px JetBrains Mono, monospace';
-        ctx.fillStyle='rgba(138,143,152,.20)'; ctx.textAlign='right';
-        ctx.fillText(p.toFixed(_dlDec),PX_R,y+rowH/2);
+        ctx.font=PX_FONT+'px JetBrains Mono, monospace';
+        ctx.fillStyle='rgba(138,143,152,.22)'; ctx.textAlign='center';
+        ctx.fillText(p.toFixed(_dlDec),cxc,y+rowH/2);
         _dlRows.push({y,h:rowH,p,sz:0,side,rel:0});
         return;
       }
-      const bw=Math.max(1.5,scale(sz)*bwMax);
+      const bw=Math.max(2,scale(sz)*half);
       const rel=sz/avg;
       const wall=rel>=1.8, big=!wall&&rel>=1.0;
       const c=side<0?'226,75,74':'29,158,117';
@@ -6247,27 +6262,35 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if((y/rowH|0)%2){ ctx.fillStyle='rgba(255,255,255,.013)'; ctx.fillRect(0,y,W,rowH-2); }
       if(hov){ ctx.fillStyle='rgba(255,255,255,.07)'; ctx.fillRect(0,y,W,rowH-2); }
       const zn=zoneNear(p);
-      // 1) ЦЕНА — вплотную к базе полос, чтобы глаз не искал соответствие
-      ctx.font=(wall?'bold ':'')+'10px JetBrains Mono, monospace';
-      ctx.fillStyle=zn?'#ff7a18':(wall?'#e6e9ee':'rgba(138,143,152,.55)');
-      ctx.textAlign='right'; ctx.fillText(p.toFixed(_dlDec),PX_R,y+rowH/2);
-      if(zn){ ctx.fillStyle='#ff7a18'; ctx.fillRect(2,y+rowH/2-2.5,4,5); }
-      // 2) ПОЛОСА — все от одной базы вправо: длины сравниваются напрямую
-      ctx.fillStyle='rgba('+c+','+(wall?0.95:big?0.5:0.22)+')';
-      ctx.fillRect(BASE,y,bw,rowH-2);
+      // 1) ОБЪЁМ — два крыла от колонки цены наружу. Одинаковая длина в обе
+      //    стороны: размер лимитки читается формой, а не чтением подписи.
+      ctx.fillStyle='rgba('+c+','+(wall?0.92:big?0.46:0.20)+')';
+      ctx.fillRect(pxR,y,bw,rowH-2);                 // вправо
+      ctx.fillRect(pxL-bw,y,bw,rowH-2);              // влево, зеркально
+      if(wall){                                       // торцы стены — единственное яркое
+        ctx.fillStyle='#ff7a18';
+        ctx.fillRect(pxR+bw-2.5,y,2.5,rowH-2);
+        ctx.fillRect(pxL-bw,y,2.5,rowH-2);
+      }
+      // 2) ЦЕНА — по центру, крупно. Стакан читают боковым зрением;
+      //    цена, которую надо выглядывать, не работает.
+      ctx.font=(wall?'bold ':'')+PX_FONT+'px JetBrains Mono, monospace';
+      ctx.fillStyle=zn?'#ff7a18':(wall?'#f0f3f7':'rgba(190,196,206,.78)');
+      ctx.textAlign='center'; ctx.fillText(p.toFixed(_dlDec),cxc,y+rowH/2);
+      if(zn){ ctx.fillStyle='#ff7a18'; ctx.fillRect(pxL-3,y+rowH/2-3,3,6); }
+      // 3) ОБЪЁМ ЦИФРОЙ + СЦЕНАРИЙ — в правом кармане, ровным столбцом.
+      //    Раньше подписи стояли у конца полосы и плясали по горизонтали:
+      //    сравнивать их между строками было невозможно.
       if(wall){
-        ctx.fillStyle='#ff7a18'; ctx.fillRect(BASE+bw-2.5,y,2.5,rowH-2);
-        // 3) СЦЕНАРИЙ + объём — сразу за полосой, в той же строке
         const sc=scen(p,side);
         const vol=sz>=1e6?(sz/1e6).toFixed(1)+'M':sz>=1e3?(sz/1e3).toFixed(0)+'k':sz.toFixed(0);
-        ctx.textAlign='left'; ctx.font='bold 9.5px JetBrains Mono, monospace';
-        ctx.fillStyle='#ffb020'; ctx.fillText(vol,BASE+bw+7,y+rowH/2);
-        if(sc){ ctx.fillStyle=sc.c; ctx.fillText(sc.t,BASE+bw+7+40,y+rowH/2); }
-        ctx.font='10px JetBrains Mono, monospace';
+        ctx.textAlign='left'; ctx.font='bold '+Math.max(9,PX_FONT-3)+'px JetBrains Mono, monospace';
+        ctx.fillStyle='#ffb020'; ctx.fillText(vol,W-RG+8,y+rowH/2);
+        if(sc){ ctx.fillStyle=sc.c; ctx.fillText(sc.t,W-RG+62,y+rowH/2); }
       }
       _dlRows.push({y,h:rowH,p,sz,side,rel});
-      if(hov){ ctx.fillStyle='rgba(255,255,255,.55)'; ctx.textAlign='right'; ctx.font='9px JetBrains Mono, monospace';
-        ctx.fillText(Math.abs(bps(p)).toFixed(1)+'bp',W-3,y+rowH/2); ctx.font='10px JetBrains Mono, monospace'; }
+      if(hov){ ctx.fillStyle='rgba(255,255,255,.55)'; ctx.textAlign='left'; ctx.font='9px JetBrains Mono, monospace';
+        ctx.fillText(Math.abs(bps(p)).toFixed(1)+'bp',4,y+rowH/2); }
     };
     // ═══ ПРОПОРЦИОНАЛЬНАЯ ЦЕНОВАЯ ШКАЛА ═══
     // Было: рисовались подряд только НЕПУСТЫЕ корзины. Уровень без ликвидности
@@ -6293,15 +6316,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     ctx.strokeStyle='rgba(255,122,24,.45)'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(0,midY-11); ctx.lineTo(W,midY-11);
     ctx.moveTo(0,midY+11); ctx.lineTo(W,midY+11); ctx.stroke();
-    ctx.font='bold 11px JetBrains Mono, monospace';
-    ctx.fillStyle='#ff7a18'; ctx.textAlign='right';
-    ctx.fillText(mid.toFixed(_dlDec),PX_R,midY+3);
+    ctx.font='bold '+(PX_FONT+2)+'px JetBrains Mono, monospace';
+    ctx.fillStyle='#ff7a18'; ctx.textAlign='center';
+    ctx.fillText(mid.toFixed(_dlDec),cxc,midY+3);
     ctx.font='9px JetBrains Mono, monospace'; ctx.fillStyle='rgba(255,176,32,.8)';
-    ctx.textAlign='left'; ctx.fillText('mid · спред '+spr.toFixed(1)+' bps',BASE+4,midY+3);
+    ctx.textAlign='left'; ctx.fillText('mid · спред '+spr.toFixed(1)+' bps',W-RG+8,midY+3);
     ctx.font='10px JetBrains Mono, monospace';
-    // вертикальная база полос — вторая точка опоры, вдоль неё выстроены все уровни
+    // границы колонки цены — две опоры, от которых крылья расходятся наружу
     ctx.strokeStyle='rgba(255,255,255,.10)';
-    ctx.beginPath(); ctx.moveTo(BASE-3,0); ctx.lineTo(BASE-3,H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pxL-3,0); ctx.lineTo(pxL-3,H);
+    ctx.moveTo(pxR+3,0); ctx.lineTo(pxR+3,H); ctx.stroke();
     // счётчик стен: сколько крупных лимиток с каждой стороны — оценка без вглядывания
     const wA=aS.filter(x=>x>=avg*1.8).length, wB=bS.filter(x=>x>=avg*1.8).length;
     ctx.font='9px JetBrains Mono, monospace'; ctx.textAlign='right';
@@ -6313,7 +6337,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const hit=_dlRows.find(r=>_dlHover>=r.y&&_dlHover<=r.y+r.h);
       if(hit){ const same=_dlRows.filter(r=>r.side===hit.side);
         const upto=same.filter(r=>(hit.side<0?r.p<=hit.p:r.p>=hit.p)).reduce((s,r)=>s+r.sz,0);
-        const tw=150, tx=Math.min(W-tw-4,BASE+10), ty=Math.max(2,hit.y-16);
+        const tw=150, tx=Math.min(W-tw-4,pxR+10), ty=Math.max(2,hit.y-16);
         ctx.fillStyle='rgba(13,12,10,.94)'; ctx.fillRect(tx,ty,tw,15);
         ctx.strokeStyle='rgba(255,122,24,.55)'; ctx.strokeRect(tx,ty,tw,15);
         ctx.fillStyle='#fff'; ctx.textAlign='left'; ctx.font='9px JetBrains Mono, monospace';
