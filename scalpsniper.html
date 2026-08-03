@@ -1596,6 +1596,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .zl-m{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-faint);white-space:nowrap;flex-shrink:0}
   .zl-m b{color:var(--text-dim);font-weight:700}
   .zl-m-warn{color:var(--warn,#e3b341)}
+  /* матожидание: цвет по знаку, а не по красоте — минус обязан быть виден */
+  .zl-ev-pos{color:var(--green,#3fb950);font-weight:700}
+  .zl-ev-neg{color:var(--danger,#f0454a);font-weight:700}
+  .zl-ev-flat{color:var(--text-faint)}
   @media(max-width:720px){ .zl-m{display:none} }   /* на телефоне ширины нет — не мельчим */
 </style>
 </head>
@@ -2498,6 +2502,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(z.stop)bits.push('<b>SL</b> '+z.stop);
     let ps=null; try{ ps=posSize(z); }catch(e){}
     if(ps)bits.push((ps.over?'<span class="zl-m-warn">⚠ </span>':'')+ps.units.toFixed(3)+' ед.');
+    // МАТОЖИДАНИЕ вместо звёзд как единственного мерила: звёзды — гипотеза,
+    // это — счёт по факту. Показываем консервативную оценку (нижняя граница
+    // Уилсона): на малой выборке она честнее сырой доли.
+    let ev=null; try{ ev=_zEV(z); }catch(e){}
+    if(ev){
+      const cls=ev.evLo>0.05?'zl-ev-pos':ev.evLo<-0.05?'zl-ev-neg':'zl-ev-flat';
+      bits.push('<span class="'+cls+'" title="Класс «'+ev.bucket+'»: отработала '+ev.w+' из '+ev.n
+        +' ('+ev.p+'%). Порог безубытка при R:R '+_EV_RR+' — '+ev.be+'%. Матожидание '+(ev.ev>=0?'+':'')+ev.ev
+        +'R, консервативная оценка '+(ev.evLo>=0?'+':'')+ev.evLo+'R (нижняя граница Уилсона, поправка на размер выборки)."'
+        +'EV '+(ev.evLo>=0?'+':'')+ev.evLo+'R</span>');
+    }
     return bits.length?'<span class="zl-m">'+bits.join(' · ')+'</span>':'<span class="zl-m"></span>';
   }
   // ШКАЛА ДИСТАНЦИИ УДАЛЕНА 2026-08-03. Она рисовала полосу от центра строки:
@@ -4906,6 +4921,49 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         ctx.fillText('LIQ ×25/50/100 · модель',plotW-bandW+4,12);
       }
     }
+    // ═══════════ ФОН: КАРТА ПЛОТНОСТИ ЗОН ═══════════
+    // Вместо чёрного поля за свечами — поле плотности размеченных уровней.
+    // Каждая зона даёт гауссово пятно с весом по звёздам; пятна складываются.
+    // Читается как рельеф: где уровни сгущаются — там рынку идти труднее,
+    // где пусто — там цена проскакивает. Это та же мысль, что в стакане:
+    // разрыв ликвидности сам по себе информация.
+    // Рисуется ПЕРВЫМ, до свечей, очень низким контрастом: фон обязан
+    // оставаться фоном. Полос поверх графика больше нет — только рельеф.
+    if(activeZ.length&&ph>20){
+      const BINS=Math.max(24,Math.min(90,Math.round(ph/5)));
+      const dens=new Float32Array(BINS);
+      const sigma=Math.max(1.5,BINS*0.035);          // ширина пятна ~3.5% высоты
+      activeZ.forEach(z=>{
+        const p=+z.px; if(!isFinite(p)||p<minP||p>maxP)return;
+        const st=Math.max(1,Math.min(3,z.stars||2));
+        const c=(1-(p-minP)/(maxP-minP))*(BINS-1);   // экранная координата в корзинах
+        const rad=Math.ceil(sigma*2.5);
+        for(let i=Math.max(0,Math.floor(c-rad));i<=Math.min(BINS-1,Math.ceil(c+rad));i++){
+          const d=(i-c)/sigma; dens[i]+=st*Math.exp(-0.5*d*d);
+        }
+      });
+      let dmax=0; for(let i=0;i<BINS;i++)if(dens[i]>dmax)dmax=dens[i];
+      if(dmax>0){
+        const bh2=ph/BINS, cy=(currentPrice&&isFinite(currentPrice))?toY(currentPrice):ph/2;
+        for(let i=0;i<BINS;i++){
+          const v=dens[i]/dmax; if(v<0.04)continue;
+          const y=i*bh2;
+          // цвет по стороне от цены: выше — сопротивление, ниже — поддержка
+          const rgb=(y+bh2/2)<cy?'226,75,74':'29,158,117';
+          ctx.fillStyle='rgba('+rgb+','+(v*0.11).toFixed(3)+')';
+          ctx.fillRect(0,y,plotW,bh2+0.6);
+        }
+        // гребни — тонкая линия там, где плотность локально максимальна:
+        // это и есть «стена из уровней», её видно без чтения подписей
+        for(let i=1;i<BINS-1;i++){
+          if(dens[i]>dens[i-1]&&dens[i]>=dens[i+1]&&dens[i]/dmax>0.55){
+            const y=i*bh2+bh2/2;
+            ctx.fillStyle='rgba(255,176,32,'+(0.10+0.12*dens[i]/dmax).toFixed(3)+')';
+            ctx.fillRect(0,y-0.5,plotW,1);
+          }
+        }
+      }
+    }
     const _zBadges=[]; // бейджи зон на шкале — рисуются после свечей с разрешением коллизий
     // ═══ ИЕРАРХИЯ ЗОН НА ГРАФИКЕ ═══
     // Замер по кадру: 23 зоны в видимом окне рисовали 23 ленты во всю ширину.
@@ -5819,6 +5877,48 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // прятала строку с кнопками «план / Обновить / авто / вибро».
     if(wrap.closest('.hdr-stick'))cls+=' fold-keep';
     wrap.className=cls; txt.textContent=parts.join(' · ');
+  }
+  // ═══════════ МАТОЖИДАНИЕ ЗОНЫ ПО ФАКТУ ═══════════
+  // АУДИТ ДЕЙСТВУЮЩЕГО ПРИОРИТЕТА (звёзды в quickAnalyze):
+  //   stars = 0.6×(размер стены / максимальной) + 0.4×(близость к цене),
+  //   потом ±1 за совпадение с трендом дня и CVD.
+  // Три изъяна, видимые из самой формулы:
+  //   1) НЕТ ОБРАТНОЙ СВЯЗИ. Звёзды назначаются по признакам ДО события и
+  //      никогда не сверяются с тем, что случилось. При этом терминал ведёт
+  //      zoneReviews с вердиктами — данные для проверки есть, но не используются.
+  //   2) Нормировка на максимум хрупка: одна гигантская стена обнуляет
+  //      относительный размер всех остальных, и звёзды начинает решать близость.
+  //   3) ±1 за тренд — огромный вес на шкале из трёх делений: слабый признак
+  //      способен превратить однозвёздочную зону в двухзвёздочную.
+  // Ниже — не замена формулы, а её ПРОВЕРКА фактом: сколько раз зоны такого
+  // класса реально отрабатывали. Оценка, а не мнение.
+  const _EV_RR=1.5;                       // то же R:R, что в модели разорения
+  function _wilsonLo(w,n){                // нижняя граница доли: 2 из 2 ≠ 100%
+    if(!n)return 0;
+    const z=1.96,p=w/n,d=1+z*z/n;
+    return Math.max(0,((p+z*z/(2*n))-z*Math.sqrt((p*(1-p)+z*z/(4*n))/n))/d);
+  }
+  function _zEV(z){
+    if(!z)return null;
+    const done=zoneReviews.filter(r=>r.verdict==='worked'||r.verdict==='failed');
+    if(!done.length)return null;
+    const st=Math.max(1,Math.min(3,z.stars||2)), kind=z.kind||'—';
+    // от узкого к широкому: класс+звёзды → класс → всё подряд.
+    // Узкая корзина точнее, широкая надёжнее — берём первую, где хватает выборки.
+    const buckets=[
+      {name:kind+'·'+st+'★', rows:done.filter(r=>r.zKind===kind&&(r.stars||2)===st)},
+      {name:kind,            rows:done.filter(r=>r.zKind===kind)},
+      {name:'все зоны',      rows:done}
+    ];
+    const b=buckets.find(x=>x.rows.length>=12)||buckets[buckets.length-1];
+    const n=b.rows.length, w=b.rows.filter(r=>r.verdict==='worked').length;
+    if(!n)return null;
+    const p=w/n, pLo=_wilsonLo(w,n);
+    // EV в R при R:R 1.5. Безубыток на p=40%: 0.4×1.5−0.6=0
+    const ev=+(p*_EV_RR-(1-p)).toFixed(3);
+    const evLo=+(pLo*_EV_RR-(1-pLo)).toFixed(3);
+    return {n,w,p:+(p*100).toFixed(1),pLo:+(pLo*100).toFixed(1),ev,evLo,bucket:b.name,
+            be:+(100/(1+_EV_RR)).toFixed(0)};   // порог безубытка в %
   }
   function zoneReadBreakdown(field){
     const g={};
