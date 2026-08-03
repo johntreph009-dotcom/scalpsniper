@@ -1580,6 +1580,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           поля от боковой колонки ей больше не подходят. */
     .hdr-stick{margin:0 0 10px!important;border-radius:12px!important;
       padding:9px 11px!important}
+
+    /* 8. ШАПКА ГРАФИКА. «BICO/USDT» ломалось на «BICO/US / DT», а «live» на «liv/e»:
+          подписи сжимались флексом до min-content и рвались по слогам.
+          Тикер и статус — атомарные подписи, переносить их нельзя в принципе. */
+    #mcTfLabel,.mc-tf,#mcStatus{white-space:nowrap!important;flex:0 0 auto!important}
+    .mini-chart-hdr{flex-wrap:wrap!important;row-gap:6px!important;align-items:center!important}
+    .mc-tfbtn{padding:7px 10px!important;font-size:11px!important}   /* палец */
   }
   /* заметка больше не растягивается: место нужно шкале */
   .zl-note{flex:0 1 auto;min-width:0}
@@ -4829,6 +4836,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     ctx.strokeStyle=P.scaleLine;ctx.beginPath();ctx.moveTo(W-LBL,0);ctx.lineTo(W-LBL,H);ctx.stroke();
     _zoneHitAreas=[];
     let offTop=0,offBot=0; // stack counters for off-range zone markers
+    let offHidTop=0,offHidBot=0; // сколько зон свернули в счётчик, чтобы не залить график
     const plotW=W-LBL;
     // ── MMI Layer 2: тепловая карта РАСЧЁТНЫХ зон ликвидаций ×25/50/100 (модель от цен и объёмов окна, не факт) ──
     if(L.liq&&candles.length>10){
@@ -4905,7 +4913,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         }
       } else {
         // зона вне диапазона — прижатая тепловая метка-стрелка у края
+        // ПОТОЛОК СТОПКИ. Раньше метки копились без ограничения: на инструменте
+        // с 30 зонами почти все оказываются вне видимого окна, и десяток подписей
+        // ложился поверх свечей — то, что читается как «новогодняя ёлка».
+        // График показывает ЦЕНУ, а не список зон; список живёт в лестнице справа.
+        // Оставляем ближайшие к окну, остальные сворачиваем в счётчик.
         const above=px>maxP;
+        const CAP=mob?3:6;
+        if((above?offTop:offBot)>=CAP){ if(above)offHidTop++; else offHidBot++; return; }
         const slot=above?offTop++:offBot++;
         const y=above?(8+slot*15):(ph-10-slot*15);
         const dist=(currentPrice&&isFinite(currentPrice))?(px/currentPrice-1)*100:NaN;
@@ -4954,9 +4969,26 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         ctx.fillText(s,Math.min(plotW-30,Math.max(2,pad+ti*cw+cw/2-14)),ph-4);
       });
     }
+    // СВЁРНУТЫЕ ЗОНЫ — одной строкой, чтобы «скрыто» не читалось как «нет».
+    if(offHidTop||offHidBot){
+      ctx.font='8.5px JetBrains Mono,monospace';
+      ctx.fillStyle='rgba(150,155,165,.75)'; ctx.textAlign='left';
+      if(offHidTop)ctx.fillText('+'+offHidTop+' выше',4,8+offTop*15+3);
+      if(offHidBot)ctx.fillText('+'+offHidBot+' ниже',4,ph-10-offBot*15-6);
+    }
     // бейджи зон на шкале — поверх, с разрешением коллизий и коннекторами
     if(_zBadges.length){
       _zBadges.sort((a,b)=>a.y-b.y);
+      // ПОТОЛОК БЕЙДЖЕЙ. Разведение коллизий сдвигало каждый следующий на 17px,
+      // но при десятке зон стопка упиралась в край и клампилась — подписи
+      // ложились друг на друга. Считаем, сколько ИХ ВЛЕЗЕТ, и оставляем
+      // ближайшие к текущей цене: остальные всё равно не про этот момент.
+      const fit=Math.max(2,Math.floor((ph-18)/17));
+      if(_zBadges.length>fit){
+        const cy=(currentPrice&&isFinite(currentPrice))?toY(currentPrice):ph/2;
+        _zBadges=_zBadges.slice().sort((a,b)=>Math.abs(a.y-cy)-Math.abs(b.y-cy))
+                         .slice(0,fit).sort((a,b)=>a.y-b.y);
+      }
       let prevB=-99;
       _zBadges.forEach(b=>{
         const by=Math.max(9,Math.min(ph-9,Math.max(b.y,prevB+17))); prevB=by;
@@ -5001,7 +5033,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         if(sh){const y=toY(candles[i].h)-7;ctx.fillStyle='rgba(240,69,74,.85)';ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-3.5,y-6);ctx.lineTo(x+3.5,y-6);ctx.closePath();ctx.fill();}
         if(sl){const y=toY(candles[i].l)+7;ctx.fillStyle='rgba(63,185,80,.85)';ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-3.5,y+6);ctx.lineTo(x+3.5,y+6);ctx.closePath();ctx.fill();}
       }
-      activeZ.forEach(z=>{const px=+z.px;if(px<minP||px>maxP)return;const y=toY(px);
+      // Значки реакции ⤴/↩ рисуем ТОЛЬКО на широком экране. На телефоне они
+      // стоят вплотную к правой шкале и налезают на бейджи цен — трейдер
+      // назвал их «смайликами, наезжающими на интерфейс», и был прав:
+      // информации в них меньше, чем помех.
+      if(!mob)activeZ.forEach(z=>{const px=+z.px;if(px<minP||px>maxP)return;const y=toY(px);
         const gl=(z.kind==='break')?'⤴':(z.kind==='fade')?'↩':'·';
         ctx.font='11px sans-serif';ctx.fillStyle=(_MC_KIND[z.kind]||_MC_KIND.watch).line;
         ctx.fillText(gl,W-LBL-15,y+4);});
