@@ -304,6 +304,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .zones-fresh.stale #zonesFreshTxt{color:var(--danger)}
   .zf-refresh{background:rgba(255,122,24,.1);border:1px solid var(--accent-dim);color:var(--accent);font-family:inherit;font-size:10px;font-weight:700;padding:3px 9px;border-radius:4px;cursor:pointer;transition:all .12s;white-space:nowrap}
   .zf-refresh:hover{background:var(--accent-soft);border-color:var(--accent)}
+/* выключенное автообновление видно с одного взгляда: трейдер должен знать, что теперь всё на нём */
+.zf-refresh.off{background:rgba(150,150,140,.08);border-color:rgba(150,150,140,.35);color:var(--text-dim)}
   .zone-delta.near{color:var(--accent);border-color:var(--accent-dim)}
   .zc-acts{display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0;opacity:0;transition:opacity .14s}
   .zone-card:hover .zc-acts,.zone-card.expanded .zc-acts{opacity:1}
@@ -1370,6 +1372,48 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .limits-inline{display:flex;align-items:center;gap:6px;flex-shrink:0}
   .limits-inline input{width:58px;font-size:12px;padding:5px 8px;text-align:center}
   .dim-lbl{font-size:10px;color:var(--text-faint);white-space:nowrap}
+
+  /* ═══════════ МОБИЛЬНАЯ ОБРЕЗКА — ПРИЧИНА И ЛЕЧЕНИЕ (сегмент F, 2026-08-03) ═══════════
+     Симптом на видео: правый край интерфейса просто отсутствует. У активной зоны
+     видна ЦЕНА ЗОНЫ и обрезан СТОП — то, без чего вход запрещён.
+
+     Причина двойная.
+     1) `html,body{overflow-x:hidden}` из правки F1 убрал скачок масштаба, но заодно
+        сделал всё, что шире экрана, НЕДОСТУПНЫМ: не ужимается, не прокручивается —
+        отрезано. Мы вылечили симптом так, что потеряли содержимое.
+     2) Правка F2 («карточка в одну колонку») существовала, но НИЖЕ по файлу блок
+        @media(max-width:600px) возвращал `.lc-grid{1fr 1fr}`. Специфичность равная,
+        медиазапрос её не повышает — выигрывало то, что позже. На телефоне карточка
+        так и осталась двухколоночной, вторая колонка уехала за экран.
+        Ровно класс ошибки из AUDIT.md: правка, отменённая ниже по файлу.
+
+     Правило на будущее: этот блок — ПОСЛЕДНИЙ в таблице стилей. Мобильные правки
+     дописывать сюда, иначе их снова тихо перебьёт что-то ниже.
+
+     Принцип лечения: не «спрятать лишнее», а «не дать появиться лишнему».
+     Что можно перенести — переносим. Что нельзя (вкладки, график) — прокручиваем.
+     Обрезать не даём ничему. */
+  @media(max-width:720px){
+    /* 1. Карточка активной зоны — строго одна колонка. Перебивает блок ≤600px. */
+    .lc-grid{grid-template-columns:1fr;gap:9px}
+
+    /* 2. Длинные строки переносятся, а не уезжают вправо.
+          nowrap задавался под широкую колонку — на телефоне он и режет. */
+    .zl-note,.zone-note,.gs-panel b,.rb-item,.tag,.zone-size,.zone-delta,
+    .je-meta,.je-out,.tdd-meta,.vibe-vel,.vibe-near{white-space:normal}
+    .wrap,.wrap p,.zl-note,.zone-note,.lc-note{overflow-wrap:anywhere}
+
+    /* 3. Строки-контейнеры получают перенос. Раньше они были flex без wrap:
+          элементы не помещались и выталкивали друг друга за экран. */
+    .live-bar,.zl-row,.zl-divider,.day-ctx,.day-trend,.limits-inline{flex-wrap:wrap}
+
+    /* 4. Что переносить нельзя по смыслу — прокручивается внутри себя.
+          Вкладки хаба и кнопки ТФ должны оставаться одной лентой. */
+    .hub-tabs,.mc-tfs{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+    .hub-tabs::-webkit-scrollbar,.mc-tfs::-webkit-scrollbar{display:none}
+    .mc-tfs{margin-left:0;padding-bottom:2px}
+    .mc-tfbtn{flex:0 0 auto}
+  }
 </style>
 </head>
 <body>
@@ -1423,7 +1467,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
             <div class="ticker-dd" id="tickerDD"></div>
           </div>
         </div>
-        <div><span class="label">Таймфрейм</span><select id="tf" onchange="saveSettings()"><option>1m</option><option selected>5m</option><option>15m</option><option>1h</option><option>4h</option></select></div>
+        <div><span class="label">Таймфрейм</span><select id="tf" onchange="_tfChanged()"><option>1m</option><option selected>5m</option><option>15m</option><option>1h</option><option>4h</option></select></div>
         <div><span class="label">Плечо ×</span><input id="lev" type="number" value="1" min="1" oninput="saveSettings()"></div>
         <div><span class="label">Текущая цена <span id="pxLiveInd" style="font-size:9px;letter-spacing:.3px;font-family:'JetBrains Mono',monospace;color:var(--text-faint);vertical-align:middle">○</span></span><input id="price" type="number" placeholder="103450"></div>
       </div>
@@ -1622,7 +1666,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div class="t-side">
   <!-- ===== ZONES (shared, always visible) ===== -->
   <div class="section-title" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация зоны по времени · Клик по цене внутри карточки зоны копирует её в буфер</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
-  <div class="zones-fresh" id="zonesFresh"><span id="zonesFreshTxt"></span><button class="zf-plan" onclick="_prepToggle()" title="План: протоколы с фитом, чеклист входа, готовность — разворачивается на месте">◈ план</button><button class="zf-refresh" onclick="quickAnalyze()" title="Пересобрать зоны из стакана (без скринов)">↻ Обновить</button></div>
+  <div class="zones-fresh" id="zonesFresh"><span id="zonesFreshTxt"></span><button class="zf-plan" onclick="_prepToggle()" title="План: протоколы с фитом, чеклист входа, готовность — разворачивается на месте">◈ план</button><button class="zf-refresh" onclick="_schedRun('zones',true)" title="Пересобрать зоны из стакана сейчас (без скринов). Автообновление это не отменяет">↻ Обновить</button><button class="zf-refresh" id="schedBtn" onclick="_schedToggle()" title="Автообновление зон и разбора">⏱ авто</button></div>
   <div id="dayTrend" class="day-trend" style="display:none"></div>
   <div id="dayCtx" class="day-ctx" style="display:none"></div>
   <div id="mpChip" class="day-ctx" style="display:none" title="Max Pain ближайшей опционной экспирации: страйк, где продавцы опционов теряют меньше всего (данные открытого интереса). Гравитация — дистанция цены до уровня. Наблюдение, не прогноз."></div>
@@ -2333,7 +2377,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const dup=findDup(px);
       if(dup&&!confirm('Зона '+dup.px+' уже есть (отличие '+(Math.abs(dup.px-px)/px*100).toFixed(3)+'%). Добавить всё равно?'))return;
     }
-    const z={px,kind:document.getElementById('z_kind').value,note:document.getElementById('z_note').value.trim(),stop:parseFloat(document.getElementById('z_stop').value)||null,stars:zStars,exp:document.getElementById('z_exp')?.value||null,createdAt:Date.now()};
+    const z={px,kind:document.getElementById('z_kind').value,note:document.getElementById('z_note').value.trim(),stop:parseFloat(document.getElementById('z_stop').value)||null,stars:zStars,exp:document.getElementById('z_exp')?.value||null,createdAt:Date.now(),origin:'manual'};
     if(editingIdx>=0){z.proto=zones[editingIdx].proto||null;zones[editingIdx]=z;editingIdx=-1;}
     else{zones.push(z);}
     zones.sort((a,b)=>b.px-a.px);
@@ -2385,7 +2429,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       let stop=null;
       if(parts[3]){const s=cleanNum(parts[3]);if(s&&isFinite(s))stop=s;}
       const proto=normProto(parts[4]);
-      zones.push({px,kind,note,stop,proto,createdAt:Date.now()});
+      zones.push({px,kind,note,stop,proto,createdAt:Date.now(),origin:'manual'});   // вставка из разбора — решение трейдера, автопересчёт её не трогает
       added++;
     });
     zones.sort((a,b)=>b.px-a.px);
@@ -2435,6 +2479,35 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     else{btn.textContent='+ Зона';btn.classList.remove('saving');cancel.style.display='none';}
   }
   function delZone(i){if(editingIdx===i)cancelEdit();zones.splice(i,1);save();renderZones();renderReadinessScore();}
+  // ── СЛИЯНИЕ РАЗМЕТКИ ──────────────────────────────────────────────────────
+  // Раньше quickAnalyze делал `zones = z` — полное затирание. Пока кнопку жал трейдер,
+  // это было осознанным действием. С автопересчётом (смена ТФ, таймер) то же самое
+  // стирало бы план посреди сессии: вставку из разбора, ручные уровни, историю закрытых.
+  // Правило: автопересчёт владеет ТОЛЬКО тем, что сам и создал.
+  //   origin:'auto'   — кандидат из стакана, машина вправе его заменить;
+  //   origin:'manual' — ручной ввод и вставка из разбора, неприкосновенно;
+  //   origin отсутствует (зоны, размеченные до этой правки) — считаем manual.
+  //   Защитный умолчание, а не удобный: неизвестное происхождение не повод стирать план.
+  // Сработавшие и закрытые auto-зоны тоже остаются — это уже не кандидат, а факт сессии.
+  function _zKeep(z){
+    if(!z)return false;
+    if((z.origin||'manual')!=='auto')return true;          // ручное и legacy
+    return !!(z.closed||z.expired||z.triggeredAt);          // auto, но уже в работе/истории
+  }
+  let _zMergeStat={kept:0,added:0,skipped:0};
+  function _zMerge(fresh){
+    const keep=(zones||[]).filter(_zKeep);
+    // свежий кандидат на уровне, который уже размечен, не дублируется:
+    // порог тот же, что у ручной проверки дублей (findDup, 5 bps)
+    // >0, а не просто isFinite: +null === 0 и isFinite(0) истинно, так что проверка
+    // на конечность пропускала зону с нулевой ценой — и дальше деление на неё давало
+    // Infinity, из-за чего мусорный уровень ещё и считался «далёким от всех».
+    const add=(fresh||[]).filter(f=>+f.px>0&&isFinite(+f.px)&&keep.every(k=>Math.abs(+k.px-+f.px)/(+f.px)>0.0005));
+    _zMergeStat={kept:keep.length,added:add.length,skipped:(fresh||[]).length-add.length};
+    const out=keep.concat(add);
+    out.sort((a,b)=>b.px-a.px);
+    return out;
+  }
   function activeZoneIdx(){
     const lp=parseFloat(document.getElementById('livePrice')?.value);
     if(!lp||!zones.length)return -1;
@@ -2567,7 +2640,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         </div>
       </div>`;
     });
+    // Список пересобирается целиком — при автообновлении это уводило прокрутку
+    // в начало посреди чтения плана. Полей ввода в карточках нет, фокусу ничего
+    // не грозит; восстанавливаем только позицию скролла — своего и родительского.
+    const _sc=wrap.scrollTop, _psc=wrap.parentElement?wrap.parentElement.scrollTop:0;
     wrap.innerHTML=html;
+    if(_sc)wrap.scrollTop=_sc;
+    if(_psc&&wrap.parentElement)wrap.parentElement.scrollTop=_psc;
     renderZonesFresh();
     renderZoneRead();
   }
@@ -4856,9 +4935,27 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function setChartTf(tf){
     const sel=document.getElementById('tf');
     if(sel)sel.value=tf;
+    _tfChanged();
+  }
+  // ── СМЕНА ТАЙМФРЕЙМА → ПЕРЕСЧЁТ ЗОН (сегмент C3) ──────────────────────────
+  // Было: onchange="saveSettings()" и всё. График догонял сам через свой 15-секундный
+  // таймер, а зоны не пересчитывались НИКОГДА — хотя quickAnalyze масштабирует под ТФ
+  // и диапазон (within), и шаг корзины, и стоп (stopK). Разметка 1m на графике 4h
+  // выглядела рабочей, будучи мусором. Это и раздражало больше всего.
+  // Пересчёт здесь безусловный: смена ТФ — явное действие трейдера, а не фон.
+  // Дебаунс 600 мс — щёлканье 1m→5m→15m→1h не должно запускать четыре разбора.
+  let _tfDeb=null, _tfPrev=null;
+  function _tfChanged(){
     saveSettings();
-    _markChartTf(tf);
+    _markChartTf();
     _chartRefresh();
+    const tf=document.getElementById('tf')?.value||null;
+    if(tf===_tfPrev)return;              // saveSettings мог дёрнуть нас без реальной смены
+    _tfPrev=tf;
+    const st=document.getElementById('quickStatus');
+    if(st)st.textContent='⏱ ТФ '+tf+' — пересчитываю зоны…';
+    if(_tfDeb)clearTimeout(_tfDeb);
+    _tfDeb=setTimeout(()=>{ _tfDeb=null; _schedRun('zones',true); },600);
   }
   function _markChartTf(tf){
     tf=tf||document.getElementById('tf')?.value;
@@ -5262,15 +5359,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       asks.forEach(o=>{ let kind,proto,note,long;
         if(tdir==='up'&&o===nearestAsk){kind='break';proto='SQUEEZE';long=true;note='пробой ask-стены '+fmtM(o.n)+' по тренду↑';}
         else{kind='fade';proto='VALENTINI';long=false;note='отбой ask-стены '+fmtM(o.n)+(tdir==='up'?' (контр-тренд)':tdir==='down'?' по тренду↓':'');}
-        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*(long?(1-stopK):(1+stopK))),proto,stars:fStars(o,long),createdAt:Date.now()}); }); // стоп по НАПРАВЛЕНИЮ сделки и масштабу ТФ
+        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*(long?(1-stopK):(1+stopK))),proto,stars:fStars(o,long),createdAt:Date.now(),origin:'auto'}); }); // стоп по НАПРАВЛЕНИЮ сделки и масштабу ТФ
       bids.forEach(o=>{ let kind,proto,note,long;
         if(tdir==='down'&&o===nearestBid){kind='break';proto='SQUEEZE';long=false;note='пробой bid-стены '+fmtM(o.n)+' по тренду↓';}
         else{kind='fade';proto='VALENTINI';long=true;note='отбой bid-стены '+fmtM(o.n)+(tdir==='down'?' (контр-тренд)':tdir==='up'?' по тренду↑':'');}
-        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*(long?(1-stopK):(1+stopK))),proto,stars:fStars(o,long),createdAt:Date.now()}); });
+        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*(long?(1-stopK):(1+stopK))),proto,stars:fStars(o,long),createdAt:Date.now(),origin:'auto'}); });
       // структура выбранного ТФ: экстремумы периода как watch-уровни (самодостаточность старших ТФ, где стакан мелок)
       const farFromAll=p=>z.every(zz=>Math.abs(zz.px-p)/p>0.0015);
-      if(swH&&swH>price*1.003&&swH<=price*(1+within)&&farFromAll(swH))z.push({px:_rpx(swH),kind:'watch',note:'хай периода '+tf+' — структурный уровень',stop:null,proto:null,stars:2,createdAt:Date.now()});
-      if(swL&&swL<price*0.997&&swL>=price*(1-within)&&farFromAll(swL))z.push({px:_rpx(swL),kind:'watch',note:'лоу периода '+tf+' — структурный уровень',stop:null,proto:null,stars:2,createdAt:Date.now()});
+      if(swH&&swH>price*1.003&&swH<=price*(1+within)&&farFromAll(swH))z.push({px:_rpx(swH),kind:'watch',note:'хай периода '+tf+' — структурный уровень',stop:null,proto:null,stars:2,createdAt:Date.now(),origin:'auto'});
+      if(swL&&swL<price*0.997&&swL>=price*(1-within)&&farFromAll(swL))z.push({px:_rpx(swL),kind:'watch',note:'лоу периода '+tf+' — структурный уровень',stop:null,proto:null,stars:2,createdAt:Date.now(),origin:'auto'});
       // пространство вариантов в разметке: у боевой зоны сразу виден альтернативный сценарий —
       // что произойдёт, если рынок опровергнет основной (fade ↔ пробой одной и той же стены).
       z.forEach(o=>{ if(o.kind==='fade')o.note+=' · если стену съедят → сценарий SQUEEZE (пробой)';
@@ -5278,26 +5375,42 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       z.sort((a,c)=>c.px-a.px);
       const topZ=z.slice().sort((a,c)=>(c.stars-a.stars)||(Math.abs(a.px-price)-Math.abs(c.px-price)))[0];
       _lastQuickPrice=price;
-      zones=z; save(); if(topZ){if(typeof protoCheckState!=='undefined')protoCheckState[topZ.proto]=null; if(typeof selectProto==='function')selectProto(topZ.proto);} renderZones(); if(typeof renderLadder==='function')renderLadder(); recalc(); renderReadinessScore(); if(typeof autoEvalZones==='function')autoEvalZones({force:true});
+      zones=_zMerge(z); save(); if(topZ){if(typeof protoCheckState!=='undefined')protoCheckState[topZ.proto]=null; if(typeof selectProto==='function')selectProto(topZ.proto);} renderZones(); if(typeof renderLadder==='function')renderLadder(); recalc(); renderReadinessScore(); if(typeof autoEvalZones==='function')autoEvalZones({force:true});
       _setZonesFresh(Date.now());
       renderDayTrend(); renderDayCtx();
       const mix=[...new Set(z.map(x=>x.proto))].join('/');
       const trTxt=tdir==='up'?'тренд↑':tdir==='down'?'тренд↓':'рейндж';
       const cvTxt=cvdDir==='buy'?'CVD↑':cvdDir==='sell'?'CVD↓':'CVD≈';
-      if(st)st.textContent='✓ '+raw+': '+z.length+' зон ('+mix+') · ТФ '+tf+' ±'+(within*100).toFixed(1)+'% · '+trTxt+'×'+trend.strength+' · '+cvTxt+' · RVOL '+ctx.rvol.val+'× · цена '+price+' · POC '+(poc??'н/д')+(funding!=null?' · фанд '+funding+'%':'')+' · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+      const _ms=_zMergeStat;
+      const _mTxt=_ms.kept?zones.length+' зон (+'+_ms.added+' из стакана, '+_ms.kept+' своих сохранено)':zones.length+' зон';
+      if(st)st.textContent='✓ '+raw+': '+_mTxt+' ('+mix+') · ТФ '+tf+' ±'+(within*100).toFixed(1)+'% · '+trTxt+'×'+trend.strength+' · '+cvTxt+' · RVOL '+ctx.rvol.val+'× · цена '+price+' · POC '+(poc??'н/д')+(funding!=null?' · фанд '+funding+'%':'')+' · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
     }catch(e){ if(st)st.textContent='⚠ '+sym+': '+(e.message||'ошибка')+' (пара есть на бирже?)'; }
     finally{ _quickBusy=false; if(btn){btn.disabled=false;btn.textContent=oldT||'⚡ Обновить зоны (без скринов)';} }
   }
   // ── свежесть зон ──
   function _setZonesFresh(ts){ try{const m=JSON.parse(localStorage.getItem('msa_zones_fresh_v1')||'{}'); m[_tkKey()]=ts; localStorage.setItem('msa_zones_fresh_v1',JSON.stringify(m));}catch(e){} renderZonesFresh(); }
   function _getZonesFresh(){ try{return (JSON.parse(localStorage.getItem('msa_zones_fresh_v1')||'{}'))[_tkKey()]||null;}catch(e){return null;} }
+  // Автообновление, о котором не сказано, ощущается как самоуправство: зоны меняются,
+  // а почему — непонятно. Плашка всегда отвечает на «когда само» и «почему молчит».
+  function _schedHint(){
+    try{
+      if(typeof _schedJobs==='undefined')return '';
+      if(!_schedOn)return ' · авто выключено';
+      const why=_schedBlocked(); if(why)return ' · авто на паузе: '+why;
+      if(typeof _zAutoWanted==='function'&&!_zAutoWanted())return ' · план ручной — авто не вмешивается';
+      const ms=_schedNextIn('zones'); if(ms==null)return '';
+      const m=Math.ceil(ms/60000);
+      return ' · авто через '+(m<=1?'<1':m)+' мин';
+    }catch(e){return '';}
+  }
   function renderZonesFresh(){
     const wrap=document.getElementById('zonesFresh'), txt=document.getElementById('zonesFreshTxt'); if(!wrap||!txt)return;
-    if(!zones.length){ wrap.className='zones-fresh'; txt.textContent='зон нет — «↻ Обновить» соберёт из стакана'; return; }
+    if(!zones.length){ wrap.className='zones-fresh'; txt.textContent='зон нет — «↻ Обновить» соберёт из стакана'+_schedHint(); return; }
     const ts=_getZonesFresh(), lp=parseFloat(document.getElementById('livePrice')?.value)||_lastQuickPrice||null;
     let cls='zones-fresh', parts=[];
     if(ts){const min=Math.floor((Date.now()-ts)/60000); parts.push('обновлено '+(min<1?'<1':min)+' мин назад'); cls+=min<10?' fresh':min<30?' aging':' stale';}
     else parts.push('разметка вручную/из разбора');
+    const hint=_schedHint(); if(hint)parts.push(hint.replace(/^ · /,''));
     if(lp){const pxs=zones.filter(z=>!z.closed&&!z.expired).map(z=>+z.px); if(pxs.length){const lo=Math.min(...pxs),hi=Math.max(...pxs),pad=(hi-lo)*0.1||lo*0.005; if(lp>hi+pad||lp<lo-pad){parts.push('⚠ цена вне диапазона зон'); cls='zones-fresh stale';}}}
     wrap.className=cls; txt.textContent=parts.join(' · ');
   }
@@ -7102,6 +7215,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _ap.today.n++; if(bps>0)_ap.today.w++; _ap.today.sum=+(_ap.today.sum+bps).toFixed(1);
     _ap.pos=null; _ap.cdUntil=Date.now()+AP_COOLDOWN;
     if(typeof _apLearn==='function')setTimeout(_apLearn,50);   // после каждой сделки ядро пересматривает настройку сегмента
+    // …а разбор до сих пор ждал кнопки: ядро уже подстроилось, а на экране висели
+    // прошлые цифры. Обновляем показ, если панель открыта — считать в закрытую вкладку смысла нет.
+    setTimeout(()=>{ try{ if(document.getElementById('apAudit')?.offsetParent&&typeof _schedRun==='function')_schedRun('audit',true); }catch(e){} },300);
     if(typeof _proc==='function')_proc('выход: '+p.proto+' ('+({tp:'тейк',stop:'стоп',time:'время',cancel:'отмена стратегии',manual:'вручную'}[reason]||reason)+') <b>'+(bps>=0?'+':'')+bps+' bps</b> за '+rec.hold+'с',bps>=0?'pr-up':'pr-dn');
   }
   function _apToggle(){
@@ -7412,6 +7528,144 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }
   }
   pollContextEngine(); setInterval(pollContextEngine,60e3);
+
+  // ═══════════ ЕДИНЫЙ ПЛАНИРОВЩИК МЕДЛЕННЫХ ИСТОЧНИКОВ (сегмент C2) ═══════════
+  // Быстрые потоки (цена 5с, график 15с, воркер стакана, сетка 250мс) НЕ трогаю:
+  // они работают, уже загейчены по document.hidden и переписывать их — риск ради
+  // симметрии. Планировщик забирает ровно то, что до сих пор жило только на кнопке:
+  // зоны, паспорт монеты, разбор журнала. Один тик на всех, у каждого свой период.
+  const _SCHED_KEY='msa_sched_v1';
+  let _schedOn=true; try{const v=localStorage.getItem(_SCHED_KEY); if(v!=null)_schedOn=(v==='1');}catch(e){}
+  const _schedJobs={};
+  // want() — условие, при котором ФОНОВЫЙ прогон уместен. Ручной и по смене ТФ
+  // его не спрашивают: трейдер попросил явно, значит хочет.
+  function _schedDef(name,every,fn,want){ _schedJobs[name]={every,fn,want:want||null,last:0,busy:false,err:0}; }
+
+  // ── Почему автообновление иногда обязано промолчать ──────────────────────
+  // Дело не в мигании. closeZoneIdx и editingIdx — это ИНДЕКСЫ в массиве zones.
+  // Слияние пересортировывает массив, поэтому пересчёт под открытым окном закрытия
+  // или под формой правки записал бы результат В ЧУЖУЮ ЗОНУ. Это порча плана,
+  // а не косметика — поэтому блокировка жёсткая, а не «постараемся не мешать».
+  function _schedBlocked(){
+    try{
+      if(typeof editingIdx!=='undefined'&&editingIdx>=0)return 'правится зона';
+      if(typeof closeZoneIdx!=='undefined'&&closeZoneIdx>=0)return 'открыто закрытие сделки';
+      for(const id of ['posModal','closeModal']){
+        const m=document.getElementById(id);
+        if(m&&!m.classList.contains('hide'))return 'открыто окно';
+      }
+      const pi=document.getElementById('pasteIn');
+      if(pi&&pi.value.trim())return 'в поле вставки есть неразобранный текст';
+    }catch(e){}
+    return null;
+  }
+  function _schedRun(name,force){
+    const j=_schedJobs[name]; if(!j)return;
+    if(j.busy)return;
+    // Блокировка по индексам действует ВСЕГДА, включая форс: она про целостность
+    // плана, а не про вежливость. Форсированный прогон не выбрасываем, а откладываем —
+    // иначе смена ТФ при открытом окне закрытия молча ничего бы не сделала.
+    const why=_schedBlocked();
+    if(why){ if(force)setTimeout(()=>_schedRun(name,true),1500); return; }
+    if(!force){
+      if(!_schedOn||document.hidden)return;
+      if(j.want&&!j.want())return;
+    }
+    j.busy=true; j.last=Date.now();
+    Promise.resolve().then(j.fn)
+      .then(()=>{j.err=0;})
+      .catch(()=>{ j.err++; })                       // сбой не должен глушить планировщик целиком
+      .then(()=>{ j.busy=false; if(typeof renderZonesFresh==='function')try{renderZonesFresh();}catch(e){} });
+  }
+  function _schedTick(){
+    if(document.hidden)return;
+    try{ if(typeof renderZonesFresh==='function')renderZonesFresh(); }catch(e){}   // счётчик «авто через N мин» должен идти
+    if(!_schedOn)return;
+    if(_schedBlocked())return;
+    const now=Date.now();
+    Object.keys(_schedJobs).forEach(n=>{
+      const j=_schedJobs[n];
+      // после сбоя период растягивается (2×, 4×, максимум 8×): мёртвый источник
+      // не должен долбиться каждые полминуты и жечь сеть
+      const every=j.every*Math.min(8,Math.pow(2,j.err));
+      if(now-j.last>=every)_schedRun(n);
+    });
+  }
+  function _schedNextIn(name){
+    const j=_schedJobs[name]; if(!j||!_schedOn)return null;
+    if(!j.last)return 0;
+    return Math.max(0,j.every*Math.min(8,Math.pow(2,j.err))-(Date.now()-j.last));
+  }
+  function _schedToggle(){
+    _schedOn=!_schedOn;
+    try{localStorage.setItem(_SCHED_KEY,_schedOn?'1':'0');}catch(e){}
+    if(typeof _proc==='function')_proc('автообновление '+(_schedOn?'включено':'выключено — обновляй кнопками'),_schedOn?'':'pr-warn');
+    if(typeof renderZonesFresh==='function')renderZonesFresh();
+    const b=document.getElementById('schedBtn');
+    if(b){b.textContent=_schedOn?'⏱ авто':'⏸ авто'; b.classList.toggle('off',!_schedOn); b.title=_schedOn?'автообновление включено — нажми, чтобы обновлять только вручную':'автообновление выключено';}
+  }
+  // Периоды. Зоны — 5 мин: чаще стакан не успевает перестроиться, и мы бы просто
+  // дёргали разметку. Паспорт — часовые данные, часа хватает. Разбор — раз в 15 мин
+  // плюс явный прогон после каждой закрытой сделки (см. хук в _apClose).
+  // Таймер зон намеренно НЕ лезет в чужую разметку. Если план собран руками или
+  // вставкой из разбора и ни одной auto-зоны в нём нет — трейдер работает сам,
+  // и подсыпать ему каждые 5 минут десяток кандидатов из стакана значит мусорить.
+  // Молчим. Пустой список — другое дело: защищать нечего, наполняем.
+  // Смена ТФ — явное действие трейдера, там пересчёт идёт всегда (см. _tfChanged).
+  function _zAutoWanted(){
+    const live=(zones||[]).filter(z=>!z.closed&&!z.expired);
+    if(!live.length)return true;
+    return live.some(z=>(z.origin||'manual')==='auto');
+  }
+  _schedDef('zones', 5*60e3, ()=>{ if(_quickBusy)return; return quickAnalyze(); }, _zAutoWanted);
+  // Паспорт и разбор считаются по всему архиву — фоном их гоняем только когда
+  // вкладка хаба реально открыта. Считать то, чего никто не видит, — жечь батарею.
+  _schedDef('passport', 60*60e3, ()=>_cpRender(false), ()=>!!document.getElementById('cpPanel')?.offsetParent);
+  _schedDef('audit',    15*60e3, ()=>_apAudit(),        ()=>!!document.getElementById('apAudit')?.offsetParent);
+  setInterval(_schedTick,20e3);
+  // ═══════════ ДЕТЕКТОР ГОРИЗОНТАЛЬНОЙ ОБРЕЗКИ (сегмент F) ═══════════
+  // Правки F1–F3 делались вслепую — эмулятор не воспроизводит поведение мобильного
+  // браузера — и в итоге одна из них была молча отменена правилом ниже по файлу.
+  // Проверить это можно только на реальном телефоне, поэтому телефон и становится
+  // измерительным прибором: страница сама сообщает, что у неё вылезает за экран.
+  // Отчёт идёт в Процессинг — новой панели не завожу, лишний экран тут не нужен.
+  function _ovScan(){
+    const W=document.documentElement.clientWidth, hits={};
+    document.querySelectorAll('.wrap *').forEach(el=>{
+      if(!el.offsetParent)return;                       // скрытое не меряем
+      const r=el.getBoundingClientRect();
+      if(r.width<=0)return;
+      const over=Math.round(r.right-W);
+      if(over<=1)return;
+      // элемент со своей горизонтальной прокруткой — это решение, а не дефект
+      const ox=getComputedStyle(el).overflowX;
+      if(/auto|scroll/.test(ox)&&el.scrollWidth-el.clientWidth>1)return;
+      // если родитель вылезает тоже — виноват он, ребёнок лишь следствие
+      const p=el.parentElement;
+      if(p&&p.classList&&!p.classList.contains('wrap')&&p.getBoundingClientRect().right-W>1)return;
+      const cn=(typeof el.className==='string')?el.className.trim():'';
+      const key=cn?'.'+cn.split(/\s+/).slice(0,2).join('.'):el.tagName.toLowerCase();
+      hits[key]=Math.max(hits[key]||0,over);
+    });
+    return Object.entries(hits).sort((a,b)=>b[1]-a[1]);
+  }
+  function _ovReport(){
+    if(document.documentElement.clientWidth>720)return;   // претензия про телефон
+    const h=_ovScan();
+    if(typeof _proc!=='function')return;
+    if(!h.length){ _proc('вёрстка: обрезки по горизонтали нет ('+document.documentElement.clientWidth+'px)'); return; }
+    _proc('вёрстка: за экран вылезает — '+h.slice(0,6).map(x=>x[0]+' +'+x[1]+'px').join(' · '),'pr-warn');
+  }
+  let _ovDeb=null;
+  addEventListener('resize',()=>{ if(_ovDeb)clearTimeout(_ovDeb); _ovDeb=setTimeout(_ovReport,800); });
+  setTimeout(_ovReport,3000);
+
+  // Стартовое состояние кнопки: выключенное автообновление переживает перезагрузку,
+  // и кнопка обязана это показывать — иначе трейдер решит, что оно работает.
+  (function(){ const b=document.getElementById('schedBtn'); if(!b)return;
+    b.textContent=_schedOn?'⏱ авто':'⏸ авто'; b.classList.toggle('off',!_schedOn);
+    try{ if(typeof renderZonesFresh==='function')renderZonesFresh(); }catch(e){} })();
+
   // ── Тир 2: вернулись на вкладку → немедленный refresh (интервалы живы, но пропускали тики при document.hidden) ──
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden){ if(typeof _whStop==='function')_whStop(); if(typeof _liqStop==='function')_liqStop(); return; }
@@ -7421,6 +7675,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{ if(typeof _chartRefresh==='function')_chartRefresh(); }catch(e){}
     try{ if((phase==='live'||phase==='demo')&&typeof _whStart==='function')_whStart(_symFromTicker(_tkKey())); }catch(e){}
     try{ if((phase==='live'||phase==='demo')&&typeof _liqStart==='function')_liqStart(); }catch(e){}
+    try{ if(typeof _schedTick==='function')_schedTick(); }catch(e){}
   });
 
   // ── Дрилл: 5-минутная сессия с итоговой карточкой фактов ──
