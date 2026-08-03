@@ -3265,7 +3265,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     return {score:Math.round(parts.reduce((s,p)=>s+p.w*p.v,0)/W), parts:parts};
   }
   function renderJournal(){
-    const trades=journal.filter(e=>e.outcome!=='skip');
+    // РАЗДЕЛЕНИЕ РЕАЛЬНОГО И ВИРТУАЛЬНОГО. Записи движка живут в общем журнале
+    // (сегмент src), но в ИТОГ не попадают, пока движок виртуальный: иначе
+    // трек-рекорд покажет прибыль, которой не было на счету. Когда автопилот
+    // начнёт выставлять реальные ордера — у записей будет virtual:false, и они
+    // войдут в общую сумму автоматически, без правок здесь.
+    const allTrades=journal.filter(e=>e.outcome!=='skip');
+    const trades=allTrades.filter(e=>!e.virtual);
+    const virt=allTrades.filter(e=>e.virtual);
+    const virtPnl=virt.reduce((s,e)=>s+(e.pnl||0),0);
     const wins=trades.filter(e=>e.outcome==='win');
     const totalPnl=trades.reduce((s,e)=>s+(e.pnl||0),0);
     const discRated=journal.filter(e=>e.plan!=null); // импорт с биржи план не знает — не разбавляет дисциплину
@@ -3275,7 +3283,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const pnlEl=document.getElementById('jTotalPnl');
     pnlEl.textContent=journal.length?(totalPnl>0?'+':'')+totalPnl.toFixed(2)+' USDT':'—';
     pnlEl.className='jsv '+pnlClass(totalPnl);
-    document.getElementById('jPnlSub').textContent=trades.length?`${trades.length} сделок (вкл. в расчёт)`:'нет сделок';
+    // виртуальные показываем рядом, но отдельной строкой — видно и не смешано
+    document.getElementById('jPnlSub').textContent=
+      (trades.length?`${trades.length} реальных сделок`:'реальных сделок нет')
+      +(virt.length?` · движок: ${virt.length} вирт. ${(virtPnl>0?'+':'')+virtPnl.toFixed(2)} USDT (в итог не входит)`:'');
     const tcEl=document.getElementById('jTradeCount');
     tcEl.textContent=journal.length?trades.length+'  /  '+(journal.length-trades.length):'—';
     tcEl.className='jsv '+(journal.length?'':'dim');
@@ -6400,7 +6411,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const _dt=document.getElementById('demoTicker'); if(_dt&&document.activeElement!==_dt)_dt.value=_raw;
     }catch(err){ const r=document.getElementById('dlRate'); if(r)r.textContent='worker N/A'; }
     _dlStartedAt=Date.now(); _dlLastSnap=Date.now(); _dlWatchdog(); try{_hubInit();}catch(e){}
-    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dldRenderHist(); _dldRenderBtn(); _dlSetRegime(_dlRegime,true); _bgStart();
+    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dldRenderBtn(); _dlSetRegime(_dlRegime,true); _bgStart();
     _dlLastSec=performance.now(); _dlFrames=0; _dlEngLast=0;
     const loop=ts=>{ if(!_dlRunning)return; _dlDraw(); _dlDrawPrice(); _dlFrames++;
       if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); }
@@ -6420,12 +6431,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(_ap.on)_apToggle(); // автопилот (и его сетка) гаснут вместе с тренажёром
     _gsStop(); // страховка на случай осиротевшей сетки
     if(typeof _bgStop==='function')_bgStop();
-    if(_dlDrill){ _dlDrill=null; _dldRenderBtn(); const c=document.getElementById('dldCard'); if(c){c.textContent='дрилл прерван (выход из демо)';c.className='dld-card';} } }
+  }
   window.addEventListener('resize',()=>{ if(_dlRunning){_dlSetupCanvas();_dlSetupPriceCanvas();} });
 
   // ── Модуль 3: гистерезис + стейт-машина режимов ──
   function _dlEngine(now){
-    _dlResolveOutcomes(); _dldTick();
+    _dlResolveOutcomes();
     const m=_dlModel; if(!m)return;
     _dlUpdateBar(m);
     const dom=Math.max(m.pUp,m.pDown);
@@ -6462,7 +6473,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     let sp=null; const s=_dlSnap;
     if(s){ const n=s[1]|0; if(n>0){ const bA=s[2], bB=s[2+2*n]; if(bA>0&&bB>0) sp=+(((bA-bB)/((bA+bB)/2))*10000).toFixed(2); } }
     const _e={side:side,px:px,ts:Date.now(),regime:_dlRegime,mdir:m?m.dir:null,sp:sp};
-    if(_dlDrill&&!_dlDrill.fin)_e.drill=_dlDrill.id;
+    
     _dlJournal.push(_e); _dlSaveJournal();
     try{ if(navigator.vibrate)navigator.vibrate(side==='long'?20:[15,25,15]); }catch(e){}
     _dlRenderTrades(side,px,warn);
@@ -7346,9 +7357,47 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }catch(e){console.warn('autopilot:',e&&e.message);}
   }
   // итог сеточной фазы → общий счёт и сегмент-статистика под ключом GRID
+  // ═══════════ АВТОПИЛОТ → ОБЩИЙ ЖУРНАЛ ═══════════
+  // Задача трейдера: вести сделки движка в общем журнале, сегментируя по типу
+  // открытия. Поле src в журнале уже существует (им помечался импорт с биржи) —
+  // используем его же: 'manual' | 'autopilot' | 'grid' | биржевой импорт.
+  //
+  // ЧЕСТНОСТЬ ИТОГА. Сегодня движок ВИРТУАЛЬНЫЙ: ордера не выставляются.
+  // Смешать его результат с реальным в одну сумму — значит получить трек-рекорд,
+  // которого не было. Поэтому у записи есть флаг virtual, и общий P&L считает
+  // только реальные сделки, а виртуальные показывает отдельной строкой.
+  // Когда движок начнёт торговать по-настоящему, достаточно писать virtual:false —
+  // сегментация и журнал уже готовы, менять ничего не придётся.
+  function _apToJournal(rec,kind){
+    try{
+      if(!rec||rec.bps==null)return;
+      const notional=(typeof _apNotional==='function')?_apNotional():0;
+      const pnl=+((rec.bps/1e4)*notional).toFixed(2);      // bps → USDT по номиналу движка
+      const tk=(typeof _tkKey==='function'?_tkKey():'BTC/USDT').toUpperCase();
+      journal.unshift({
+        id:Date.now()+Math.floor(Math.random()*1000),
+        ts:new Date(rec.t||Date.now()).toISOString(),
+        ticker:tk, tf:document.getElementById('tf')?.value||null,
+        protocol:rec.proto||null,
+        src:kind,                       // ← сегмент: чем открыта сделка
+        virtual:true,                   // движок пока не торгует реальными ордерами
+        zPx:rec.entry||null, zKind:'stand',
+        zNote:(kind==='grid'?'сетка':'автопилот')+' · '+(rec.proto||'')+(rec.reason?' · '+rec.reason:'')
+              +(rec.pairs?' · пар '+rec.pairs:'')+' · '+rec.bps+' bps',
+        zStop:null, outcome:rec.bps>0?'win':'loss', side:rec.side==='—'?null:rec.side,
+        entryPx:rec.entry||null, notional:notional, pnl:pnl,
+        bps:rec.bps, seg:rec.seg||null, hold:rec.hold||null,
+        plan:null,                      // движок не «следовал плану» — дисциплину не разбавляет
+        note:'', grade:null, stars:2, triggered:true
+      });
+      saveJournal();
+      if(typeof renderJournal==='function')renderJournal();
+    }catch(e){ try{console.warn('[scalpsniper] _apToJournal:',e&&e.message);}catch(_){} }
+  }
   function _apLogGrid(st,m){
     const rec={t:Date.now(),proto:'GRID',side:'—',entry:0,exit:0,bps:st.net,seg:_apSegKey(m.f),reason:'mode',hold:st.dur,fills:st.fills,pairs:st.pairs,fee:AP_FEE};
     _apArchive(rec);
+    _apToJournal(rec,'grid');                       // сетка — в общий журнал, сегмент «grid»
     _ap.log.push(rec); if(_ap.log.length>300)_ap.log=_ap.log.slice(-300);
     const sg=_ap.seg[rec.seg]=_ap.seg[rec.seg]||{};
     const s=sg.GRID=sg.GRID||{n:0,w:0,sum:0};
@@ -7424,6 +7473,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // (фит не логировался вообще → порог подбирать было не на чем; издержки менялись → старые bps несравнимы с новыми)
     const rec={t:Date.now(),proto:p.proto,side:p.side,entry:+p.entry.toFixed(6),exit:+px.toFixed(6),bps,seg:p.seg,reason,hold:Math.round((Date.now()-p.t0)/1e3),part:!!p.part,conf:p.conf||[],against:p.against||[],fit:p.fit!=null?p.fit:null,fee:AP_FEE};
     _apArchive(rec);                                   // полная копия в IDB — окно ниже обрезается, архив нет
+    _apToJournal(rec,'autopilot');                     // и в общий журнал, сегмент «autopilot»
     _ap.log.push(rec); if(_ap.log.length>300)_ap.log=_ap.log.slice(-300);
     const sg=_ap.seg[p.seg]=_ap.seg[p.seg]||{};
     const st=sg[p.proto]=sg[p.proto]||{n:0,w:0,sum:0};
@@ -8013,53 +8063,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{ if(typeof _schedTick==='function')_schedTick(); }catch(e){}
   });
 
-  // ── Дрилл: 5-минутная сессия с итоговой карточкой фактов ──
-  const DLD_KEY='msa_demo_drills_v1';
-  let _dlDrill=null; // {id,end,fin}
-  function _dldToggle(){
-    if(_dlDrill){ if(!_dlDrill.fin)_dlDrill.end=Date.now(); return; } // ⏹ — досрочный стоп, замеры дожидаемся
-    _dlDrill={id:Date.now(),end:Date.now()+300000,fin:false};
-    const c=document.getElementById('dldCard'); if(c){c.textContent='';c.className='dld-card';}
-    _dldRenderBtn();
-  }
-  function _dldRenderBtn(){
-    const b=document.getElementById('dldBtn'); if(!b)return;
-    if(!_dlDrill){ b.textContent='▶ дрилл 5:00'; b.classList.remove('on'); return; }
-    if(_dlDrill.fin){ b.textContent='⏳ замеры…'; b.classList.add('on'); return; }
-    const left=Math.max(0,_dlDrill.end-Date.now()), m=Math.floor(left/60000), s=Math.floor(left%60000/1000);
-    b.textContent='⏹ '+m+':'+String(s).padStart(2,'0'); b.classList.add('on');
-  }
-  function _dldTick(){
-    if(!_dlDrill)return;
-    _dldRenderBtn();
-    if(!_dlDrill.fin && Date.now()>=_dlDrill.end)_dlDrill.fin=true;
-    if(_dlDrill.fin){
-      const rec=_dlJournal.filter(t=>t.drill===_dlDrill.id);
-      if(!rec.length || rec.every(t=>t.done))_dldFinish(rec);
-    }
-  }
-  function _dldFinish(rec){
-    _dlDrill=null; _dldRenderBtn();
-    const c=document.getElementById('dldCard');
-    const res=rec.filter(t=>t.o30!=null);
-    if(!res.length){ if(c){c.textContent=rec.length?'дрилл: исходы не замерены':'дрилл: 0 свайпов — не засчитан';c.className='dld-card';} return; }
-    const w=res.filter(t=>_dlVerdict(t)==='win').length, l=res.filter(t=>_dlVerdict(t)==='loss').length, f=res.length-w-l;
-    const avg=+(res.reduce((s,t)=>s+t.o30,0)/res.length).toFixed(1);
-    const sd=rec.filter(t=>t.regime==='SAFE_SHUTDOWN').length;
-    const ag=rec.filter(t=>t.mdir&&t.mdir!=='flat'&&((t.mdir==='up')!==(t.side==='long'))&&t.regime!=='SAFE_SHUTDOWN').length;
-    let hist=[]; try{hist=JSON.parse(localStorage.getItem(DLD_KEY)||'[]');}catch(e){}
-    hist.push({ts:Date.now(),n:rec.length,res:res.length,w:w,l:l,f:f,avg:avg,sd:sd,ag:ag});
-    try{localStorage.setItem(DLD_KEY,JSON.stringify(hist.slice(-20)));}catch(e){}
-    if(c){ c.innerHTML='<b>'+rec.length+'</b> свайпов · '+w+'✓ '+l+'✗ '+f+'≈ · ср <b>'+(avg>=0?'+':'')+avg+'</b> bps'+(sd?' · ⚠ SHUTDOWN: '+sd:'')+(ag?' · против модели: '+ag:'');
-      c.className='dld-card '+(avg>0?'good':avg<0?'bad':''); }
-    _dldRenderHist();
-  }
-  function _dldRenderHist(){
-    const el=document.getElementById('dldHist'); if(!el)return;
-    let hist=[]; try{hist=JSON.parse(localStorage.getItem(DLD_KEY)||'[]');}catch(e){}
-    el.textContent=hist.length?('дриллы: '+hist.slice(-3).reverse().map(d=>(d.avg>=0?'+':'')+d.avg+' bps ('+d.n+')').join(' · ')):'';
-  }
-
+  
   function toggleCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; const open=w.classList.toggle('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded',open?'true':'false'); try{localStorage.setItem('msa_calc_open_v1',open?'1':'0');}catch(e){} }
   function _restoreCalc(){ const w=document.getElementById('calcWrap'); if(!w)return; let o='0'; try{o=localStorage.getItem('msa_calc_open_v1')||'0';}catch(e){} if(o==='1'){w.classList.add('open'); const b=document.getElementById('calcToggle'); if(b)b.setAttribute('aria-expanded','true');} }
   load(); loadJournal(); loadReviews(); loadSettings(); loadRules(); loadPos(); checkExpiry(); triggerPriceFetch(); _fetchTopTickers(); renderPosition(); _restoreCalc(); _sessPcRestore(); _themeInit(); _muteInit();
