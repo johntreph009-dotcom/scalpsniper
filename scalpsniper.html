@@ -1449,6 +1449,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
      правила padding, и «последнее в файле» этот спор не решало. */
   .zl-row{padding:3px 10px!important}
   .zone-ladder{gap:2px!important}
+  .zl-more-note{font-size:10px;color:var(--text-faint);line-height:1.5;
+    padding:9px 11px;margin-top:8px;border:1px dashed var(--line-soft);border-radius:8px;
+    font-family:'JetBrains Mono',monospace}
 
   /* ── СТРОКА СВЕЖЕСТИ: ТЕКСТ СВЕРХУ, КНОПКИ ПОД НИМ ──────────────────────
      Я ошибочно счёл это мобильной проблемой и спрятал правку в медиазапрос.
@@ -2829,8 +2832,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(a===act)return-1;if(b===act)return 1;
       return(zb.stars||2)-(za.stars||2)||(a-b);
     });
-    let lastGroup='',html='';
+    // ═══ БЕЗ ДУБЛИРОВАНИЯ СПИСКА ЗОН ═══
+    // Вопрос трейдера: «зачем зоны справа, если есть зоны снизу с объёмами?»
+    // Он прав. Лестница внизу показывает то же самое и лучше: полная заметка,
+    // стоп, размер позиции и шкала дистанции в общем масштабе. Правая колонка
+    // повторяла тот же список в узких карточках с обрезанным текстом.
+    // Оставляем справа ТОЛЬКО активную зону — она центр сессии, ей нужны
+    // крупная плашка и кнопки решения. Остальное живёт в одном месте.
+    const _ladderOn=!!document.getElementById('zoneLadder');
+    let lastGroup='',html='',_skipped=0;
     order.forEach(i=>{
+      if(_ladderOn&&i!==act&&!zones[i].closed){ _skipped++; return; }
       const z=zones[i];const k=KIND[z.kind];
       const isDone=!!z.closed,isExpired=!!z.expired;
       const isActive=i===act&&!isDone&&!isExpired;
@@ -2911,6 +2923,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // Список пересобирается целиком — при автообновлении это уводило прокрутку
     // в начало посреди чтения плана. Полей ввода в карточках нет, фокусу ничего
     // не грозит; восстанавливаем только позицию скролла — своего и родительского.
+    // Скрытое должно быть названо: иначе «где мои зоны» — законный вопрос.
+    if(_skipped)html+='<div class="zl-more-note">остальные '+_skipped+
+      ' зон — в лестнице ниже, там заметка целиком, стоп, размер и шкала дистанции</div>';
     const _sc=wrap.scrollTop, _psc=wrap.parentElement?wrap.parentElement.scrollTop:0;
     wrap.innerHTML=html;
     if(_sc)wrap.scrollTop=_sc;
@@ -4864,7 +4879,28 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       }
     }
     const _zBadges=[]; // бейджи зон на шкале — рисуются после свечей с разрешением коллизий
+    // ═══ ИЕРАРХИЯ ЗОН НА ГРАФИКЕ ═══
+    // Замер по кадру: 23 зоны в видимом окне рисовали 23 ленты во всю ширину.
+    // Свечей за ними не видно — график перестаёт показывать цену и показывает
+    // список зон, для которого есть отдельная панель. Это и есть «новогодняя ёлка».
+    // Тот же принцип, что уже работает в стакане: иерархия через ВЫЧИТАНИЕ.
+    // Полную ленту и риск-конверт получают только зоны, важные СЕЙЧАС:
+    // ближайшая к цене и трёхзвёздочные рядом. Остальные не исчезают — они
+    // сжимаются в короткую засечку у правой оси и остаются в бейджах.
+    const _prim=(()=>{
+      const inR=activeZ.filter(z=>{const p=+z.px;return p>=minP&&p<=maxP;});
+      const cp=(currentPrice&&isFinite(currentPrice))?currentPrice:((minP+maxP)/2);
+      const CAPZ=mob?3:5;
+      if(inR.length<=CAPZ)return new Set(inR);
+      const score=z=>{
+        const st=Math.max(1,Math.min(3,z.stars||2));
+        const d=Math.abs(+z.px-cp)/cp;                 // ближе к цене — важнее
+        return st*2 - Math.min(6,d*400);
+      };
+      return new Set(inR.slice().sort((a,b)=>score(b)-score(a)).slice(0,CAPZ));
+    })();
     activeZ.forEach(z=>{
+      const _isPrim=_prim.has(z);
       const col=_MC_KIND[z.kind]||_MC_KIND.watch;
       const px=+z.px;
       const stars=Math.max(1,Math.min(3,z.stars||2));
@@ -4873,7 +4909,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         // ── Trailing Shadow ЗОНЫ: риск-конверт от уровня до его стопа. Рисуется ПО УМОЛЧАНИЮ
         // для каждой размеченной зоны со стопом — план и его риск видны на графике до всякой позиции.
         // Под лентой зоны, чтобы линия уровня оставалась чёткой. Сильнее ★ — заметнее конверт.
-        if(z.stop){
+        // риск-конверт — только у значимых: это самая «заливочная» деталь,
+        // на 23 зонах она и превращала график в сплошное красно-зелёное поле
+        if(z.stop&&_isPrim){
           const sp0=+z.stop;
           if(isFinite(sp0)&&sp0!==px){
             const sy=toY(Math.max(minP,Math.min(maxP,sp0)));
@@ -4896,11 +4934,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         const bh=5;                       // лента ПОСТОЯННОЙ высоты — кластеры зон больше не сливаются
         const a=0.05+stars*0.04;          // сила ★ = яркость, не толщина
         _zoneHitAreas.push({idx:zones.indexOf(z),yCenter:y,bh:9});
-        ctx.fillStyle='rgba('+col.rgb+','+a.toFixed(3)+')';
-        ctx.fillRect(0,y-bh,plotW,bh*2);
-        ctx.strokeStyle='rgba('+col.rgb+','+(0.5+stars*0.16).toFixed(2)+')';
-        ctx.lineWidth=stars>=3?1.6:1;ctx.setLineDash([]);
-        ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(plotW,y);ctx.stroke();
+        if(_isPrim){
+          ctx.fillStyle='rgba('+col.rgb+','+a.toFixed(3)+')';
+          ctx.fillRect(0,y-bh,plotW,bh*2);
+          ctx.strokeStyle='rgba('+col.rgb+','+(0.5+stars*0.16).toFixed(2)+')';
+          ctx.lineWidth=stars>=3?1.6:1;ctx.setLineDash([]);
+          ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(plotW,y);ctx.stroke();
+        }else{
+          // второстепенная зона: короткая засечка у оси. Уровень виден,
+          // свечи не закрыты. Полная информация — в лестнице и в бейдже справа.
+          const tickW=Math.min(58,plotW*0.09);
+          ctx.strokeStyle='rgba('+col.rgb+',.42)';
+          ctx.lineWidth=1;ctx.setLineDash([]);
+          ctx.beginPath();ctx.moveTo(plotW-tickW,y);ctx.lineTo(plotW,y);ctx.stroke();
+        }
         _zBadges.push({y:y,rgb:col.rgb,txt:(z.kind||'').toUpperCase().slice(0,5)+' '+z.px});
         if(z.stop){
           const sp=+z.stop;
