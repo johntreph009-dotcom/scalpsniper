@@ -2732,10 +2732,29 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   //   origin отсутствует (зоны, размеченные до этой правки) — считаем manual.
   //   Защитный умолчание, а не удобный: неизвестное происхождение не повод стирать план.
   // Сработавшие и закрытые auto-зоны тоже остаются — это уже не кандидат, а факт сессии.
+  // ═══ СРОК ЖИЗНИ AUTO-ЗОНЫ ═══
+  // Замер на живой сессии: 23 зоны при том, что quickAnalyze за прогон рождает
+  // максимум 8 (3 стены на сторону + 2 структурных). Значит дело не в генераторе,
+  // а в накоплении: зона с triggeredAt становилась неприкосновенной НАВСЕГДА.
+  // За часы работы цена обходит десятки уровней, и план превращался в список.
+  // Правило: зона нужна, пока по ней можно ВОЙТИ. Сработавшая час назад в 2%
+  // от текущей цены — это история, ей место в журнале, а не в плане.
+  // Ручные зоны и закрытые (у них есть запись в журнале) не трогаем никогда.
+  const _ZAGE=60*60e3, _ZFAR=0.012;      // старше часа И дальше 1.2% — на покой
+  function _zStale(z,px){
+    if(!z||(z.origin||'manual')!=='auto')return false;   // не auto — не наше дело
+    if(z.closed)return false;                             // закрытая = запись в журнале
+    if(!z.triggeredAt)return false;                       // ещё не срабатывала — живая
+    if(Date.now()-z.triggeredAt<_ZAGE)return false;
+    if(!(px>0))return false;                              // без цены не судим
+    return Math.abs(+z.px-px)/px>_ZFAR;
+  }
   function _zKeep(z){
     if(!z)return false;
     if((z.origin||'manual')!=='auto')return true;          // ручное и legacy
-    return !!(z.closed||z.expired||z.triggeredAt);          // auto, но уже в работе/истории
+    if(!(z.closed||z.expired||z.triggeredAt))return false;  // чистый кандидат — заменяем
+    const px=parseFloat(document.getElementById('livePrice')?.value)||_lastQuickPrice||0;
+    return !_zStale(z,px);                                 // в работе/истории, но не протухшая
   }
   let _zMergeStat={kept:0,added:0,skipped:0};
   function _zMerge(fresh){
@@ -2747,7 +2766,22 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // Infinity, из-за чего мусорный уровень ещё и считался «далёким от всех».
     const add=(fresh||[]).filter(f=>+f.px>0&&isFinite(+f.px)&&keep.every(k=>Math.abs(+k.px-+f.px)/(+f.px)>0.0005));
     _zMergeStat={kept:keep.length,added:add.length,skipped:(fresh||[]).length-add.length};
-    const out=keep.concat(add);
+    let out=keep.concat(add);
+    // ПОТОЛОК КАК СТРАХОВКА. Срок жизни решает проблему на длинной дистанции,
+    // но в рваной сессии зоны могут накопиться и за час. 14 уровней — предел,
+    // за которым план перестаёт быть планом. Режем самые дальние от цены:
+    // ближние актуальнее по определению. Ручные не трогаем.
+    const CAPZ=14;
+    const autos=out.filter(z=>(z.origin||'manual')==='auto'&&!z.closed);
+    if(autos.length>CAPZ){
+      const px=parseFloat(document.getElementById('livePrice')?.value)||_lastQuickPrice||0;
+      if(px>0){
+        const doomed=new Set(autos.slice()
+          .sort((a,b)=>Math.abs(+b.px-px)-Math.abs(+a.px-px))
+          .slice(0,autos.length-CAPZ));
+        out=out.filter(z=>!doomed.has(z));
+      }
+    }
     out.sort((a,b)=>b.px-a.px);
     return out;
   }
@@ -5764,6 +5798,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!zones.length){ wrap.className='zones-fresh'; txt.textContent='зон нет — «↻ Обновить» соберёт из стакана'+_schedHint(); return; }
     const ts=_getZonesFresh(), lp=parseFloat(document.getElementById('livePrice')?.value)||_lastQuickPrice||null;
     let cls='zones-fresh', parts=[];
+    // БЛИЖАЙШАЯ ЗОНА — ПЕРВОЙ. В свёрнутой шапке на телефоне видна только эта
+    // строка, и «обновлено 3 мин назад» — не то, что нужно в моменте. Нужно:
+    // куда идёт цена и сколько до ближайшего размеченного уровня.
+    if(lp){
+      const live=zones.filter(z=>!z.closed&&!z.expired&&isFinite(+z.px));
+      if(live.length){
+        const n=live.reduce((a,z)=>Math.abs(+z.px-lp)<Math.abs(+a.px-lp)?z:a);
+        const d=(+n.px-lp)/lp*100;
+        parts.push('ближайшая '+n.px+' '+(d>=0?'↑':'↓')+' '+Math.abs(d).toFixed(2)+'%'
+          +(n.kind?' · '+String(n.kind).toUpperCase():''));
+      }
+    }
     if(ts){const min=Math.floor((Date.now()-ts)/60000); parts.push('обновлено '+(min<1?'<1':min)+' мин назад'); cls+=min<10?' fresh':min<30?' aging':' stale';}
     else parts.push('разметка вручную/из разбора');
     const hint=_schedHint(); if(hint)parts.push(hint.replace(/^ · /,''));
