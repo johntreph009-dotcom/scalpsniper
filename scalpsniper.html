@@ -1437,6 +1437,29 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     .mc-tfs{margin-left:0;padding-bottom:2px}
     .mc-tfbtn{flex:0 0 auto}
   }
+
+  /* ═══════════ ПОСЛЕДНИЙ БЛОК. Правки, которые нечем перебить ═══════════
+     U2. Плотность лестницы зон. Правило уже писалось выше по файлу и не
+     сработало: базовое .zl-row{padding:5px 10px} объявлено ПОЗЖЕ и выигрывало
+     при равной специфичности. Тот же капкан, что был у .lc-grid и у мобильной
+     карточки. Здесь он захлопнуться не может — ниже ничего нет.
+     Зачем: строка 32px под шрифт 10px, на 30 зонах это лишние пол-экрана
+     прокрутки. Цель панели — увидеть весь план разом, а не листать его. */
+  .zl-row{padding:3px 10px}
+  .zone-ladder{gap:2px}
+  /* заметка больше не растягивается: место нужно шкале */
+  .zl-note{flex:0 1 auto;min-width:0}
+  .zl-m{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-faint);white-space:nowrap;flex-shrink:0}
+  .zl-m b{color:var(--text-dim);font-weight:700}
+  .zl-m-warn{color:var(--warn,#e3b341)}
+  /* ШКАЛА ДИСТАНЦИИ: ноль по текущей цене, единый масштаб у всех строк */
+  .zl-track{position:relative;flex:1;min-width:60px;height:6px;border-radius:3px;
+    background:rgba(255,255,255,.035);overflow:hidden}
+  .zl-track-mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(255,122,24,.5)}
+  .zl-track-fill{position:absolute;top:1px;bottom:1px;border-radius:2px}
+  .zl-track-fill.up{background:rgba(226,75,74,.55)}
+  .zl-track-fill.dn{background:rgba(29,158,117,.55)}
+  @media(max-width:720px){ .zl-track,.zl-m{display:none} }   /* на телефоне ширины нет — не мельчим */
 </style>
 </head>
 <body>
@@ -1549,10 +1572,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <span class="mc-tf" id="mcTfLabel">—</span>
         <div class="mc-tfs" id="mcTfs">
           <button class="mc-tfbtn" data-tf="1m" onclick="setChartTf('1m')">1m</button>
+          <button class="mc-tfbtn" data-tf="3m" onclick="setChartTf('3m')">3m</button>
           <button class="mc-tfbtn" data-tf="5m" onclick="setChartTf('5m')">5m</button>
           <button class="mc-tfbtn" data-tf="15m" onclick="setChartTf('15m')">15m</button>
+          <button class="mc-tfbtn" data-tf="30m" onclick="setChartTf('30m')">30m</button>
           <button class="mc-tfbtn" data-tf="1h" onclick="setChartTf('1h')">1h</button>
           <button class="mc-tfbtn" data-tf="4h" onclick="setChartTf('4h')">4h</button>
+          <button class="mc-tfbtn" data-tf="1d" onclick="setChartTf('1d')">1D</button>
         </div>
         <span class="mc-status" id="mcStatus">загрузка…</span>
         <button type="button" class="mc-tfbtn" id="mcTallBtn" onclick="_mcToggleTall()" title="Развернуть/свернуть график по высоте">⤢</button>
@@ -2320,6 +2346,32 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
 
   // ---- zone price ladder (session) ----
+  // ── СТРОКА ЛЕСТНИЦЫ: ЧЕМ ЗАНЯТА ОСВОБОДИВШАЯСЯ ШИРИНА ──────────────────────
+  // После снятия обреза заметки в строке осталось ~600px пустоты (замер: строка
+  // 1380px, текст заметки ~570px). Заполнять её текстом было бы шагом назад —
+  // читать стало бы дольше. Кладём туда два вида информации, которых раньше
+  // не было видно без разворачивания карточки:
+  //   1) СТОП и РАЗМЕР — три числа, без которых вход невозможен, теперь в строке;
+  //   2) ШКАЛА ДИСТАНЦИИ — общая для всех строк, с нулём по текущей цене.
+  // Второе важнее первого: одинаковый масштаб у всех строк превращает столбец
+  // в форму плана. Видно не «сколько процентов до зоны», а где сгущение уровней
+  // и куда рынку идти дольше всего. Числа этого не показывают, полоса показывает.
+  function _zlMetrics(z){
+    const bits=[];
+    if(z.stop)bits.push('<b>SL</b> '+z.stop);
+    let ps=null; try{ ps=posSize(z); }catch(e){}
+    if(ps)bits.push((ps.over?'<span class="zl-m-warn">⚠ </span>':'')+ps.units.toFixed(3)+' ед.');
+    return bits.length?'<span class="zl-m">'+bits.join(' · ')+'</span>':'<span class="zl-m"></span>';
+  }
+  function _zlTrack(z,lp,maxAbs){
+    if(!lp||!maxAbs||!isFinite(maxAbs))return '<span class="zl-track"></span>';
+    const d=(z.px-lp)/lp*100;
+    const w=Math.min(50,Math.abs(d)/maxAbs*50);        // половина ширины = самая дальняя зона
+    const up=d>=0;
+    return '<span class="zl-track"><i class="zl-track-mid"></i>'
+      +'<i class="zl-track-fill '+(up?'up':'dn')+'" style="'
+      +(up?'left:50%;':'right:50%;')+'width:'+w.toFixed(2)+'%"></i></span>';
+  }
   function renderLadder(){
     const el=document.getElementById('zoneLadder');
     if(!el)return;
@@ -2331,6 +2383,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const act=lp?activeZoneIdx():-1;
     let nearestIdx=-1,nd=Infinity;
     if(lp)zones.forEach((z,i)=>{ if(z.closed||z.expired)return; const d=Math.abs(z.px-lp); if(d<nd){nd=d;nearestIdx=i;} });
+    // общий масштаб шкалы: самая дальняя живая зона задаёт край для ВСЕХ строк,
+    // иначе полосы несравнимы между собой и смысл теряется
+    let maxAbsDist=0;
+    if(lp)zones.forEach(z=>{ if(z.closed||z.expired)return; const d=Math.abs((z.px-lp)/lp*100); if(d>maxAbsDist)maxAbsDist=d; });
     const divHtml=`<div class="zl-divider"><span class="zl-div-line"></span><span class="zl-div-px">▸ ${lp} цена ◂</span><span class="zl-div-line"></span></div>`;
     let html='',divPlaced=false;
     zones.forEach((z,i)=>{
@@ -2356,6 +2412,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <span class="zl-px">${z.px}</span>
         ${stars}${bar}
         <span class="zl-note">${z.note?escapeHtml(z.note):''}</span>
+        ${_zlMetrics(z)}
+        ${_zlTrack(z,lp,maxAbsDist)}
         ${vb}
         ${lp?`<span class="${distCls}">${distTxt}</span>`:''}
       </div>`;
@@ -4473,7 +4531,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         return j.map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5],tb:+k[9]})); }
     }catch(e){}
     const base=sym.replace(/USDT$/,''), inst=base+'-USDT';
-    const okxBar={'1m':'1m','5m':'5m','15m':'15m','1h':'1H','4h':'4H'}[tf]||'1m';
+    const okxBar={'1m':'1m','3m':'3m','5m':'5m','15m':'15m','30m':'30m','1h':'1H','4h':'4H','1d':'1D'}[tf]||'1m';
     // 2) OKX свечи (сначала перп SWAP, затем спот) — OKX формат newest-first, разворачиваем
     for(const iid of [inst+'-SWAP', inst]){
       try{
@@ -4508,7 +4566,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   async function _klRaw(sym,tf,limit){   // → массив в форме Binance klines [[t,o,h,l,c,v]…] по возрастанию времени
     try{const r=await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval='+tf+'&limit='+limit,{cache:'no-store'}); if(r.ok){const j=await r.json(); if(Array.isArray(j)&&j.length)return j;}}catch(e){}
-    const okxBar={'1m':'1m','5m':'5m','15m':'15m','1h':'1H','4h':'4H','1d':'1D'}[tf]||tf;
+    const okxBar={'1m':'1m','3m':'3m','5m':'5m','15m':'15m','30m':'30m','1h':'1H','4h':'4H','1d':'1D'}[tf]||tf;
     for(const iid of [_okxInst(sym), sym.replace(/USDT$/,'')+'-USDT']){
       try{const r=await fetch('https://www.okx.com/api/v5/market/candles?instId='+iid+'&bar='+okxBar+'&limit='+Math.min(limit,300),{cache:'no-store'}); if(r.ok){const d=(await r.json()).data; if(Array.isArray(d)&&d.length)return d.map(k=>[+k[0],+k[1],+k[2],+k[3],+k[4],+k[5]]).reverse();}}catch(e){}
     }
@@ -5400,10 +5458,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(!depth)throw new Error('нет стакана');
       // масштабирование под выбранный ТФ: диапазон уровней, кластеры и стопы дышат с таймфреймом
       const tf=document.getElementById('tf')?.value||'5m';
-      const tfMult={'1m':0.6,'5m':1,'15m':1.8,'1h':3.2,'4h':6}[tf]||1;
+      // Масштаб разметки под ТФ. Ряд ~корневой по отношению длительностей: диапазон
+      // поиска стен и стоп растут медленнее времени, иначе на старших ТФ зоны
+      // расползаются. Пропуск ТФ в этой карте не падает, но молча даёт множитель 1
+      // (то есть разметку пятиминутки на дневке) — при добавлении ТФ править ЗДЕСЬ.
+      const tfMult={'1m':0.6,'3m':0.8,'5m':1,'15m':1.8,'30m':2.4,'1h':3.2,'4h':6,'1d':12}[tf]||1;
       const b=_niceBucket(price)*Math.max(1,tfMult*0.75);
       const stopK=0.003*Math.sqrt(tfMult);
-      const tfKl={'1m':['1m',240],'5m':['5m',96],'15m':['15m',96],'1h':['1h',120],'4h':['4h',120]}[tf]||['5m',96];
+      const tfKl={'1m':['1m',240],'3m':['3m',160],'5m':['5m',96],'15m':['15m',96],'30m':['30m',96],'1h':['1h',120],'4h':['4h',120],'1d':['1d',120]}[tf]||['5m',96];
       let poc=null,funding=null,oi=null,momUp=null,swH=null,swL=null;
       try{const kl=await _klRaw(sym,tfKl[0],tfKl[1]); if(!kl)throw 0; const m={}; kl.forEach(k=>{const tp=(+k[2]+ +k[3]+ +k[4])/3,v=+k[5],key=Math.round(tp/b)*b; m[key]=(m[key]||0)+v;}); let bv=-1; for(const k in m){if(m[k]>bv){bv=m[k];poc=+k;}}
         swH=Math.max(...kl.map(k=>+k[2])); swL=Math.min(...kl.map(k=>+k[3]));
@@ -6168,6 +6230,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       }catch(e){return null;}
     };
     const row=(p,sz,y,side)=>{
+      // пустой уровень сетки: рисуем только цену бледно, без полосы —
+      // разрыв в книге должен быть виден, но не кричать
+      if(!(sz>0)){
+        ctx.font='10px JetBrains Mono, monospace';
+        ctx.fillStyle='rgba(138,143,152,.20)'; ctx.textAlign='right';
+        ctx.fillText(p.toFixed(_dlDec),PX_R,y+rowH/2);
+        _dlRows.push({y,h:rowH,p,sz:0,side,rel:0});
+        return;
+      }
       const bw=Math.max(1.5,scale(sz)*bwMax);
       const rel=sz/avg;
       const wall=rel>=1.8, big=!wall&&rel>=1.0;
@@ -6198,9 +6269,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(hov){ ctx.fillStyle='rgba(255,255,255,.55)'; ctx.textAlign='right'; ctx.font='9px JetBrains Mono, monospace';
         ctx.fillText(Math.abs(bps(p)).toFixed(1)+'bp',W-3,y+rowH/2); ctx.font='10px JetBrains Mono, monospace'; }
     };
-    const rowsA=Math.min(A.length,Math.floor((midY-16)/rowH)), rowsB=Math.min(B.length,Math.floor((midY-16)/rowH));
-    for(let i=0;i<rowsA;i++)row(A[i].p,A[i].v,midY-14-(rowsA-i)*rowH,-1);   // дальние сверху, ближние у mid
-    for(let i=0;i<rowsB;i++)row(B[i].p,B[i].v,midY+14+i*rowH,1);
+    // ═══ ПРОПОРЦИОНАЛЬНАЯ ЦЕНОВАЯ ШКАЛА ═══
+    // Было: рисовались подряд только НЕПУСТЫЕ корзины. Уровень без ликвидности
+    // просто выпадал, и соседние строки склеивались — шаг между ценами скакал
+    // (замер по кадру: 40, 40, 20, 40 при одном и том же шаге сетки).
+    // Стакан переставал быть стаканом: расстояние на экране не значило расстояние
+    // в цене, и «стена рядом» визуально не отличалась от «стены далеко».
+    // Стало: идём по СЕТКЕ от mid наружу с постоянным шагом и рисуем каждый
+    // уровень, включая нулевые. Пустота теперь видна как пустота — а это тоже
+    // информация: разрыв в стакане и есть место, где цена проскакивает быстро.
+    const mapA=new Map(A.map(r=>[Math.round(r.p/step),r.v]));
+    const mapB=new Map(B.map(r=>[Math.round(r.p/step),r.v]));
+    const k0=Math.round(mid/step);
+    const rowsA=Math.floor((midY-16)/rowH), rowsB=Math.floor((midY-16)/rowH);
+    for(let i=rowsA;i>=1;i--){ const kk=k0+i, p=kk*step;
+      row(p, mapA.get(kk)||0, midY-14-i*rowH, -1); }
+    for(let i=1;i<=rowsB;i++){ const kk=k0-i, p=kk*step;
+      row(p, mapB.get(kk)||0, midY+14+(i-1)*rowH, 1); }
     // mid со спредом — сразу видно цену входа и её стоимость
     // ЯКОРЬ ВЗГЛЯДА: плотная плашка mid со спредом. От неё глаз расходится вверх и вниз.
     const spr=(aP[0]&&bP[0])?((aP[0]-bP[0])/mid*1e4):0;
