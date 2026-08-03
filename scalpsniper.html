@@ -18,7 +18,10 @@
 <link rel="icon" type="image/png" href="icon-192.png">
 <title>ScalpSniper — Precision Trading Terminal</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Rajdhani:wght@600;700&family=Archivo:wght@600;800&display=swap');
+  /* Chakra Petch — техничная угловатая антиква, читаемая в интерфейсе.
+     Цифры НАМЕРЕННО остаются в JetBrains Mono: в терминале колонки чисел
+     должны выстраиваться по разрядам, а пропорциональный шрифт их развалит. */
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Rajdhani:wght@600;700&family=Archivo:wght@600;800&family=Chakra+Petch:wght@500;600;700&display=swap');
   :root{
     --bg:#0a0b0d; --panel:#121417; --panel-2:#181b1f; --line:#262b30; --line-soft:#1d2125;
     --text:#e3e7ea; --text-dim:#bcc4cc; --text-faint:#96a1aa;
@@ -514,7 +517,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .lc-cell{background:rgba(0,0,0,.25);border:1px solid var(--line-soft);border-radius:7px;padding:12px}
   .lc-l{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-faint)}
   .lc-v{font-family:'Archivo',sans-serif;font-weight:700;font-size:22px;margin-top:4px}
-  .lc-note{margin-top:14px;font-size:13px;color:var(--text);background:rgba(0,0,0,.2);border-radius:7px;padding:11px 14px}
+  .lc-note{margin-top:14px;font-size:13px;color:var(--text);background:rgba(0,0,0,.2);border-radius:7px;padding:11px 14px;
+    text-align:center;overflow-wrap:anywhere;word-break:break-word;hyphens:auto;line-height:1.6}
+  /* ПРИЧИНА ОБРЕЗКИ ТЕКСТА: элемент грид-ячейки по умолчанию имеет min-width:auto
+     и отказывается сжиматься уже своего содержимого — длинная строка выпихивала
+     карточку за пределы колонки, и текст резало с обеих сторон.
+     min-width:0 разрешает сжатие, дальше перенос делает своё дело. */
+  .live-card,.lc-grid,.lc-grid>*,.lc-note{min-width:0}
+  .live-card{overflow:hidden}
+  .lc-grid>*{overflow-wrap:anywhere}
+  /* Техничный шрифт — заголовкам и подписям, где важен характер.
+     Числа, цены и таблицы остаются моноширинными. */
+  .brand h1,.badge,.section-title,.hub-tab,.phase-btn,.lc-title,.zone-hdr{font-family:'Chakra Petch','Rajdhani',sans-serif;letter-spacing:.6px}
   .calc-wrap{margin:26px 0 12px}
   .calc-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:none;border:1px solid var(--line-soft);border-radius:8px;padding:11px 14px;color:var(--text);font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;transition:border-color .15s,color .15s}
   .calc-toggle:hover{border-color:var(--accent-dim);color:var(--accent)}
