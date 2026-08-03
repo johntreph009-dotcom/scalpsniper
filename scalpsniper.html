@@ -1449,7 +1449,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .zone-ladder{gap:2px}
 
   /* ── ЛИПКАЯ ШАПКА СЕССИИ ─────────────────────────────────────────────── */
-  .hdr-stick{position:sticky;top:0;z-index:40;padding:6px 8px 8px;margin:-6px -8px 8px;
+  /* Специфичность нарочно повышена: ниже идёт [data-fold]{position:relative},
+     а у шапки есть data-fold — при равном весе выиграло бы правило ниже по файлу.
+     Ровно этот капкан сегодня уже ловил .lc-grid и .zl-row. */
+  .hdr-stick[data-fold],.hdr-stick{position:sticky;top:0;z-index:40;padding:6px 8px 8px;margin:-6px -8px 8px;
     background:rgba(10,11,13,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
     border-bottom:1px solid var(--line);border-radius:0 0 10px 10px}
   html[data-theme="light"] .hdr-stick{background:rgba(236,238,240,.93)}
@@ -7939,18 +7942,22 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _hdrStickInit(){
     const side=document.querySelector('.t-side'); if(!side||side.querySelector('.hdr-stick'))return;
     const start=side.firstElementChild; if(!start)return;
-    const stop=document.getElementById('prepPhase');
+    // ЯВНЫЙ СПИСОК, А НЕ ОБХОД ДО МАРКЕРА. Первая версия шла по соседям до текста
+    // «сбросить статистику» и утащила 11 блоков вместо шести — вместе с лестницей
+    // зон и карточкой (замер: высота обёртки 3605px). Перебор соседей по тексту
+    // хрупок: достаточно, чтобы блок обернули ещё одним div, и граница уезжает.
+    // Берём поимённо и только прямых детей .t-side.
+    const direct=el=>{ while(el&&el.parentElement!==side)el=el.parentElement; return el; };
+    const want=[start];                                    // «Зоны на сессию» — заголовок
+    ['zonesFresh','dayTrend','dayCtx','mpChip'].forEach(id=>{ const d=direct(document.getElementById(id)); if(d)want.push(d); });
+    const acc=[...side.querySelectorAll('*')].find(e=>/ТОЧНОСТЬ ЧТЕНИЯ/.test(e.textContent||'')&&e.children.length<10);
+    const accD=direct(acc); if(accD)want.push(accD);
+    const uniq=[...new Set(want)].filter(Boolean);
+    if(!uniq.length)return;
     const wrap=document.createElement('div');
     wrap.className='hdr-stick';
-    side.insertBefore(wrap,start);
-    let n=wrap.nextElementSibling, guard=0;
-    while(n&&guard++<14){
-      const next=n.nextElementSibling;
-      const txt=(n.textContent||'');
-      wrap.appendChild(n);
-      if(n===stop||/сбросить статистику/i.test(txt))break;      // до конца статистики чтения
-      n=next;
-    }
+    side.insertBefore(wrap,uniq[0]);
+    uniq.forEach(el=>wrap.appendChild(el));
     _foldMount('hdr',wrap,'Свернуть шапку: останется только строка свежести');
     if(_folds.hdr===undefined&&innerWidth<=720)_foldSet('hdr',true);  // телефон — свёрнута сразу
   }
