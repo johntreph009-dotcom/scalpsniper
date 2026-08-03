@@ -1447,6 +1447,35 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
      прокрутки. Цель панели — увидеть весь план разом, а не листать его. */
   .zl-row{padding:3px 10px}
   .zone-ladder{gap:2px}
+
+  /* ── ЛИПКАЯ ШАПКА СЕССИИ ─────────────────────────────────────────────── */
+  .hdr-stick{position:sticky;top:0;z-index:40;padding:6px 8px 8px;margin:-6px -8px 8px;
+    background:rgba(10,11,13,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);border-radius:0 0 10px 10px}
+  html[data-theme="light"] .hdr-stick{background:rgba(236,238,240,.93)}
+  /* СВЁРНУТАЯ: остаётся только строка свежести — «когда обновлено, когда авто».
+     Это единственное, что нужно постоянно; остальное — для разбора, не для момента. */
+  .hdr-stick.is-folded > *{display:none}
+  .hdr-stick.is-folded > .fold-btn,
+  .hdr-stick.is-folded > #zonesFresh{display:flex}
+  .hdr-stick.is-folded{padding-bottom:5px}
+
+  /* ── ВЫКЛЮЧАТЕЛЬ БЛОКА ───────────────────────────────────────────────── */
+  .fold-btn{position:absolute;top:4px;right:4px;z-index:5;width:22px;height:22px;line-height:1;
+    background:rgba(255,255,255,.05);border:1px solid var(--line-soft);border-radius:5px;
+    color:var(--text-faint);font-size:11px;cursor:pointer;padding:0;transition:all .12s}
+  .fold-btn:hover{border-color:var(--accent-dim);color:var(--accent);background:var(--accent-soft)}
+  [data-fold]{position:relative}
+  [data-fold].is-folded > *:not(.fold-btn){display:none!important}
+  [data-fold].is-folded{min-height:26px;opacity:.75}
+  .hdr-stick > .fold-btn{top:2px;right:2px}
+
+  @media(max-width:720px){
+    /* на телефоне шапка обязана быть узкой: замер — развёрнутая занимает ~40% экрана */
+    .hdr-stick{max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+    .hdr-stick.is-folded{max-height:none;overflow:visible}
+    .fold-btn{width:26px;height:26px;font-size:12px}   /* палец, не курсор */
+  }
   /* заметка больше не растягивается: место нужно шкале */
   .zl-note{flex:0 1 auto;min-width:0}
   .zl-m{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-faint);white-space:nowrap;flex-shrink:0}
@@ -1715,7 +1744,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <div class="t-side">
   <!-- ===== ZONES (shared, always visible) ===== -->
   <div class="section-title" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация зоны по времени · Клик по цене внутри карточки зоны копирует её в буфер</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
-  <div class="zones-fresh" id="zonesFresh"><span id="zonesFreshTxt"></span><button class="zf-plan" onclick="_prepToggle()" title="План: протоколы с фитом, чеклист входа, готовность — разворачивается на месте">◈ план</button><button class="zf-refresh" onclick="_schedRun('zones',true)" title="Пересобрать зоны из стакана сейчас (без скринов). Автообновление это не отменяет">↻ Обновить</button><button class="zf-refresh" id="schedBtn" onclick="_schedToggle()" title="Автообновление зон и разбора">⏱ авто</button></div>
+  <div class="zones-fresh" id="zonesFresh"><span id="zonesFreshTxt"></span><button class="zf-plan" onclick="_prepToggle()" title="План: протоколы с фитом, чеклист входа, готовность — разворачивается на месте">◈ план</button><button class="zf-refresh" onclick="_schedRun('zones',true)" title="Пересобрать зоны из стакана сейчас (без скринов). Автообновление это не отменяет">↻ Обновить</button><button class="zf-refresh" id="schedBtn" onclick="_schedToggle()" title="Автообновление зон и разбора">⏱ авто</button><button class="zf-refresh" id="hapBtn" onclick="_hapticToggle()" title="Тактильная отдача на телефоне (Android; в iOS Safari Web Vibration API отсутствует)">◈ вибро</button></div>
   <div id="dayTrend" class="day-trend" style="display:none"></div>
   <div id="dayCtx" class="day-ctx" style="display:none"></div>
   <div id="mpChip" class="day-ctx" style="display:none" title="Max Pain ближайшей опционной экспирации: страйк, где продавцы опционов теряют меньше всего (данные открытого интереса). Гравитация — дистанция цены до уровня. Наблюдение, не прогноз."></div>
@@ -2809,7 +2838,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const st=document.getElementById('liveStatus');
     const card=document.getElementById('liveCard');
     const a=activeZoneIdx();
-    if(a>=0&&a!==_lastAlertZone&&phase==='live'){_zoneBeep();_zoneTitleFlash();}
+    if(a>=0&&a!==_lastAlertZone&&phase==='live'){_zoneBeep();_zoneTitleFlash();if(typeof _haptic==='function')_haptic('zone');}
     _lastAlertZone=a;
     if(a>=0&&!zones[a].triggeredAt&&!zones[a].closed&&!zones[a].expired){zones[a].triggeredAt=Date.now();save();}
     if(!lp){st.textContent='введи цену';st.style.color='var(--text-dim)';card.classList.add('hide');}
@@ -2864,7 +2893,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(ni>=0&&ndp<=0.3){
         st.textContent='ПОДХОД · зона '+(ni+1)+' ('+zones[ni].px+') · '+ndp.toFixed(2)+'%'; st.style.color='var(--warn)';
         if(ld2){ ld2.textContent='ближайшая зона '+zones[ni].px+' · '+ndp.toFixed(2)+'% · приготовься'; ld2.style.display='block'; }
-        if(ni!==_lastApproachZone && phase==='live'){ _approachBeep(); _lastApproachZone=ni; }
+        if(ni!==_lastApproachZone && phase==='live'){ _approachBeep(); if(typeof _haptic==='function')_haptic('soft'); _lastApproachZone=ni; }
       } else {
         if(ld2)ld2.style.display='none';
         if(ndp>0.45)_lastApproachZone=-1;
@@ -7844,6 +7873,91 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   let _ovDeb=null;
   addEventListener('resize',()=>{ if(_ovDeb)clearTimeout(_ovDeb); _ovDeb=setTimeout(_ovReport,800); });
   setTimeout(_ovReport,3000);
+
+  // ═══════════ ТАКТИЛЬНАЯ ОТДАЧА ═══════════
+  // Честно о границах: Web Vibration API есть в Android Chrome и НЕТ в iOS Safari —
+  // Apple его не реализует, обойти нельзя. Поэтому это приятное дополнение там,
+  // где оно есть, и молчаливое ничто там, где его нет. Никакая логика на вибрацию
+  // не завязана: если её нет, продукт работает ровно так же.
+  // Паттерны короткие. Длинная вибрация в торговом терминале — раздражитель,
+  // а не подсказка: рука должна получать сигнал, а не тревогу.
+  let _hapticOn=true; try{const v=localStorage.getItem('msa_haptic_v1'); if(v!=null)_hapticOn=(v==='1');}catch(e){}
+  const _HAP={tap:[8],soft:[5],ok:[10,40,10],warn:[18,60,18],zone:[12,50,12,50,24]};
+  function _haptic(kind){
+    if(!_hapticOn)return;
+    try{ if(navigator.vibrate)navigator.vibrate(_HAP[kind]||_HAP.tap); }catch(e){}
+  }
+  function _hapticToggle(){
+    _hapticOn=!_hapticOn;
+    try{localStorage.setItem('msa_haptic_v1',_hapticOn?'1':'0');}catch(e){}
+    if(_hapticOn)_haptic('ok');
+    if(typeof _proc==='function')_proc('вибрация '+(_hapticOn?'включена':'выключена'));
+  }
+  // Отдача на осмысленных действиях, а не на каждом касании: клик по кнопке —
+  // подтверждение, вход цены в зону — событие. Всё остальное молчит.
+  document.addEventListener('click',e=>{
+    const t=e.target.closest('button'); if(!t)return;
+    _haptic(/не сработала|Очистить|стоп/i.test(t.textContent||'')?'warn':'tap');
+  },{passive:true});
+
+  // ═══════════ СВОРАЧИВАНИЕ БЛОКОВ ═══════════
+  // На телефоне экран — дефицит, и какой блок лишний, знает только трейдер:
+  // одному мешает лента китов, другому паспорт. Поэтому не выбираем за него,
+  // а даём выключатель на каждом блоке и запоминаем выбор.
+  const _FOLD_KEY='msa_folds_v1';
+  let _folds={}; try{_folds=JSON.parse(localStorage.getItem(_FOLD_KEY)||'{}')||{};}catch(e){_folds={};}
+  function _foldSave(){ try{localStorage.setItem(_FOLD_KEY,JSON.stringify(_folds));}catch(e){} }
+  function _foldSet(key,on){
+    _folds[key]=!!on; _foldSave();
+    document.querySelectorAll('[data-fold="'+key+'"]').forEach(el=>{
+      el.classList.toggle('is-folded',!!on);
+      const b=el.querySelector(':scope > .fold-btn'); if(b)b.textContent=on?'▸':'▾';
+    });
+  }
+  function _foldToggle(key){ _haptic('soft'); _foldSet(key,!_folds[key]); }
+  // Навешиваем выключатель на контейнер: кнопка кладётся ВНУТРЬ блока первым
+  // элементом, содержимое прячется классом. Разметку блоков не трогаем —
+  // тот же принцип, что при переносе блоков в хаб: id и логика остаются прежними.
+  function _foldMount(key,el,title){
+    if(!el||el.dataset.fold)return;
+    el.dataset.fold=key;
+    const b=document.createElement('button');
+    b.className='fold-btn'; b.type='button'; b.title=(title||'Свернуть блок');
+    b.textContent=_folds[key]?'▸':'▾';
+    b.onclick=ev=>{ ev.stopPropagation(); _foldToggle(key); };
+    el.insertBefore(b,el.firstChild);
+    if(_folds[key])el.classList.add('is-folded');
+  }
+
+  // ═══════════ ЛИПКАЯ ШАПКА СЕССИИ ═══════════
+  // Собираем верхний прогон правой колонки в одну обёртку и делаем её липкой.
+  // Узлы ПЕРЕНОСИМ физически, а не копируем: id, обработчики и вся логика
+  // остаются теми же — приём уже применён в проекте при переезде блоков в хаб.
+  // Свёрнутое состояние — по умолчанию на телефоне: замер показал, что блок
+  // целиком занимает ~40% экрана 390×844, и липкая шапка такой высоты не
+  // оставила бы места плану. Развёрнутая доступна тапом и запоминается.
+  function _hdrStickInit(){
+    const side=document.querySelector('.t-side'); if(!side||side.querySelector('.hdr-stick'))return;
+    const start=side.firstElementChild; if(!start)return;
+    const stop=document.getElementById('prepPhase');
+    const wrap=document.createElement('div');
+    wrap.className='hdr-stick';
+    side.insertBefore(wrap,start);
+    let n=wrap.nextElementSibling, guard=0;
+    while(n&&guard++<14){
+      const next=n.nextElementSibling;
+      const txt=(n.textContent||'');
+      wrap.appendChild(n);
+      if(n===stop||/сбросить статистику/i.test(txt))break;      // до конца статистики чтения
+      n=next;
+    }
+    _foldMount('hdr',wrap,'Свернуть шапку: останется только строка свежести');
+    if(_folds.hdr===undefined&&innerWidth<=720)_foldSet('hdr',true);  // телефон — свёрнута сразу
+  }
+  try{ _hdrStickInit(); }catch(e){ console.warn('[scalpsniper] hdr-stick:',e&&e.message); }
+  // Сворачиваемые панели хаба — по одному вызову на блок, добавить новый тривиально
+  try{ [['book','hubBook'],['auto','hubAuto'],['proc','hubProc'],['pass','hubPass'],['whale','hubWhale'],['liq','hubLiq']]
+    .forEach(([k,id])=>_foldMount('hub_'+k,document.getElementById(id))); }catch(e){}
 
   // ═══════════ ВТОРАЯ ВКЛАДКА (AUDIT) ═══════════
   // localStorage общий на весь origin, и два экземпляра пишут в него independently:
