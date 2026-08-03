@@ -5592,6 +5592,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     else parts.push('разметка вручную/из разбора');
     const hint=_schedHint(); if(hint)parts.push(hint.replace(/^ · /,''));
     if(lp){const pxs=zones.filter(z=>!z.closed&&!z.expired).map(z=>+z.px); if(pxs.length){const lo=Math.min(...pxs),hi=Math.max(...pxs),pad=(hi-lo)*0.1||lo*0.005; if(lp>hi+pad||lp<lo-pad){parts.push('⚠ цена вне диапазона зон'); cls='zones-fresh stale';}}}
+    // className присваивается целиком, поэтому служебные классы надо возвращать:
+    // fold-keep слетал при каждой перерисовке, и на телефоне свёрнутая шапка
+    // прятала строку с кнопками «план / Обновить / авто / вибро».
+    if(wrap.closest('.hdr-stick'))cls+=' fold-keep';
     wrap.className=cls; txt.textContent=parts.join(' · ');
   }
   function zoneReadBreakdown(field){
