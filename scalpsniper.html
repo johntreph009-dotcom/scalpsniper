@@ -1448,6 +1448,25 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .zl-row{padding:3px 10px}
   .zone-ladder{gap:2px}
 
+  /* ── СТРОКА СВЕЖЕСТИ: ТЕКСТ СВЕРХУ, КНОПКИ ПОД НИМ ──────────────────────
+     Я ошибочно счёл это мобильной проблемой и спрятал правку в медиазапрос.
+     Скриншот с 1920 показал ту же колонку из огрызков: дело не в телефоне.
+     .t-side шириной 360px, четыре кнопки занимают ~280, а #zonesFreshTxt
+     объявлен flex:1 (то есть flex-basis:0) — тексту достаётся ~80px в любом
+     разрешении. Правило обязано быть БЕЗУСЛОВНЫМ. */
+  .zones-fresh{flex-wrap:wrap;row-gap:7px;align-items:stretch}
+  #zonesFreshTxt{flex:1 1 100%;min-width:0;line-height:1.5;order:-1}   /* order:-1 — текст всегда первый */
+  .zones-fresh .zf-plan,.zones-fresh .zf-refresh{
+    flex:1 1 0;min-width:0;padding:9px 8px;font-size:11px;
+    display:flex;align-items:center;justify-content:center;white-space:nowrap}
+  /* Кнопка вибрации убрана из ряда: на iOS Web Vibration API нет вовсе,
+     на Android она включена по умолчанию и трогать её незачем. Место
+     в узкой колонке дороже переключателя, которым пользуются раз в жизни. */
+  #hapBtn{display:none!important}
+  /* ТРЕНД ДНЯ и КОНТЕКСТ — во всю ширину колонки: они читаются первыми
+     и не должны жаться к левому краю, оставляя пустоту справа. */
+  #dayTrend,#dayCtx,#mpChip{width:100%;box-sizing:border-box}
+
   /* ── ЛИПКАЯ ШАПКА СЕССИИ ─────────────────────────────────────────────── */
   /* Специфичность нарочно повышена: ниже идёт [data-fold]{position:relative},
      а у шапки есть data-fold — при равном весе выиграло бы правило ниже по файлу.
