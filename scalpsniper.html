@@ -1591,19 +1591,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     .mini-chart-hdr{flex-wrap:wrap!important;row-gap:6px!important;align-items:center!important}
     .mc-tfbtn{padding:7px 10px!important;font-size:11px!important}   /* палец */
   }
-  /* заметка больше не растягивается: место нужно шкале */
-  .zl-note{flex:0 1 auto;min-width:0}
+  /* шкала удалена — ширина возвращена заметке, ради которой всё и начиналось */
+  .zl-note{flex:1 1 auto;min-width:0}
   .zl-m{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-faint);white-space:nowrap;flex-shrink:0}
   .zl-m b{color:var(--text-dim);font-weight:700}
   .zl-m-warn{color:var(--warn,#e3b341)}
-  /* ШКАЛА ДИСТАНЦИИ: ноль по текущей цене, единый масштаб у всех строк */
-  .zl-track{position:relative;flex:1;min-width:60px;height:6px;border-radius:3px;
-    background:rgba(255,255,255,.035);overflow:hidden}
-  .zl-track-mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(255,122,24,.5)}
-  .zl-track-fill{position:absolute;top:1px;bottom:1px;border-radius:2px}
-  .zl-track-fill.up{background:rgba(226,75,74,.55)}
-  .zl-track-fill.dn{background:rgba(29,158,117,.55)}
-  @media(max-width:720px){ .zl-track,.zl-m{display:none} }   /* на телефоне ширины нет — не мельчим */
+  @media(max-width:720px){ .zl-m{display:none} }   /* на телефоне ширины нет — не мельчим */
 </style>
 </head>
 <body>
@@ -2507,15 +2500,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(ps)bits.push((ps.over?'<span class="zl-m-warn">⚠ </span>':'')+ps.units.toFixed(3)+' ед.');
     return bits.length?'<span class="zl-m">'+bits.join(' · ')+'</span>':'<span class="zl-m"></span>';
   }
-  function _zlTrack(z,lp,maxAbs){
-    if(!lp||!maxAbs||!isFinite(maxAbs))return '<span class="zl-track"></span>';
-    const d=(z.px-lp)/lp*100;
-    const w=Math.min(50,Math.abs(d)/maxAbs*50);        // половина ширины = самая дальняя зона
-    const up=d>=0;
-    return '<span class="zl-track"><i class="zl-track-mid"></i>'
-      +'<i class="zl-track-fill '+(up?'up':'dn')+'" style="'
-      +(up?'left:50%;':'right:50%;')+'width:'+w.toFixed(2)+'%"></i></span>';
-  }
+  // ШКАЛА ДИСТАНЦИИ УДАЛЕНА 2026-08-03. Она рисовала полосу от центра строки:
+  // зелёная влево — зона под ценой, красная вправо — над, длина ∝ расстоянию
+  // в общем масштабе. Замысел — видеть форму плана, а не только числа.
+  // Трейдер прочитал её как «рандомные зелёные и красные полосочки», и он прав:
+  //   1) осевая линия в 1px не видна на тёмном фоне → нет точки отсчёта;
+  //   2) легенды нет, догадаться о смысле неоткуда;
+  //   3) дистанция УЖЕ написана числом в той же строке справа (+0.43% / −2.39%),
+  //      то есть полоса дублировала существующую колонку.
+  // Причина появления тоже была неверной: я заполнял пустое место, освободившееся
+  // после снятия обреза заметки. Свободная ширина — не повод рисовать информацию.
+  // Место возвращено заметке, которая раньше обрезалась.
   function renderLadder(){
     const el=document.getElementById('zoneLadder');
     if(!el)return;
@@ -2557,7 +2552,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         ${stars}${bar}
         <span class="zl-note">${z.note?escapeHtml(z.note):''}</span>
         ${_zlMetrics(z)}
-        ${_zlTrack(z,lp,maxAbsDist)}
         ${vb}
         ${lp?`<span class="${distCls}">${distTxt}</span>`:''}
       </div>`;
