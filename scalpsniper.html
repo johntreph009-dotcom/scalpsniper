@@ -6500,7 +6500,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const _dt=document.getElementById('demoTicker'); if(_dt&&document.activeElement!==_dt)_dt.value=_raw;
     }catch(err){ const r=document.getElementById('dlRate'); if(r)r.textContent='worker N/A'; }
     _dlStartedAt=Date.now(); _dlLastSnap=Date.now(); _dlWatchdog(); try{_hubInit();}catch(e){}
-    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dldRenderBtn(); _dlSetRegime(_dlRegime,true); _bgStart();
+    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dlSetRegime(_dlRegime,true); _bgStart();
     _dlLastSec=performance.now(); _dlFrames=0; _dlEngLast=0;
     const loop=ts=>{ if(!_dlRunning)return; _dlDraw(); _dlDrawPrice(); _dlFrames++;
       if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); }
