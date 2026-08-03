@@ -212,6 +212,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .dep-unit{font-size:11px;color:var(--text-faint)}
   .zone-size{font-family:'Archivo',sans-serif;font-weight:700;font-size:13px;color:var(--accent);white-space:nowrap;background:var(--accent-soft);border:1px solid var(--accent-dim);padding:4px 9px;border-radius:4px}
   .zone-size.muted{color:var(--text-faint);background:none;border-color:var(--line-soft)}
+/* объём выше потолка «депозит×плечо» — почти всегда опечатка в стопе */
+.zone-size.over{color:var(--warn,#e3b341);background:rgba(227,179,65,.10);border-color:rgba(227,179,65,.45)}
   .zone-add{display:grid;grid-template-columns:90px 1fr 110px 80px;gap:8px;align-items:end;margin-bottom:14px}
   @media(max-width:720px){.zone-add{grid-template-columns:1fr 1fr}}
   .mini-label{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px;display:block}
@@ -2534,13 +2536,24 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function posSize(z){
     const dep=_pf(document.getElementById('deposit').value);
     const risk=_pf(document.getElementById('depRisk').value);
-    if(!dep||!risk||!z.stop||!z.px)return null;
+    // Замер границ 2026-08-03: `!dep` ловит ноль и пустое, но НЕ ловит минус.
+    // Депозит −1000 или риск −5 давали отрицательный размер позиции, а в подсказке
+    // «Риск −50 USDT» читалось как прибыль. min="0.1" в разметке тут не помощник:
+    // у <input type=number> он ограничивает стрелки, а не ввод с клавиатуры.
+    if(!(dep>0)||!(risk>0)||!(z.px>0)||!z.stop)return null;
     const perUnit=Math.abs(z.px-z.stop);
     if(perUnit<=0)return null;
     const riskMoney=dep*risk/100;
     const units=riskMoney/perUnit;
     const notional=units*z.px;
-    return {units,riskMoney,notional};
+    // ОПЕЧАТКА В СТОПЕ — самый дорогой из возможных промахов ввода.
+    // Стоп 72.4999 вместо 71.5 при депозите $1000 даёт 99 999 единиц и объём $7.25 млн.
+    // Формула при этом права: риск честно держится в $10. Неправо молчание —
+    // число выглядит как обычное, хотя позиция неисполнима. Считаем потолок по
+    // марже: больше, чем депозит×плечо, биржа не даст открыть в принципе.
+    const lev=_pf(document.getElementById('lev')?.value)||1;
+    const cap=dep*Math.max(1,lev);
+    return {units,riskMoney,notional,over:notional>cap,cap};
   }
   const _KIND_RAW={fade:'#bc8cff',break:'#3fb950',watch:'#58a6ff',stand:'#666'};
   let _expandedZones=new Set();
@@ -2588,7 +2601,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const dimCls=(phase==='live'&&st<3&&!isDone&&!isExpired&&!isActive)?'dim-zone':'';
       const ps=posSize(z);
       const sizeHtml=ps
-        ?`<span class="zone-size" title="Риск ${ps.riskMoney.toFixed(2)} USDT · объём ${ps.notional.toFixed(0)} USDT">${ps.units.toFixed(4)} ед.</span>`
+        ?(ps.over
+          ?`<span class="zone-size over" title="Объём ${ps.notional.toFixed(0)} USDT превышает потолок ${ps.cap.toFixed(0)} USDT (депозит×плечо). Обычно это опечатка в стопе: он слишком близко к цене зоны. Риск в деньгах посчитан верно, но такую позицию не открыть.">⚠ ${ps.units.toFixed(4)} ед.</span>`
+          :`<span class="zone-size" title="Риск ${ps.riskMoney.toFixed(2)} USDT · объём ${ps.notional.toFixed(0)} USDT">${ps.units.toFixed(4)} ед.</span>`)
         :`<span class="zone-size muted">— ед.</span>`;
       const expBadge=isExpired?'<span class="zone-exp-badge zone-exp-dead">ПРОСРОЧЕНА</span>':(z.exp?`<span class="zone-exp-badge">⏰ ${z.exp}</span>`:'');
       const trigBadge=z.triggeredAt&&!isDone?`<span class="zone-trig-badge">🎯 ${new Date(z.triggeredAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</span>`:'';
@@ -2790,7 +2805,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const entry=_pf(document.getElementById('c_entry').value),stop=_pf(document.getElementById('c_stop').value),
       lev=_pf(document.getElementById('lev').value)||1,wr=_pf(document.getElementById('c_wr').value),risk=_pf(document.getElementById('c_risk').value);
     const mEl=document.getElementById('o_margin'),dEl=document.getElementById('o_dist'),rEl=document.getElementById('o_ror');
-    if(entry>0&&stop>0){const dist=Math.abs(entry-stop)/entry*100,margin=dist*lev;
+    // lev через ||1 ловил ноль, но пропускал минус: плечо −10 давало «маржа −10.00%».
+    // Вход, равный стопу, показывал «0.00%» — читалось как «риска нет», хотя это
+    // вырожденный ввод, и posSize в том же случае честно отказывается считать.
+    if(entry>0&&stop>0&&entry!==stop&&lev>0){const dist=Math.abs(entry-stop)/entry*100,margin=dist*lev;
       dEl.textContent=dist.toFixed(3)+'%';mEl.textContent=margin.toFixed(2)+'%';mEl.className='sv '+(margin>20?'danger':margin>8?'warn':'green');}
     else{mEl.textContent='—';dEl.textContent='—';mEl.className='sv';}
     if(wr>0&&wr<100&&risk>0){const p=wr/100,rr=1.5,expR=p*rr-(1-p);let ror;
