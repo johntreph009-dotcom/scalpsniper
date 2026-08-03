@@ -7722,6 +7722,35 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   addEventListener('resize',()=>{ if(_ovDeb)clearTimeout(_ovDeb); _ovDeb=setTimeout(_ovReport,800); });
   setTimeout(_ovReport,3000);
 
+  // ═══════════ ВТОРАЯ ВКЛАДКА (AUDIT) ═══════════
+  // localStorage общий на весь origin, и два экземпляра пишут в него independently:
+  // зоны, журнал, настройки. Кто сохранил последним — тот и прав, второй молча
+  // теряет свою работу. Трейдера об этом предупреждали устно, но продукт не должен
+  // ломаться от второй вкладки — а тем более ломаться незаметно.
+  // ПРЕДУПРЕЖДАЕМ, А НЕ БЛОКИРУЕМ. Блокировка посреди сессии — это отобрать
+  // терминал у человека в позиции; лечение хуже болезни. Показываем факт,
+  // решение оставляем ему. Это тот же принцип, что и во всём остальном:
+  // инструмент сообщает, трейдер решает.
+  (function(){
+    if(typeof BroadcastChannel!=='function')return;   // старый браузер — молча пропускаем
+    let ch; try{ ch=new BroadcastChannel('scalpsniper-tabs'); }catch(e){ return; }
+    const me=Math.random().toString(36).slice(2), t0=Date.now();
+    let warned=false;
+    function warn(){
+      if(warned)return; warned=true;
+      const m='ОТКРЫТА ВТОРАЯ ВКЛАДКА ScalpSniper. Хранилище общее: вкладки затирают друг другу зоны и журнал — сохранит та, что записала последней. Оставь одну.';
+      try{ if(typeof _proc==='function')_proc(m,'pr-dn'); }catch(e){}
+      try{ const st=document.getElementById('quickStatus'); if(st)st.textContent='⚠ '+m; }catch(e){}
+      try{ console.warn('[scalpsniper] '+m); }catch(e){}
+    }
+    ch.onmessage=e=>{
+      const d=e&&e.data; if(!d||d.id===me)return;
+      if(d.t==='hello'){ try{ch.postMessage({t:'here',id:me,t0});}catch(_){} warn(); }
+      else if(d.t==='here')warn();
+    };
+    try{ ch.postMessage({t:'hello',id:me,t0}); }catch(e){}
+  })();
+
   // Стартовое состояние кнопки: выключенное автообновление переживает перезагрузку,
   // и кнопка обязана это показывать — иначе трейдер решит, что оно работает.
   (function(){ const b=document.getElementById('schedBtn'); if(!b)return;
