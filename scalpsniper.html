@@ -738,11 +738,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   .hub-tabs{display:flex;gap:0;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--line)}
   .hub-tabs::-webkit-scrollbar{display:none}
+  /* Вкладки — основная навигация терминала, а не подпись мелким шрифтом.
+     10px читались только вплотную; на рабочей дистанции это шум. */
   .hub-tab{flex:1;min-width:max-content;background:transparent;border:0;border-bottom:2px solid transparent;
-    color:var(--text-faint);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.3px;
-    padding:10px 12px;cursor:pointer;white-space:nowrap;transition:color .15s,background .15s;position:relative}
-  .hub-tab:hover{color:var(--text);background:rgba(255,255,255,.03)}
+    color:var(--text-faint);font-family:'Chakra Petch','Rajdhani',sans-serif;font-size:15px;font-weight:600;letter-spacing:.8px;
+    padding:14px 18px;cursor:pointer;white-space:nowrap;position:relative;
+    transition:color .18s ease,background .18s ease,transform .12s ease}
+  .hub-tab:hover{color:var(--text);background:rgba(255,255,255,.05)}
+  .hub-tab:active{transform:translateY(1px)}
   .hub-tab.on{color:var(--accent);border-bottom-color:var(--accent);background:var(--accent-soft)}
+  /* Подсветка активной вкладки снизу вверх — глаз цепляется за текущий раздел
+     даже боковым зрением, не перечитывая ряд. */
+  .hub-tab.on::after{content:'';position:absolute;left:0;right:0;bottom:0;height:36px;
+    background:linear-gradient(180deg,transparent,rgba(255,122,24,.16));pointer-events:none}
+  .hub-tab .hub-dot{width:7px;height:7px;margin-left:7px}
   .hub-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--line);margin-left:5px;vertical-align:middle}
   .hub-dot.live{background:#2EE08A;box-shadow:0 0 6px #2EE08A;animation:hubBlink 1.6s infinite}
   @keyframes hubBlink{0%,100%{opacity:1}50%{opacity:.35}}
@@ -6722,6 +6731,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
            if(typeof _dlDraw==='function')_dlDraw(); if(typeof _dlDrawPrice==='function')_dlDrawPrice(); }catch(e){}
     });
     _hubDots();
+    // ДУБЛИ КНОПОК. При переезде блоков в панели их собственные кнопки действий
+    // переехали вместе с ними, а шапка хаба рисует такие же — выходило по две
+    // «Пересчитать» и по две «Прогнать историю». Единственный ряд действий —
+    // в шапке: он меняется вместе с вкладкой и всегда на одном месте.
+    ['hubAudit','hubPass','hubProc'].forEach(id=>{
+      const p=document.getElementById(id); if(!p)return;
+      p.querySelectorAll('[onclick]').forEach(b=>{
+        if(/_apAudit\(|_apExport\(|_cpRender\(/.test(b.getAttribute('onclick')||''))b.style.display='none';
+      });
+    });
     // кнопки действий переносим в шапку окна — они разные для каждой вкладки
     const act=document.getElementById('hubAct'); if(!act)return;
     const whOn=(typeof _whWorker!=='undefined'&&!!_whWorker), lqOn=(typeof _liqWs!=='undefined'&&!!_liqWs);
