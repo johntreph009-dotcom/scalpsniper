@@ -1445,8 +1445,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
      карточки. Здесь он захлопнуться не может — ниже ничего нет.
      Зачем: строка 32px под шрифт 10px, на 30 зонах это лишние пол-экрана
      прокрутки. Цель панели — увидеть весь план разом, а не листать его. */
-  .zl-row{padding:3px 10px}
-  .zone-ladder{gap:2px}
+  /* !important — не привычка, а вывод из замера: у .zl-row три конкурирующих
+     правила padding, и «последнее в файле» этот спор не решало. */
+  .zl-row{padding:3px 10px!important}
+  .zone-ladder{gap:2px!important}
 
   /* ── СТРОКА СВЕЖЕСТИ: ТЕКСТ СВЕРХУ, КНОПКИ ПОД НИМ ──────────────────────
      Я ошибочно счёл это мобильной проблемой и спрятал правку в медиазапрос.
@@ -1516,6 +1518,55 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     /* Заголовки внутри шапки на телефоне лишние: они съедают высоту,
        а что это за блок, видно по содержимому. */
     .hdr-stick .section-title{margin:6px 0 6px;font-size:11px}
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     ЕДИНАЯ МОБИЛЬНАЯ СЕТКА. Последний блок в таблице стилей.
+
+     Почему он выглядит так, а не как набор точечных правок: за сегодня пять
+     раз подряд правка проигрывала каскаду — .lc-grid, .zl-row, position:sticky,
+     дважды шапка. Каждый раз я добавлял правило, конкурирующее с существующим,
+     и каждый раз проигрывал тому, что ниже по файлу. Лечение не в шестой
+     аккуратной правке, а в снятии конкуренции: один блок, объявленный
+     последним, задаёт ВСЕ размеры карточек в боковой колонке. !important
+     здесь не костыль, а объявление: ниже спорить не с чем.
+
+     Принцип вёрстки: карточка — единица. Одна ширина, один радиус, один
+     отступ, одна типографика. Разнобой ширин и есть то, что читается как
+     «сделано на коленке», а не мелкие огрехи внутри блоков.
+     ═══════════════════════════════════════════════════════════════════════ */
+  @media(max-width:720px){
+    /* 1. КАРТОЧКИ ОДНОЙ ШИРИНЫ. Раньше каждый блок сам решал, насколько
+          растянуться: тренд дня обрывался на 60% экрана, контекст шёл во всю,
+          OPT MAX — по-своему. Глаз читает такой разнобой как небрежность. */
+    .t-side #dayTrend,.t-side #dayCtx,.t-side #mpChip,
+    .t-side .gs-panel,.t-side .zones-fresh,.t-side .cf-banner{
+      width:100%!important;max-width:100%!important;box-sizing:border-box!important;
+      margin:0 0 9px!important;border-radius:12px!important}
+    .t-side #dayTrend,.t-side #dayCtx,.t-side #mpChip{padding:11px 13px!important}
+
+    /* 2. ЗАГОЛОВОК СЕКЦИИ. «ОЧИСТИТЬ» уезжала за правый край, а кнопка
+          сворачивания шапки садилась поверх неё. Заголовок переносится,
+          управляющие кнопки идут своей строкой и не наезжают. */
+    .t-side .section-title{flex-wrap:wrap!important;row-gap:8px!important;
+      padding-right:34px!important;margin:10px 0 9px!important}
+    .t-side .section-title .tag,.t-side .section-title .clear-zones-btn{
+      font-size:10px!important;padding:5px 10px!important}
+    .hdr-stick > .fold-btn{top:6px!important;right:6px!important}
+
+    /* 3. ТАБЛИЧНЫЕ БЛОКИ (OPT MAX / PAIN) — метка и значение в две колонки,
+          иначе значение отрывается от своей метки и строка читается неверно. */
+    .t-side #mpChip{display:grid!important;grid-template-columns:auto 1fr!important;
+      gap:3px 10px!important;align-items:baseline!important}
+
+    /* 4. ПАРНЫЕ ПАНЕЛИ (точность чтения / дисциплина) — равные половины,
+          а не «широкая и узкая»: сравнение глазами требует равных рамок. */
+    .t-side .row2,.t-side .gs-pair{display:grid!important;
+      grid-template-columns:1fr 1fr!important;gap:9px!important}
+
+    /* 5. ТИПОГРАФИКА: одна шкала на все карточки колонки. */
+    .t-side{font-size:12px}
+    .t-side .section-title{font-size:12px!important;letter-spacing:1.1px!important}
   }
   /* заметка больше не растягивается: место нужно шкале */
   .zl-note{flex:0 1 auto;min-width:0}
