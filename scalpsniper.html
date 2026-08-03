@@ -1567,6 +1567,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     /* 5. ТИПОГРАФИКА: одна шкала на все карточки колонки. */
     .t-side{font-size:12px}
     .t-side .section-title{font-size:12px!important;letter-spacing:1.1px!important}
+
+    /* 6. ЧИПЫ ГОТОВНОСТИ СКРЫТЫ (по просьбе трейдера). «Зон: 22 · Без стопа: 3 ·
+          Байас · Лимиты · Протокол 0/4» — это предсессионный чеклист. В сессии
+          он занимает первый экран и не отвечает ни на один вопрос момента.
+          Данные никуда не делись: счётчик зон есть в плашке под ценой. */
+    /* !important обязателен: видимость чипов JS ставит ИНЛАЙНОМ (style="display:flex"),
+       а инлайн бьёт обычное правило таблицы стилей. */
+    #readinessBar,.readiness-bar{display:none!important}
+
+    /* 7. ШАПКА ПЕРЕЕХАЛА В НАЧАЛО СЕТКИ (см. _hdrStickInit) — значит отрицательные
+          поля от боковой колонки ей больше не подходят. */
+    .hdr-stick{margin:0 0 10px!important;border-radius:12px!important;
+      padding:9px 11px!important}
   }
   /* заметка больше не растягивается: место нужно шкале */
   .zl-note{flex:0 1 auto;min-width:0}
@@ -8210,6 +8223,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // Строка свежести с кнопками «план / Обновить / авто / вибро» переживает
     // сворачивание: без неё свёрнутая шапка не давала доступа к обновлению вовсе.
     const keep=wrap.querySelector('#zonesFresh'); if(keep)keep.classList.add('fold-keep');
+    // ПОРЯДОК ПЕРВОГО ЭКРАНА НА ТЕЛЕФОНЕ.
+    // .t-side в разметке идёт ПОСЛЕ основной колонки, поэтому sticky внутри неё
+    // прилипал только когда до неё доскроллишь — «шапка не работает» именно об этом.
+    // Переносим обёртку в самое начало сетки: она и на первом экране, и липнет
+    // к верху по-настоящему. Порядок по убыванию важности задал трейдер:
+    // свежесть и тренд → хаб с автопилотом; чипы готовности он просил скрыть.
+    if(innerWidth<=720){
+      const grid=side.parentElement;
+      if(grid)grid.insertBefore(wrap,grid.firstElementChild);
+    }
     _foldMount('hdr',wrap,'Свернуть шапку: останется строка свежести с кнопками');
     if(_folds.hdr===undefined&&innerWidth<=720)_foldSet('hdr',true);  // телефон — свёрнута сразу
   }
