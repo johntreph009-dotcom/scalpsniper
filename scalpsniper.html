@@ -6213,13 +6213,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // формой, а не подписью. Справа оставлен карман под объём и сценарий, чтобы
     // подписи стояли столбцом и не плясали по концам полос.
     const midY=H*0.5;
-    const RG=150;                                   // правый карман: объём + сценарий
-    const rowH=Math.max(14,Math.min(20,(midY-18)/9));
-    const PW=Math.max(88,Math.min(120,rowH*6.4));   // ширина колонки цены
-    const cxc=(W-RG)/2;                             // центр ПОЛЯ ОБЪЁМОВ, не канваса
+    // Правый карман убран: подпись объёма ушла ВНУТРЬ правого крыла, к его началу.
+    // Так число стоит на самой полосе, которую описывает, — глаз не переводит
+    // взгляд через пустоту к отдельному столбцу. А освободившиеся 150px забрали
+    // крылья: та же стена рисуется длиннее и различается увереннее.
+    const rowH=Math.max(17,Math.min(26,(midY-18)/7));
+    const PX_FONT=Math.max(14,Math.round(rowH-5));
+    const midH=Math.max(11,Math.round((PX_FONT+7)*0.66));  // полувысота плашки mid: растёт со шрифтом
+    const PW=Math.max(96,Math.round(PX_FONT*7.2));  // колонка цены под крупный шрифт
+    const cxc=W/2;                                  // ровно центр канваса
     const pxL=cxc-PW/2, pxR=cxc+PW/2;
-    const half=Math.max(40,Math.min(pxL-6,(W-RG)-pxR));   // крылья одинаковой длины
-    const PX_FONT=Math.max(12,Math.round(rowH-4));
+    const half=Math.max(40,Math.min(pxL-6,W-6-pxR));      // крылья одинаковой длины
     ctx.font='10px JetBrains Mono, monospace'; ctx.textBaseline='middle';
     const allV=A.concat(B).map(r=>r.v).filter(v=>v>0).sort((x,y)=>x-y);
     const avg=allV.length?allV[Math.floor(allV.length/2)]:1;   // медиана устойчивее среднего к выбросам
@@ -6278,15 +6282,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       ctx.fillStyle=zn?'#ff7a18':(wall?'#f0f3f7':'rgba(190,196,206,.78)');
       ctx.textAlign='center'; ctx.fillText(p.toFixed(_dlDec),cxc,y+rowH/2);
       if(zn){ ctx.fillStyle='#ff7a18'; ctx.fillRect(pxL-3,y+rowH/2-3,3,6); }
-      // 3) ОБЪЁМ ЦИФРОЙ + СЦЕНАРИЙ — в правом кармане, ровным столбцом.
-      //    Раньше подписи стояли у конца полосы и плясали по горизонтали:
-      //    сравнивать их между строками было невозможно.
+      // 3) ОБЪЁМ ЦИФРОЙ + СЦЕНАРИЙ — ВНУТРИ правого крыла, от его начала.
+      //    Число стоит на той самой полосе, которую описывает: не нужно вести
+      //    взгляд через пустоту к отдельному столбцу и сопоставлять по высоте.
+      //    Старт от центра — значит все подписи всё равно выровнены по вертикали.
       if(wall){
         const sc=scen(p,side);
         const vol=sz>=1e6?(sz/1e6).toFixed(1)+'M':sz>=1e3?(sz/1e3).toFixed(0)+'k':sz.toFixed(0);
-        ctx.textAlign='left'; ctx.font='bold '+Math.max(9,PX_FONT-3)+'px JetBrains Mono, monospace';
-        ctx.fillStyle='#ffb020'; ctx.fillText(vol,W-RG+8,y+rowH/2);
-        if(sc){ ctx.fillStyle=sc.c; ctx.fillText(sc.t,W-RG+62,y+rowH/2); }
+        const fs=Math.max(10,PX_FONT-4);
+        ctx.textAlign='left'; ctx.font='bold '+fs+'px JetBrains Mono, monospace';
+        ctx.fillStyle='#fff3e0'; ctx.fillText(vol,pxR+7,y+rowH/2);
+        if(sc){ ctx.fillStyle=sc.c; ctx.fillText(sc.t,pxR+7+ctx.measureText(vol).width+10,y+rowH/2); }
       }
       _dlRows.push({y,h:rowH,p,sz,side,rel});
       if(hov){ ctx.fillStyle='rgba(255,255,255,.55)'; ctx.textAlign='left'; ctx.font='9px JetBrains Mono, monospace';
@@ -6304,24 +6310,25 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const mapA=new Map(A.map(r=>[Math.round(r.p/step),r.v]));
     const mapB=new Map(B.map(r=>[Math.round(r.p/step),r.v]));
     const k0=Math.round(mid/step);
-    const rowsA=Math.floor((midY-16)/rowH), rowsB=Math.floor((midY-16)/rowH);
+    const rowsA=Math.floor((midY-midH-4)/rowH), rowsB=rowsA;
     for(let i=rowsA;i>=1;i--){ const kk=k0+i, p=kk*step;
-      row(p, mapA.get(kk)||0, midY-14-i*rowH, -1); }
+      row(p, mapA.get(kk)||0, midY-midH-3-i*rowH, -1); }
     for(let i=1;i<=rowsB;i++){ const kk=k0-i, p=kk*step;
-      row(p, mapB.get(kk)||0, midY+14+(i-1)*rowH, 1); }
+      row(p, mapB.get(kk)||0, midY+midH+3+(i-1)*rowH, 1); }
     // mid со спредом — сразу видно цену входа и её стоимость
     // ЯКОРЬ ВЗГЛЯДА: плотная плашка mid со спредом. От неё глаз расходится вверх и вниз.
     const spr=(aP[0]&&bP[0])?((aP[0]-bP[0])/mid*1e4):0;
-    ctx.fillStyle='rgba(255,122,24,.10)'; ctx.fillRect(0,midY-11,W,22);
+    ctx.fillStyle='rgba(255,122,24,.10)'; ctx.fillRect(0,midY-midH,W,midH*2);
     ctx.strokeStyle='rgba(255,122,24,.45)'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(0,midY-11); ctx.lineTo(W,midY-11);
-    ctx.moveTo(0,midY+11); ctx.lineTo(W,midY+11); ctx.stroke();
-    ctx.font='bold '+(PX_FONT+2)+'px JetBrains Mono, monospace';
+    ctx.beginPath(); ctx.moveTo(0,midY-midH); ctx.lineTo(W,midY-midH);
+    ctx.moveTo(0,midY+midH); ctx.lineTo(W,midY+midH); ctx.stroke();
+    // mid крупнее всех остальных: это единственная точка, от которой считается
+    // всё остальное, и глаз должен находить её без поиска
+    ctx.font='bold '+(PX_FONT+7)+'px JetBrains Mono, monospace';
     ctx.fillStyle='#ff7a18'; ctx.textAlign='center';
     ctx.fillText(mid.toFixed(_dlDec),cxc,midY+3);
-    ctx.font='9px JetBrains Mono, monospace'; ctx.fillStyle='rgba(255,176,32,.8)';
-    ctx.textAlign='left'; ctx.fillText('mid · спред '+spr.toFixed(1)+' bps',W-RG+8,midY+3);
-    ctx.font='10px JetBrains Mono, monospace';
+    ctx.font='10px JetBrains Mono, monospace'; ctx.fillStyle='rgba(255,176,32,.85)';
+    ctx.textAlign='left'; ctx.fillText('mid · спред '+spr.toFixed(1)+' bps',pxR+10,midY+3);
     // границы колонки цены — две опоры, от которых крылья расходятся наружу
     ctx.strokeStyle='rgba(255,255,255,.10)';
     ctx.beginPath(); ctx.moveTo(pxL-3,0); ctx.lineTo(pxL-3,H);
