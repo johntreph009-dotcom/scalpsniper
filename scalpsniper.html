@@ -1458,9 +1458,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   html[data-theme="light"] .hdr-stick{background:rgba(236,238,240,.93)}
   /* СВЁРНУТАЯ: остаётся только строка свежести — «когда обновлено, когда авто».
      Это единственное, что нужно постоянно; остальное — для разбора, не для момента. */
-  .hdr-stick.is-folded > *{display:none}
-  .hdr-stick.is-folded > .fold-btn,
-  .hdr-stick.is-folded > #zonesFresh{display:flex}
   .hdr-stick.is-folded{padding-bottom:5px}
 
   /* ── ВЫКЛЮЧАТЕЛЬ БЛОКА ───────────────────────────────────────────────── */
@@ -1469,7 +1466,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     color:var(--text-faint);font-size:11px;cursor:pointer;padding:0;transition:all .12s}
   .fold-btn:hover{border-color:var(--accent-dim);color:var(--accent);background:var(--accent-soft)}
   [data-fold]{position:relative}
-  [data-fold].is-folded > *:not(.fold-btn){display:none!important}
+  /* .fold-keep — то, что обязано пережить сворачивание. На телефоне шапка свёрнута
+     по умолчанию, и раньше это правило со !important гасило ВСЁ, включая строку
+     с кнопками «план / Обновить / авто / вибро»: на iPhone пропадали и шапка,
+     и обновление разом. Исключение должно жить в САМОМ правиле, а не в отдельном
+     ниже — иначе !important снова его перебьёт. */
+  [data-fold].is-folded > *:not(.fold-btn):not(.fold-keep){display:none!important}
+  [data-fold].is-folded > .fold-keep{display:flex!important}
   [data-fold].is-folded{min-height:26px;opacity:.75}
   .hdr-stick > .fold-btn{top:2px;right:2px}
 
@@ -8029,12 +8032,29 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!_hapticOn)return;
     try{ if(navigator.vibrate)navigator.vibrate(_HAP[kind]||_HAP.tap); }catch(e){}
   }
+  // На iOS Web Vibration API отсутствует физически. Кнопка, которая «включается»,
+  // но ничего не делает, — обман интерфейса: трейдер решит, что вибрация есть,
+  // и спишет её отсутствие на свой телефон. Поэтому там она честно неактивна.
+  const _hapSupported=(typeof navigator!=='undefined'&&!!navigator.vibrate);
+  function _hapBtnSync(){
+    const b=document.getElementById('hapBtn'); if(!b)return;
+    if(!_hapSupported){
+      b.textContent='◈ вибро н/д'; b.classList.add('off'); b.disabled=true;
+      b.title='Вибрация недоступна: в iOS Safari нет Web Vibration API (ограничение Apple, обойти нельзя). На Android работает.';
+      return;
+    }
+    b.textContent=_hapticOn?'◈ вибро':'◇ вибро'; b.classList.toggle('off',!_hapticOn);
+    b.title='Тактильная отдача на входе цены в зону и на действиях';
+  }
   function _hapticToggle(){
+    if(!_hapSupported)return;
     _hapticOn=!_hapticOn;
     try{localStorage.setItem('msa_haptic_v1',_hapticOn?'1':'0');}catch(e){}
     if(_hapticOn)_haptic('ok');
+    _hapBtnSync();
     if(typeof _proc==='function')_proc('вибрация '+(_hapticOn?'включена':'выключена'));
   }
+  setTimeout(_hapBtnSync,300);
   // Отдача на осмысленных действиях, а не на каждом касании: клик по кнопке —
   // подтверждение, вход цены в зону — событие. Всё остальное молчит.
   document.addEventListener('click',e=>{
@@ -8097,7 +8117,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     wrap.className='hdr-stick';
     side.insertBefore(wrap,uniq[0]);
     uniq.forEach(el=>wrap.appendChild(el));
-    _foldMount('hdr',wrap,'Свернуть шапку: останется только строка свежести');
+    // Строка свежести с кнопками «план / Обновить / авто / вибро» переживает
+    // сворачивание: без неё свёрнутая шапка не давала доступа к обновлению вовсе.
+    const keep=wrap.querySelector('#zonesFresh'); if(keep)keep.classList.add('fold-keep');
+    _foldMount('hdr',wrap,'Свернуть шапку: останется строка свежести с кнопками');
     if(_folds.hdr===undefined&&innerWidth<=720)_foldSet('hdr',true);  // телефон — свёрнута сразу
   }
   try{ _hdrStickInit(); }catch(e){ console.warn('[scalpsniper] hdr-stick:',e&&e.message); }
