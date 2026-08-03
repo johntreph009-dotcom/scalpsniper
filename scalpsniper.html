@@ -1769,7 +1769,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <label>пауза с<input type="number" id="cfgCd" min="0" step="5" oninput="_apCfg('cd',this.value)"></label>
       <span class="ap-cfg-out" id="cfgOut"></span>
     </div>
-    <div class="dl-canvas-lbl" style="margin-top:8px">ПАСПОРТ МОНЕТЫ <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Прогон по истории инструмента: характер монеты (трендовость, волатильность, возврат к уровню) на месяцах часовых свечей + достоверный прогон лесенки по минуткам с перебором шага и режима. Найденный шаг подставляется автоматически. Протоколы стакана по истории НЕ восстановимы — свечи не хранят стены и дельту.</span></span> <button type="button" class="zf-refresh" onclick="_cpRender(true)">↻ Прогнать историю</button></div>
+    <div class="dl-canvas-lbl" style="margin-top:8px">ПАСПОРТ МОНЕТЫ <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Прогон по истории инструмента: характер монеты (трендовость, волатильность, возврат к уровню) на месяцах часовых свечей + достоверный прогон лесенки по минуткам с перебором шага и режима. Найденный шаг подставляется автоматически. Протоколы стакана по истории НЕ восстановимы — свечи не хранят стены и дельту.</span></span></div>
     <div id="cpPanel" class="gs-panel"><span class="gs-note">нажми «Прогнать историю» — соберу паспорт текущего инструмента</span></div>
     <div id="apPanel" class="gs-panel" style="display:none"></div>
     <div class="hub" id="hub">
@@ -1799,7 +1799,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <div class="hub-pane" id="hubLiq"></div>
       </div>
     </div>
-    <div class="dl-canvas-lbl" style="margin-top:8px">РАЗБОР АВТОПИЛОТА <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Матожидание (среднее bps на сделку) по протоколам, сегментам рынка и причинам выхода. Считается по журналу движка при ТЕКУЩИХ издержках — старые записи пересчитываются к ним же. Матожидание важнее WR: высокий процент побед при отрицательном среднем — убыточная машина.</span></span> <button type="button" class="zf-refresh" onclick="_apAudit()">↻ Пересчитать</button> <button type="button" class="zf-refresh" onclick="_apExport()">⭳ Выгрузить журнал (CSV)</button></div>
+    <div class="dl-canvas-lbl" style="margin-top:8px">РАЗБОР АВТОПИЛОТА <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Матожидание (среднее bps на сделку) по протоколам, сегментам рынка и причинам выхода. Считается по журналу движка при ТЕКУЩИХ издержках — старые записи пересчитываются к ним же. Матожидание важнее WR: высокий процент побед при отрицательном среднем — убыточная машина.</span></span></div>
     <div id="apAudit" class="gs-panel"><span class="gs-note">нажми «Пересчитать» — покажу матожидание по протоколам и сегментам</span></div>
     <div id="gsPanel" class="gs-panel" style="display:none"></div>
     <div id="mktBg" class="gs-panel" style="display:none"></div>
@@ -3509,7 +3509,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   // ── Дневной стоп-лимит: не индикатор, а интервенция (одноразовый оверлей + баннер + блок-подсветка входа) ──
   function _applyDayLock(locked, info){
-    ['psLong','psShort','dlLong','dlShort','lcPosBtn'].forEach(id=>{ const el=document.getElementById(id); if(el)el.classList.toggle('day-lock',locked); });
+    ['psLong','psShort','lcPosBtn'].forEach(id=>{ const el=document.getElementById(id); if(el)el.classList.toggle('day-lock',locked); });
     let bn=document.getElementById('dayLockBanner');
     if(locked){
       if(!bn){ const lc=document.getElementById('liveCard'); if(lc&&lc.parentNode){ bn=document.createElement('div'); bn.id='dayLockBanner'; bn.className='cf-banner'; lc.parentNode.insertBefore(bn,lc); } }
@@ -6272,8 +6272,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       el.addEventListener('touchstart',e=>{ y0=e.touches[0].clientY; },{passive:true});
       el.addEventListener('touchend',e=>{ if(y0==null)return; const dy=e.changedTouches[0].clientY-y0; y0=null; if(Math.abs(dy)>40)_dlTrade(dy<0?'long':'short'); },{passive:true});
     }
-    const lo=document.getElementById('dlLong'); if(lo&&!lo._b){ lo._b=1; lo.addEventListener('click',()=>_dlTrade('long')); }
-    const sh=document.getElementById('dlShort'); if(sh&&!sh._b){ sh._b=1; sh.addEventListener('click',()=>_dlTrade('short')); }
+    // Кнопки #dlLong/#dlShort удалены из разметки по просьбе трейдера — привязка к ним
+    // была мёртвой (AUDIT.md п.4). Сам _dlTrade жив: его вызывает свайп по касанию выше.
   }
   // ── исходы демо-свайпов: замер mid @15с/@30с, порог = спред на входе ──
   let _dlFbT=0;
@@ -6874,16 +6874,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
            if(typeof _dlDraw==='function')_dlDraw(); if(typeof _dlDrawPrice==='function')_dlDrawPrice(); }catch(e){}
     });
     _hubDots();
-    // ДУБЛИ КНОПОК. При переезде блоков в панели их собственные кнопки действий
-    // переехали вместе с ними, а шапка хаба рисует такие же — выходило по две
-    // «Пересчитать» и по две «Прогнать историю». Единственный ряд действий —
-    // в шапке: он меняется вместе с вкладкой и всегда на одном месте.
-    ['hubAudit','hubPass','hubProc'].forEach(id=>{
-      const p=document.getElementById(id); if(!p)return;
-      p.querySelectorAll('[onclick]').forEach(b=>{
-        if(/_apAudit\(|_apExport\(|_cpRender\(/.test(b.getAttribute('onclick')||''))b.style.display='none';
-      });
-    });
+    // ДУБЛИ КНОПОК — вылечены в разметке, а не прятаньем на лету (AUDIT.md п.1).
+    // Было: блоки переехали в панели вместе со своими кнопками действий, шапка хаба
+    // рисовала такие же, и здесь стоял цикл, скрывавший статические через style.display.
+    // Это работало, но разметка оставалась грязной: при следующем переносе блоков
+    // дубль всплыл бы снова, а скрытая кнопка продолжала бы существовать в DOM.
+    // Стало: статические кнопки удалены из #hubPass и #hubAudit. Единственный ряд
+    // действий — в шапке ниже: он меняется вместе с вкладкой и всегда на одном месте.
     // кнопки действий переносим в шапку окна — они разные для каждой вкладки
     const act=document.getElementById('hubAct'); if(!act)return;
     const whOn=(typeof _whWorker!=='undefined'&&!!_whWorker), lqOn=(typeof _liqWs!=='undefined'&&!!_liqWs);
@@ -7535,7 +7532,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!bn){ const lc=document.getElementById('liveCard'); if(lc&&lc.parentNode){ bn=document.createElement('div'); bn.id='cfBanner'; bn.className='cf-banner'; lc.parentNode.insertBefore(bn,lc); } }
     const danger=c.alarm_level==='CRITICAL'||ov.index>3.2, high=c.alarm_level==='HIGH', caution=danger||high||c.squeeze.active;
     if(bn){ bn.style.display=(danger||high)?'block':'none'; bn.textContent=(danger?'⛔ CRITICAL: ':'⚠ HIGH: ')+(c.directive||''); }
-    ['dlLong','dlShort','lcPosBtn','psLong','psShort'].forEach(id=>{ const el=document.getElementById(id); if(el)el.classList.toggle('cf-warn',caution); });
+    ['lcPosBtn','psLong','psShort'].forEach(id=>{ const el=document.getElementById(id); if(el)el.classList.toggle('cf-warn',caution); });
     if(c.alarm_level!==_cfLastAlarm){
       if(typeof _proc==='function'&&(high||danger))_proc('CF-контекст: '+c.alarm_level+' · '+c.scenario+' — '+c.directive,danger?'pr-dn':'pr-warn');
       _cfLastAlarm=c.alarm_level;
