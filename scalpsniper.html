@@ -6213,6 +6213,48 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(now)now.textContent=cur.toFixed(_dlDec);
     if(chg){ chg.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%'; chg.className='dl-price-chg '+(pct>=0?'up':'dn'); }
   }
+  // ═══════════ ВТОРОЙ ТИР: КАРТА СТЕН НА РЕАЛЬНОЙ ГЛУБИНЕ ═══════════
+  // ЗАМЕР, ради которого всё это. Быстрый поток даёт 20 уровней: на ETH это
+  // 1.3 bps в обе стороны — сотые доли процента. Стены, ради которых стакан и
+  // смотрят, стоят в 10–50 bps, то есть ЗА пределами кадра. «Стены 16k/28k»,
+  // которые рисовались раньше, — не стены, а текущая очередь у мида.
+  //
+  // БЮДЖЕТ ЗАПРОСОВ (замерено на api/v3/exchangeInfo, а не по памяти):
+  //   лимит IP — 6000 веса/мин; depth limit=1000 стоит 50.
+  //   Опрос раз в 3 с = 20 запросов/мин × 50 = 1000 веса = 17% бюджета.
+  // Ровно поэтому НЕ поднимаем limit у быстрого тира: 800 мс × 50 = 3750/мин,
+  // 62% бюджета за одну ручку — так и приезжает бан по 429/418.
+  // Разделение по смыслу, а не только по нагрузке: микроструктура меняется
+  // за миллисекунды, карта стен — за секунды. Опрашивать их одинаково незачем.
+  //
+  // Второй тир живёт на ГЛАВНОМ потоке, а не в воркере: воркер работает,
+  // и лезть в поток данных ради аддитивной надстройки — лишний риск.
+  // Нет глубоких данных → всё рисуется как раньше, из быстрого снимка.
+  let _dlDeep=null, _deepBusy=false, _deepErr=0;
+  async function _deepFetch(){
+    if(_deepBusy||document.hidden)return;
+    const cv=document.getElementById('dlBook');
+    if(!cv||!cv.offsetParent)return;                 // панель закрыта — не жжём лимит
+    _deepBusy=true;
+    try{
+      const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'BTCUSDT';
+      const r=await fetch('https://api.binance.com/api/v3/depth?symbol='+sym+'&limit=1000',{cache:'no-store'});
+      if(!r.ok)throw new Error('http '+r.status);
+      const j=await r.json();
+      if(!j||!j.asks||!j.asks.length||!j.bids||!j.bids.length)throw new Error('пусто');
+      const bestA=+j.asks[0][0], bestB=+j.bids[0][0], mid=(bestA+bestB)/2;
+      const within=mid*0.006;                        // ±60 bps: с запасом на перекорзинивание
+      const take=(arr,lo,hi)=>{ const out=[]; for(const [p,q] of arr){ const P=+p; if(P<lo||P>hi)continue; out.push([P,+q]); } return out; };
+      _dlDeep={t:Date.now(),mid,
+        asks:take(j.asks,mid,mid+within),
+        bids:take(j.bids,mid-within,mid)};
+      _deepErr=0;
+    }catch(e){ _deepErr++; if(_deepErr>=3)_dlDeep=null; }   // три подряд — молча падаем на быстрый тир
+    finally{ _deepBusy=false; }
+  }
+  setInterval(_deepFetch,3000);
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden)_deepFetch(); });
+
   function _dlDraw(){
     const ctx=_dlCtx; if(!ctx)return; const W=_dlW,H=_dlH; ctx.clearRect(0,0,W,H);
     const s=_dlSnap; if(!s)return;
@@ -6228,8 +6270,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // 2) разброс объёмов 46:1 — при линейной шкале медиана невидима → корень вместо линейной;
     // 3) 37% уровней резко меняются между кадрами → сглаживание EMA, книга перестаёт мерцать.
     const rawStep=Math.max((aP[0]-bP[n-1])/Math.max(1,n*2),mid*2e-6);
-    const step=(()=>{const t=mid*1.2e-5; const m=Math.pow(10,Math.floor(Math.log10(t)));
-      const q=t/m; return (q<1.5?1:q<3.5?2:q<7.5?5:10)*m;})();   // «круглый» шаг корзины ~1.2 bps
+    // ШАГ КОРЗИНЫ СЛЕДУЕТ ЗА ИСТОЧНИКОМ. На быстром тире (20 уровней ≈ 1.3 bps)
+    // осмысленный шаг ~1.2 bps. На глубоком поднимаем до ~6 bps: при 7 строках
+    // в полполя это даёт кадр ±40 bps — тот самый диапазон, где стоят стены.
+    // Оставить мелкий шаг на глубоких данных значило бы получить ту же щель,
+    // только с большим числом пустых строк.
+    const _deepNow=_dlDeep&&(Date.now()-_dlDeep.t)<9000;
+    const step=(()=>{const t=mid*(_deepNow?6e-5:1.2e-5); const m=Math.pow(10,Math.floor(Math.log10(t)));
+      const q=t/m; return (q<1.5?1:q<3.5?2:q<7.5?5:10)*m;})();
     const buck=(arr,px,sgn)=>{const m=new Map();
       for(let i=0;i<n;i++){ const key=Math.round(px[i]/step)*step; m.set(key,(m.get(key)||0)+arr[i]); }
       return [...m.entries()].map(([p,v])=>({p,v})).sort((x,y)=>sgn*(y.p-x.p));};
@@ -6269,7 +6317,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const half=Math.max(40,Math.min(pxL-6,W-6-pxR));      // крылья одинаковой длины
     ctx.font='10px JetBrains Mono, monospace'; ctx.textBaseline='middle';
     const allV=A.concat(B).map(r=>r.v).filter(v=>v>0).sort((x,y)=>x-y);
-    const avg=allV.length?allV[Math.floor(allV.length/2)]:1;   // медиана устойчивее среднего к выбросам
+    let avg=allV.length?allV[Math.floor(allV.length/2)]:1;   // медиана устойчивее среднего к выбросам (переопределяется на глубоких данных)
     const bps=p=>((p-mid)/mid*1e4);
     _dlRows=[];   // зоны наведения: строим при отрисовке, читаем в обработчиках мыши
     // мои размеченные зоны — отмечаем прямо в книге, чтобы не сверять глазами с другой панелью
@@ -6350,8 +6398,27 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // Стало: идём по СЕТКЕ от mid наружу с постоянным шагом и рисуем каждый
     // уровень, включая нулевые. Пустота теперь видна как пустота — а это тоже
     // информация: разрыв в стакане и есть место, где цена проскакивает быстро.
-    const mapA=new Map(A.map(r=>[Math.round(r.p/step),r.v]));
-    const mapB=new Map(B.map(r=>[Math.round(r.p/step),r.v]));
+    // ИСТОЧНИК СЕТКИ: глубокий тир, если он свежий, иначе быстрый снимок.
+    // Свежесть 9 с = три пропущенных опроса: дальше данные врут о стенах,
+    // а врущая карта хуже отсутствующей — лучше честные 1.3 bps.
+    const deepOk=_dlDeep&&(Date.now()-_dlDeep.t)<9000&&Math.abs(_dlDeep.mid-mid)/mid<0.01;
+    let mapA,mapB;
+    if(deepOk){
+      const acc=(rows)=>{ const m=new Map();
+        for(const [p,q] of rows){ const k=Math.round(p/step); m.set(k,(m.get(k)||0)+p*q); }   // в деньгах, как и быстрый тир
+        return m; };
+      mapA=acc(_dlDeep.asks); mapB=acc(_dlDeep.bids);
+    }else{
+      mapA=new Map(A.map(r=>[Math.round(r.p/step),r.v]));
+      mapB=new Map(B.map(r=>[Math.round(r.p/step),r.v]));
+    }
+    // Медиана и порог стены считаются по ТОМУ ЖЕ источнику, что рисуется.
+    // Иначе на глубоких данных «стеной» становился бы каждый второй уровень:
+    // медиана быстрого тира взята у мида, где объёмы крупнее.
+    if(deepOk){
+      const vv=[...mapA.values(),...mapB.values()].filter(v=>v>0).sort((x,y)=>x-y);
+      if(vv.length){ avg=vv[Math.floor(vv.length/2)]; mx=vv[vv.length-1]||1; }  // scale замыкается на mx — читает новое значение
+    }
     const k0=Math.round(mid/step);
     const rowsA=Math.floor((midY-midH-4)/rowH), rowsB=rowsA;
     for(let i=rowsA;i>=1;i--){ const kk=k0+i, p=kk*step;
