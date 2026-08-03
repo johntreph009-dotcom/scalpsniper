@@ -525,6 +525,22 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
      min-width:0 разрешает сжатие, дальше перенос делает своё дело. */
   .live-card,.lc-grid,.lc-grid>*,.lc-note{min-width:0}
   .live-card{overflow:hidden}
+  /* СКАЧОК МАСШТАБА НА ТЕЛЕФОНЕ. Когда цена входит в зону, карточка
+     разворачивается; если её содержимое оказывалось шире вьюпорта, страница
+     становилась шире экрана и браузер ужимал ВЕСЬ интерфейс, чтобы влезть.
+     Карточка ушла — масштаб отскочил обратно. Выглядело как «дёргается размер».
+     Лечим причину: ничему не разрешаем быть шире экрана. */
+  @media(max-width:720px){
+    html,body{max-width:100%;overflow-x:hidden}
+    .live-card,.lc-grid,.lc-grid>*,.lc-note,.zone-ladder,.hub,.hub-pane{max-width:100%;min-width:0}
+    .lc-grid{grid-template-columns:1fr}          /* три колонки на телефоне не читаются */
+    .lc-note{font-size:13px;padding:10px 12px;text-align:left}  /* центр хорош для короткой строки, для абзаца — нет */
+    /* Карточка не должна распирать экран: длинный план прокручивается внутри неё,
+       а не растягивает страницу и не сдвигает всё остальное вниз. */
+    .live-card{max-height:62vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+    .hub-tabs{overflow-x:auto}
+    .hub-tab{flex:0 0 auto;font-size:13px;padding:12px 14px}
+  }
   .lc-grid>*{overflow-wrap:anywhere}
   /* Техничный шрифт — заголовкам и подписям, где важен характер.
      Числа, цены и таблицы остаются моноширинными. */
@@ -6699,12 +6715,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       '.section-title',  // 2. инструмент
       '.live-bar',       // 3. цена — где я
       '#prepPhase',      // 4. план (свёрнут, разворачивается кнопкой)
-      '#liveCard',       // 5. ГЕРОЙ: активная зона — что делать
+      '#hub',            // 5. стакан и автопилот — то, во что смотришь постоянно
       '#sessWalls',      // 6. стены у цены
       '#sessionCtx',     // 7. байас и контекст дня
       '.sess-pchart',    // 8. пульс цены
       '#miniChartWrap',  // 9. график с зонами
-      '#hub',            // 10. стакан и автопилот сразу под графиком — микроструктура читается вместе с ним
+      '#liveCard',       // 10. активная зона: план читается после контекста графика
       '#zoneLadder',     // 11. весь план целиком
       '#posBlock'        // 12. исполнение: позиция и калькулятор риска
     ];
