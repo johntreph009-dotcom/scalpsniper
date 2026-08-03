@@ -2553,7 +2553,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // марже: больше, чем депозит×плечо, биржа не даст открыть в принципе.
     const lev=_pf(document.getElementById('lev')?.value)||1;
     const cap=dep*Math.max(1,lev);
-    return {units,riskMoney,notional,over:notional>cap,cap};
+    // Одного «нельзя» мало. Замер на реальных настройках (депозит 20000, плечо 3,
+    // риск 1%) показал: потолок пробивается на ЛЮБОМ стопе ближе 33 bps, то есть
+    // почти на каждом скальперском входе. Предупреждение, которое горит всегда,
+    // перестают читать — и оно становится хуже, чем его отсутствие.
+    // Поэтому считаем ДОСТИЖИМЫЙ риск при текущем плече. Это одно число разводит
+    // два разных случая, которые иначе неотличимы:
+    //   опечатка в стопе  → достижимый риск исчезающе мал (сотые доли процента);
+    //   нормальный узкий стоп → «поставь 0.3% вместо 1%» — готовое действие.
+    const maxRiskPct=dep>0?(cap*perUnit)/(z.px*dep)*100:0;
+    return {units,riskMoney,notional,over:notional>cap,cap,maxRiskPct};
   }
   const _KIND_RAW={fade:'#bc8cff',break:'#3fb950',watch:'#58a6ff',stand:'#666'};
   let _expandedZones=new Set();
@@ -2602,7 +2611,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const ps=posSize(z);
       const sizeHtml=ps
         ?(ps.over
-          ?`<span class="zone-size over" title="Объём ${ps.notional.toFixed(0)} USDT превышает потолок ${ps.cap.toFixed(0)} USDT (депозит×плечо). Обычно это опечатка в стопе: он слишком близко к цене зоны. Риск в деньгах посчитан верно, но такую позицию не открыть.">⚠ ${ps.units.toFixed(4)} ед.</span>`
+          ?`<span class="zone-size over" title="Объём ${ps.notional.toFixed(0)} USDT против потолка ${ps.cap.toFixed(0)} USDT (депозит×плечо) — столько не открыть. При этом стопе и плече проходит риск до ${ps.maxRiskPct<0.01?'<0.01':ps.maxRiskPct.toFixed(2)}% вместо текущего. Если это число исчезающе мало — скорее всего опечатка в стопе.">⚠ ${ps.units.toFixed(4)} ед. · макс ${ps.maxRiskPct<0.01?'<0.01':ps.maxRiskPct.toFixed(2)}%</span>`
           :`<span class="zone-size" title="Риск ${ps.riskMoney.toFixed(2)} USDT · объём ${ps.notional.toFixed(0)} USDT">${ps.units.toFixed(4)} ед.</span>`)
         :`<span class="zone-size muted">— ед.</span>`;
       const expBadge=isExpired?'<span class="zone-exp-badge zone-exp-dead">ПРОСРОЧЕНА</span>':(z.exp?`<span class="zone-exp-badge">⏰ ${z.exp}</span>`:'');
