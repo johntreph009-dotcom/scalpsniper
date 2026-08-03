@@ -6656,7 +6656,39 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     move('hubLiq',['liqDemo']);
     document.querySelectorAll('.hub-tab').forEach(b=>b.addEventListener('click',e=>{
       e.preventDefault(); _hubGo(b.getAttribute('data-hub'));}));
-    _hubReady=true; _hubGo('proc');
+    // вкладка по умолчанию — Стакан: в Сессии он нужен чаще лога движка, и это первая вкладка в ряду
+    _hubReady=true; _hubGo('book');
+  }
+  // СЕГМЕНТ 5: композиция Сессии. Порядок блоков = порядок принятия решения,
+  // а не порядок, в котором они исторически дописывались в файл.
+  // ГДЕ Я → ЧТО ДЕЛАТЬ → ЧЕМ ПОДТВЕРЖДАЮ → ВЕСЬ ПЛАН → ИНСТРУМЕНТЫ → ИСПОЛНЕНИЕ.
+  // Узлы только переставляются (appendChild переносит) — id, обработчики и разметка не тронуты.
+  function _layoutSession(){
+    const root=document.getElementById('livePhase'); if(!root)return;
+    // Ленты китов и ликвидаций в Сессии — те же данные, что во вкладках хаба
+    // (обе половины пишутся одним и тем же кодом, см. _whRender/_liqRender).
+    // Дубль съедал верх экрана и отодвигал решение вниз → прячем, живут во вкладках.
+    ['whaleSess','liqSess'].forEach(id=>{const el=document.getElementById(id); if(el)el.style.display='none';});
+    const ORDER=[
+      '#readinessBar',   // 1. можно ли вообще торговать сейчас
+      '.section-title',  // 2. инструмент
+      '.live-bar',       // 3. цена — где я
+      '#prepPhase',      // 4. план (свёрнут, разворачивается кнопкой)
+      '#liveCard',       // 5. ГЕРОЙ: активная зона — что делать
+      '#sessWalls',      // 6. стены у цены
+      '#sessionCtx',     // 7. байас и контекст дня
+      '.sess-pchart',    // 8. пульс цены
+      '#miniChartWrap',  // 9. график с зонами
+      '#hub',            // 10. стакан и автопилот сразу под графиком — микроструктура читается вместе с ним
+      '#zoneLadder',     // 11. весь план целиком
+      '#posBlock'        // 12. исполнение: позиция и калькулятор риска
+    ];
+    const kids=[...root.children];
+    const rank=el=>{for(let i=0;i<ORDER.length;i++){try{if(el.matches(ORDER[i]))return i;}catch(e){}} return ORDER.length;};
+    // сортировка устойчивая: незнакомые блоки не теряются, а оседают в конец в прежнем порядке
+    kids.map((el,i)=>({el,r:rank(el),i}))
+        .sort((a,b)=>a.r-b.r||a.i-b.i)
+        .forEach(o=>root.appendChild(o.el));
   }
   function _hubGo(k){
     _hubCur=k;
@@ -7401,6 +7433,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   try{ setPhase('live'); }catch(e){}
   // хаб живёт в Сессии — собираем его сразу, не дожидаясь запуска потока
   try{ _hubInit(); }catch(e){}
+  try{ _layoutSession(); }catch(e){}
   if(typeof autoEvalZones==='function')setTimeout(()=>autoEvalZones({force:true}),1500);
 
   // ── PWA: установка как приложение + офлайн-кэш ──
