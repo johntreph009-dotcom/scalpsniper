@@ -1974,8 +1974,32 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   const _jIdb=(typeof IdbStore==='function')?new IdbStore('scalpsniper','journal'):null;
   // зеркало журнала в IndexedDB — дебаунснутое, вне UI-потока по факту (async), не блокирует
-  const _jMirror=_debounce(()=>{ if(_jIdb)_jIdb.replaceAll(journal).catch(()=>{}); },400);
-  function saveJournal(){ try{localStorage.setItem(JKEY,JSON.stringify(journal))}catch(e){} _jMirror(); }
+  // ЦЕЛОСТНОСТЬ ЖУРНАЛА (AUDIT). Схема надёжная: localStorage — быстрое окно,
+  // IndexedDB — долговременное зеркало, при пустом localStorage журнал из него
+  // восстанавливается. Но раньше ОБА пути отказа были немыми: `catch(e){}` и
+  // `.catch(()=>{})`. Пока цел хотя бы один — потери нет. А вот когда срывались
+  // оба (приватный режим, исчерпанная квота, запрет хранилища), журнал переставал
+  // писаться молча, и трейдер узнавал об этом, только не найдя своих сделок.
+  // Для инструмента, чья ценность — запись и дисциплина, это худший отказ:
+  // он не мешает работать, он просто тихо обесценивает всю работу.
+  // Молчать нельзя даже ценой лишней плашки.
+  let _jFailLs=false,_jFailIdb=false,_jWarned=false;
+  function _jWarn(){
+    if(_jWarned)return;                       // один раз за сессию, не долбим
+    if(!_jFailLs||!_jFailIdb)return;          // одно хранилище живо — данные целы
+    _jWarned=true;
+    const m='ЖУРНАЛ НЕ СОХРАНЯЕТСЯ: недоступны оба хранилища. Выгрузи CSV сейчас — иначе сделки этой сессии пропадут.';
+    try{ if(typeof _proc==='function')_proc(m,'pr-dn'); }catch(e){}
+    try{ const st=document.getElementById('quickStatus'); if(st)st.textContent='⚠ '+m; }catch(e){}
+    try{ console.error('[scalpsniper] '+m); }catch(e){}
+  }
+  const _jMirror=_debounce(()=>{ if(!_jIdb){_jFailIdb=true;_jWarn();return;}
+    _jIdb.replaceAll(journal).then(()=>{_jFailIdb=false;}).catch(()=>{_jFailIdb=true;_jWarn();}); },400);
+  function saveJournal(){
+    try{ localStorage.setItem(JKEY,JSON.stringify(journal)); _jFailLs=false; }
+    catch(e){ _jFailLs=true; _jWarn(); }
+    _jMirror();
+  }
   function loadJournal(){ try{const r=localStorage.getItem(JKEY); if(r)journal=JSON.parse(r)}catch(e){journal=[]} }
   // при старте: если localStorage пуст, но в IDB есть журнал — восстанавливаем (обход утери/лимита); иначе мигрируем localStorage→IDB
   async function _journalIdbInit(){
