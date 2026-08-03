@@ -82,7 +82,9 @@
   body{background:var(--bg);background-image:radial-gradient(circle at 50% -10%,#16110b 0%,#0a0b0d 55%);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.5;padding:24px 16px 60px;min-height:100vh;position:relative;overflow-x:clip}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 60% 40% at 20% 5%,rgba(255,122,24,.06) 0%,transparent 60%),radial-gradient(ellipse 40% 35% at 85% 25%,rgba(88,166,255,.04) 0%,transparent 55%),radial-gradient(ellipse 50% 45% at 50% 90%,rgba(188,140,255,.03) 0%,transparent 60%)}
 .wrap{position:relative;z-index:1}
-  .wrap{max-width:1080px;margin:0 auto}
+  /* Ширина: 1080px оставляли 44% экрана пустыми на 1920. Потолок нужен всё равно —
+     на ультраширике строка длиннее ~1800px перестаёт читаться одним взглядом. */
+  .wrap{max-width:min(1760px,97vw);margin:0 auto}
   /* ── header (logo, прокручивается) ── */
   .head{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--line);margin-bottom:14px}
   /* ── sticky phase-nav: вкладки Подготовка / Сессия / Журнал парят вверху ── */
