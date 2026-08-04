@@ -1990,7 +1990,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="dl-pchart-wrap"><canvas id="dlPriceChart"></canvas></div>
     <div class="dl-canvas-lbl">Стакан <span id="dlSym">—</span> · <span id="dlSrc">подключение…</span> · <span id="dlUps">0</span> упд/с</div>
     <div class="dl-canvas-wrap"><canvas id="dlBook"></canvas></div>
-    <div class="dld-bar"><button type="button" class="dld-btn" id="apBtn" onclick="_apToggle()">▶ автопилот</button><button type="button" class="dld-btn" id="gsBtn" onclick="_gsToggle()" title="Сетка — независимый инструмент">▦ сетка</button><span class="dld-card" id="apCard"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Единый движок-диспетчер, всё ВИРТУАЛЬНО: сам определяет сегмент рынка и выбирает исполнение · РЕЙНДЖ → разворачивает сетку (спрей: buy ниже / sell выше, профит = шаг за шагом) · ТРЕНД/ПОТОК → сворачивает сетку по рынку и торгует направленными триггерами стратегий из реестра (стены с возрастом, съедание, дельта-развороты, фиб-откаты, кластеры ликвидаций) · комиссия 5 bps в PnL, исходы копятся по сегментам · реальные ордера НЕ открывает</span></span></div>
+    <div class="dld-bar"><button type="button" class="dld-btn" id="apBtn" onclick="_apToggle()">▶ автопилот</button><button type="button" class="dld-btn" id="gsBtn" onclick="_gsToggle(true)" title="Сетка — независимый инструмент">▦ сетка</button><span class="dld-card" id="apCard"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Единый движок-диспетчер, всё ВИРТУАЛЬНО: сам определяет сегмент рынка и выбирает исполнение · РЕЙНДЖ → разворачивает сетку (спрей: buy ниже / sell выше, профит = шаг за шагом) · ТРЕНД/ПОТОК → сворачивает сетку по рынку и торгует направленными триггерами стратегий из реестра (стены с возрастом, съедание, дельта-развороты, фиб-откаты, кластеры ликвидаций) · комиссия 5 bps в PnL, исходы копятся по сегментам · реальные ордера НЕ открывает</span></span></div>
     <div class="ap-cfg" id="apCfg">
       <span class="ap-cfg-t">ПАРАМЕТРЫ ОРДЕРА</span>
       <label>маржа $<input type="number" id="cfgMargin" min="1" step="10" oninput="_apCfg('margin',this.value)"></label>
@@ -7489,10 +7489,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // Теперь у сетки свой выключатель и своя жизнь. Диспетчер автопилота её
   // не трогает, пока она в ручном режиме — иначе два хозяина у одного объекта.
   let _gsManual=false;
-  function _gsToggle(){
+  // Обход гейта — ТОЛЬКО по живому нажатию человека.
+  // Замер на проде: сетка поднялась с forced=true, хотя кнопку никто не жал
+  // дважды. Диапазон 2.9 bps при пороге 6 — гейт отказал, и программный повтор
+  // вызова попал в семисекундное окно «всё равно запускай». То есть защита,
+  // построенная ради решения трейдера, обходилась кодом сама собой.
+  // Теперь окно взводится, только если вызов пришёл из доверенного события.
+  function _gsToggle(userGesture){
+    const trusted=(userGesture===true)||!!(window.event&&window.event.isTrusted);
     _gsManual=!_gsManual;
     if(_gsManual){
-      _gsStart();
+      _gsStart(trusted);
       if(!_gs)_gsManual=false;                    // гейт не пустил — кнопка не залипает
     }else{
       const st=_gsStop('ручная');
@@ -7519,7 +7526,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // Отказ должен быть ВИДЕН на кнопке. Раньше причина уходила только в Процессинг,
   // и снаружи это выглядело как мёртвая кнопка — трейдер жал и ничего не понимал.
   let _gsArm=0;
-  function _gsRefuse(why,armable){
+  function _gsRefuse(why,armable,trusted){
     const b=document.getElementById('gsBtn');
     if(typeof _proc==='function')_proc('сетка не запущена: '+why,'pr-warn');
     if(b){
@@ -7532,22 +7539,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
            n.style.display='block';
            setTimeout(()=>{ n.style.display='none'; }, armable?7000:2600); }
     try{ if(navigator.vibrate)navigator.vibrate([18,40,18]); }catch(e){}
-    if(armable)_gsArm=Date.now();
+    if(armable&&trusted)_gsArm=Date.now();
   }
-  function _gsStart(){
+  function _gsStart(trusted){
     if(_gs)return;
     // Гейт СОВЕТУЕТ, но не запирает. Философия продукта: инструмент показывает,
     // что видит, финальное решение за трейдером. Первое нажатие в плохом режиме
     // объясняет отказ, повторное в течение 7 секунд запускает принудительно —
     // и этот факт пишется в запись прогона, чтобы потом было видно в статистике.
-    const forced=(Date.now()-_gsArm)<7000;
+    // Принудительный запуск засчитывается, только когда окно взвёл ЧЕЛОВЕК.
+    const forced=(trusted===true)&&((Date.now()-_gsArm)<7000);
     // ГЕЙТ НА ВХОДЕ: сетку нельзя запускать в тренде — это вход в заведомо
     // проигрышный для неё режим. Дешевле не начать, чем ограничивать убыток.
     const hh=_dlHist;
     if(!hh||hh.length<12){ _gsRefuse('мало данных: '+((hh&&hh.length)||0)+' из 12 тиков',false); return; }
     const er=_gsER();
     if(!forced&&er!=null&&er>=_GS.erOff){
-      _gsRefuse('ход направленный, ER '+er+' при пороге '+_GS.erOff,true); return;
+      _gsRefuse('ход направленный, ER '+er+' при пороге '+_GS.erOff,true,trusted); return;
     }
     // Диапазон меряем по тому же секундному ряду, что и ER. По _dlHist он
     // считался за десятки секунд и прыгал с 43.6 на 1.7 bps между нажатиями —
@@ -7556,7 +7564,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const lo=Math.min.apply(null,rw), hi=Math.max.apply(null,rw), mid=(hi+lo)/2;
     const rngBps=(hi-lo)/mid*1e4;
     if(!forced&&rngBps<_GS.minRange){
-      _gsRefuse('диапазон '+rngBps.toFixed(1)+' bps — фармить нечего',true); return;
+      _gsRefuse('диапазон '+rngBps.toFixed(1)+' bps — фармить нечего',true,trusted); return;
     }
     const g=_gsBuild(hh[hh.length-1]);
     if(!g){ _gsRefuse('сетка не построилась на текущей цене',false); return; }
