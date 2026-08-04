@@ -7601,12 +7601,22 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // ВАЖНО: у ноги переносим kind и peak — иначе после сдвига моментум-нога теряет трейл и превращается в обычную
     const keep={inv:_gs.inv.map(x=>({side:x.side,entry:x.entry,tp:x.tp,kind:x.kind||'mr',peak:(x.peak!=null?x.peak:x.entry),lvl:null})),
       f:_gs.fills,p:_gs.pairs,r:_gs.realized,rb:(_gs.rebuilds||0)+1,t0:_gs.t0,h:_gs.hfa||0,ev:_gs.ev||[],
-      cr:_gs.credit||0,tl:_gs.tail||0};
+      cr:_gs.credit||0,tl:_gs.tail||0,
+      // УСЛОВИЯ ВХОДА ОБЯЗАНЫ ПЕРЕЖИТЬ ПЕРЕСБОРКУ.
+      // Замер на живом прогоне: 24 пересборки — и все поля стёрты, потому что
+      // _gsBuild создаёт объект заново. Прогон уходил бы в журнал с пустыми
+      // erIn/vpIn, то есть вся добавленная ради калибровки запись условий
+      // теряется на любой сетке, пережившей хоть один сдвиг лесенки. А сдвиг
+      // переживают почти все. Это «время входа», оно по определению не меняется.
+      fo:_gs.forced, ei:_gs.erIn, ri:_gs.rngIn,
+      vi:_gs.vpIn, va:_gs.vapIn, pb:_gs.pocBpsIn};
     const ng=_gsBuild(px);
     if(!ng)return;
     ng.inv=keep.inv; ng.fills=keep.f; ng.pairs=keep.p; ng.realized=keep.r;
     ng.rebuilds=keep.rb; ng.t0=keep.t0; ng.hfa=keep.h; ng.ev=keep.ev;
     ng.credit=keep.cr; ng.tail=keep.tl; ng.lastRb=Date.now();   // кредит и счётчик хвоста переживают сдвиг лесенки
+    ng.forced=keep.fo; ng.erIn=keep.ei; ng.rngIn=keep.ri;
+    ng.vpIn=keep.vi; ng.vapIn=keep.va; ng.pocBpsIn=keep.pb;
     _gs=ng;
   }
   function _gsTick(){
