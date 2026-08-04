@@ -8101,8 +8101,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // (обе половины пишутся одним и тем же кодом, см. _whRender/_liqRender).
     // Дубль съедал верх экрана и отодвигал решение вниз → прячем, живут во вкладках.
     ['whaleSess','liqSess'].forEach(id=>{const el=document.getElementById(id); if(el)el.style.display='none';});
+    /* СТРОКА ГОТОВНОСТИ СКРЫТА по решению трейдера. Чипы «Зон / Без стопа /
+     * Байас / Лимиты / Протокол» дублируют то, что и так видно ниже, а место
+     * на первом экране стоит дороже. Её место занимает аналитика дня. */
+    {const rb=document.getElementById('readinessBar'); if(rb)rb.style.display='none';}
+    /* АНАЛИТИКА ДНЯ ПЕРЕЕЗЖАЕТ НАВЕРХ СЕССИИ.
+     * Тренд дня, контекст (CVD/RVOL/OI/фандинг/BTC), опционный магнит и точность
+     * чтения жили в колонке зон и на телефоне оказывались ниже всего экрана.
+     * Это то, с чего начинается решение, — значит должно быть первым.
+     * Узлы только переносятся: id, обработчики и рендеры не тронуты. */
+    ['dayTrend','dayCtx','mpChip','zoneRead'].forEach(id=>{
+      const el=document.getElementById(id); if(el)root.appendChild(el);
+    });
     const ORDER=[
-      '#readinessBar',   // 1. можно ли вообще торговать сейчас
+      '#dayTrend',       // 0. куда идёт день — первое, что нужно знать
+      '#dayCtx',         // 0. поток, объём, фандинг
+      '#mpChip',         // 0. опционный магнит
+      '#zoneRead',       // 0. насколько точно я читаю зоны
       '.section-title',  // 2. инструмент
       '.live-bar',       // 3. цена — где я
       '#prepPhase',      // 4. план (свёрнут, разворачивается кнопкой)
@@ -9115,10 +9130,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // хрупок: достаточно, чтобы блок обернули ещё одним div, и граница уезжает.
     // Берём поимённо и только прямых детей .t-side.
     const direct=el=>{ while(el&&el.parentElement!==side)el=el.parentElement; return el; };
+    // ОДИН ВЛАДЕЛЕЦ НА УЗЕЛ. Раньше сюда входили dayTrend, dayCtx, mpChip и
+    // «точность чтения». Теперь аналитика дня переехала в самый верх Сессии
+    // (см. _layoutSession), и забирать её сюда нельзя: два механизма начали бы
+    // перетягивать одни и те же узлы, а победитель зависел бы от порядка вызова.
+    // В липкой шапке остаётся то, ради чего она делалась: заголовок и кнопки
+    // обновления зон.
     const want=[start];                                    // «Зоны на сессию» — заголовок
-    ['zonesFresh','dayTrend','dayCtx','mpChip'].forEach(id=>{ const d=direct(document.getElementById(id)); if(d)want.push(d); });
-    const acc=[...side.querySelectorAll('*')].find(e=>/ТОЧНОСТЬ ЧТЕНИЯ/.test(e.textContent||'')&&e.children.length<10);
-    const accD=direct(acc); if(accD)want.push(accD);
+    ['zonesFresh'].forEach(id=>{ const d=direct(document.getElementById(id)); if(d)want.push(d); });
     const uniq=[...new Set(want)].filter(Boolean);
     if(!uniq.length)return;
     const wrap=document.createElement('div');
