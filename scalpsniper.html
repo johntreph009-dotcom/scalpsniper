@@ -1658,6 +1658,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     .mc-act{padding:7px 10px;font-size:11px}
     .mc-hdr-gap{flex-basis:100%;height:0}
   }
+
+  /* ═══ ТАП-ТАРГЕТЫ НА ТЕЛЕФОНЕ ═══
+     Найдено собственной проверкой `_tapScan`, а не жалобой трейдера: три
+     элемента остались 15–21px, потому что мобильных правил у них не было
+     вовсе. 15px — меньше половины подушечки пальца, попасть можно ногтем.
+
+     Размер задаётся min-height, а паддинг лишь центрирует содержимое.
+     Одним паддингом до 32px не дотянуть: строка 10px + 2×8px даёт 30.
+     Правила стоят последними в файле — перебить их нечем. */
+  @media(max-width:720px){
+    .lc-chk{min-height:32px;padding:6px 9px;display:inline-flex;align-items:center}
+    .zr-reset{min-height:32px;padding:6px 10px;display:inline-flex;align-items:center}
+    .clear-zones-btn{min-height:32px;padding:6px 12px}
+  }
 </style>
 </head>
 <body>
