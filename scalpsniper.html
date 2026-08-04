@@ -9067,16 +9067,60 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     });
     return Object.entries(hits).sort((a,b)=>b[1]-a[1]);
   }
+  /* ═══ ТАП-ТАРГЕТЫ ═══
+   * Вторая по частоте мобильная беда после вылета за экран — кнопка, в которую
+   * невозможно попасть пальцем. Порог 32px взят как рабочий минимум: подушечка
+   * пальца это ~40px, но в плотном терминале 32 ещё приемлемо, а меньше — уже
+   * промахи. Меряем ФАКТИЧЕСКИЙ размер на экране, а не то, что задумано в CSS. */
+  function _tapScan(){
+    const bad={};
+    document.querySelectorAll('button,.btn,[onclick],select,input[type=checkbox]').forEach(el=>{
+      if(!el.offsetParent)return;
+      const r=el.getBoundingClientRect();
+      if(r.width<=0||r.height<=0)return;
+      const m=Math.min(r.width,r.height);
+      if(m>=32)return;
+      const cn=(typeof el.className==='string')?el.className.trim():'';
+      const key=el.id?('#'+el.id):(cn?'.'+cn.split(/\s+/)[0]:el.tagName.toLowerCase());
+      bad[key]=Math.min(bad[key]||99,Math.round(m));
+    });
+    return Object.entries(bad).sort((a,b)=>a[1]-b[1]);
+  }
+  /* Значок в углу. Отчёт в Процессинг остаётся, но полагаться только на него
+   * нельзя: вкладка может быть закрыта, и дефект доживёт до жалобы трейдера.
+   * Значок появляется ТОЛЬКО когда есть проблема — чистая вёрстка молчит. */
+  function _ovBadge(txt){
+    let b=document.getElementById('ovBadge');
+    if(!txt){ if(b)b.remove(); return; }
+    if(!b){ b=document.createElement('div'); b.id='ovBadge';
+      b.style.cssText='position:fixed;left:8px;bottom:8px;z-index:99;max-width:70vw;'
+        +'font:10px/1.35 JetBrains Mono,monospace;color:#e3b341;background:rgba(30,22,6,.94);'
+        +'border:1px solid rgba(227,179,65,.5);border-radius:7px;padding:6px 9px;cursor:pointer';
+      b.title='Проверка вёрстки на этом экране. Нажми, чтобы скрыть.';
+      b.onclick=()=>b.remove();
+      document.body.appendChild(b); }
+    b.textContent=txt;
+  }
   function _ovReport(){
-    if(document.documentElement.clientWidth>720)return;   // претензия про телефон
-    const h=_ovScan();
-    if(typeof _proc!=='function')return;
-    if(!h.length){ _proc('вёрстка: обрезки по горизонтали нет ('+document.documentElement.clientWidth+'px)'); return; }
-    _proc('вёрстка: за экран вылезает — '+h.slice(0,6).map(x=>x[0]+' +'+x[1]+'px').join(' · '),'pr-warn');
+    const W=document.documentElement.clientWidth;
+    if(W>720){ _ovBadge(''); return; }                     // претензия про телефон
+    const h=_ovScan(), t=_tapScan();
+    const парт=[];
+    if(h.length)парт.push('за экран: '+h.slice(0,4).map(x=>x[0]+' +'+x[1]+'px').join(' · '));
+    if(t.length)парт.push('мелкие кнопки: '+t.slice(0,4).map(x=>x[0]+' '+x[1]+'px').join(' · '));
+    if(typeof _proc==='function'){
+      if(!парт.length)_proc('вёрстка: чисто ('+W+'px) — обрезки нет, тап-таргеты в норме');
+      else _proc('вёрстка: '+парт.join(' | '),'pr-warn');
+    }
+    _ovBadge(парт.length?('⚠ вёрстка '+W+'px · '+парт.join(' | ')):'');
   }
   let _ovDeb=null;
   addEventListener('resize',()=>{ if(_ovDeb)clearTimeout(_ovDeb); _ovDeb=setTimeout(_ovReport,800); });
+  // Один прогон на старте ловит только то, что успело отрисоваться. Зоны,
+  // график и лестница приходят позже и приносят свои проблемы — поэтому
+  // проверка повторяется, а не выполняется однажды.
   setTimeout(_ovReport,3000);
+  setInterval(_ovReport,30000);
 
   // ═══════════ ТАКТИЛЬНАЯ ОТДАЧА ═══════════
   // Честно о границах: Web Vibration API есть в Android Chrome и НЕТ в iOS Safari —
