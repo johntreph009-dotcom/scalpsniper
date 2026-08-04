@@ -4013,14 +4013,27 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(!byTK[k])byTK[k]={w:0,t:0,ticker:e.ticker,kind:e.zKind};
       byTK[k].t++;if(e.outcome==='win')byTK[k].w++;
     });
-    const tkRows=Object.values(byTK).filter(x=>x.t>=2).sort((a,b)=>b.w/b.t-a.w/a.t);
+    const tkRows=Object.values(byTK).filter(x=>x.t>=3).sort((a,b)=>b.w/b.t-a.w/a.t);
     let tkHtml=tkRows.length
       ? tkRows.slice(0,5).map(x=>{
           const wr=Math.round(x.w/x.t*100);
           const kd=KIND[x.kind]||{cls:'',lbl:'БИРЖА'};
-          return `<div class="tk-row"><span><span class="zone-kind ${kd.cls}" style="font-size:9px">${kd.lbl}</span> ${x.ticker}</span><span class="tk-wr" style="color:${wr>=55?'var(--green)':wr>=40?'var(--warn)':'var(--danger)'}">${wr}% <span style="font-size:10px;color:var(--text-faint)">(${x.t})</span></span></div>`;
+          // ЦВЕТ ПО ГРАНИЦАМ ИНТЕРВАЛА, А НЕ ПО ТОЧЕЧНОЙ ДОЛЕ.
+          // Раньше 2 из 2 красились зелёным как «100%», а цвет читается как
+          // рекомендация. Теперь зелёный — только если нижняя граница выше 55%,
+          // красный — если верхняя ниже порога безубытка 40%. Во всех остальных
+          // случаях серый: выборка не даёт права утверждать ни то, ни другое.
+          // typeof-проверка, а не расчёт на всплытие: функции объявлены ниже
+          // по файлу, и полагаться на порядок областей видимости в файле такого
+          // размера — способ получить «is not defined» в проде. Не в области —
+          // просто нейтральный цвет без интервала, витрина не падает.
+          const ok=(typeof _wilsonLo==='function'&&typeof _wilsonHi==='function');
+          const lo=ok?_wilsonLo(x.w,x.t):null, hi=ok?_wilsonHi(x.w,x.t):null;
+          const col=!ok?'var(--text-dim)':lo>=0.55?'var(--green)':hi<0.40?'var(--danger)':'var(--text-dim)';
+          const iv=ok?(', '+Math.round(lo*100)+'–'+Math.round(hi*100)+'%'):'';
+          return `<div class="tk-row"><span><span class="zone-kind ${kd.cls}" style="font-size:9px">${kd.lbl}</span> ${x.ticker}</span><span class="tk-wr" style="color:${col}">${wr}% <span style="font-size:10px;color:var(--text-faint)">(${x.t}${iv})</span></span></div>`;
         }).join('')
-      : '<div style="font-size:11px;color:var(--text-faint)">нет данных (нужно 2+ сделки)</div>';
+      : '<div style="font-size:11px;color:var(--text-faint)">нет данных (нужно 3+ сделки на связку)</div>';
     // --- by day of week ---
     const DOWL=['вс','пн','вт','ср','чт','пт','сб'];
     const byDow={};
@@ -4367,20 +4380,37 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const ins=[];
     // best/worst hour
     const bH={};trades.forEach(e=>{const h=new Date(e.ts).getHours();if(!bH[h])bH[h]={w:0,t:0};bH[h].t++;if(e.outcome==='win')bH[h].w++;});
-    const hrs=Object.keys(bH).filter(h=>bH[h].t>=2).map(Number);
+    // ═══ ЛУЧШИЙ/ХУДШИЙ ЧАС: ДВЕ ЛОВУШКИ СРАЗУ ═══
+    // 1. Порог был t>=2. Две сделки в ведре давали «🚫 Избегай 3:00» — директиву
+    //    от двух наблюдений.
+    // 2. Хуже: выбирая максимум и минимум из десятка вёдер, крайности находишь
+    //    гарантированно даже в чистом шуме. Это множественные сравнения, и без
+    //    поправки витрина ПРОИЗВОДИТ инсайты, а не находит их.
+    // Лечим обе: ведро от 8 сделок, и час называется лучшим только если его
+    // нижняя граница по Уилсону выше общей доли, худшим — если верхняя ниже.
+    // Не прошло — значит отличие неотличимо от случайности, и мы молчим.
+    const HR_MIN=8;
+    const _wOK=(typeof _wilsonLo==='function'&&typeof _wilsonHi==='function');
+    const allW=trades.filter(e=>e.outcome==='win').length, allWR=trades.length?allW/trades.length:0;
+    const hrs=Object.keys(bH).filter(h=>bH[h].t>=HR_MIN).map(Number);
     if(hrs.length>=2){
       const best=hrs.slice().sort((a,b)=>bH[b].w/bH[b].t-bH[a].w/bH[a].t)[0];
       const worst=hrs.slice().sort((a,b)=>bH[a].w/bH[a].t-bH[b].w/bH[b].t)[0];
-      ins.push({g:true,ico:'⏰',l:'Лучшее время',v:`<b>${best}:00</b> — ${Math.round(bH[best].w/bH[best].t*100)}% WR (${bH[best].t} сд.)`});
-      if(best!==worst)ins.push({g:false,ico:'🚫',l:'Избегай',v:`<b>${worst}:00</b> — ${Math.round(bH[worst].w/bH[worst].t*100)}% WR — ниже нормы`});
+      if(_wOK&&_wilsonLo(bH[best].w,bH[best].t)>allWR)
+        ins.push({g:true,ico:'⏰',l:'Лучшее время',v:`<b>${best}:00</b> — ${Math.round(bH[best].w/bH[best].t*100)}% WR (${bH[best].t} сд., не хуже ${Math.round(_wilsonLo(bH[best].w,bH[best].t)*100)}%)`});
+      if(best!==worst&&_wOK&&_wilsonHi(bH[worst].w,bH[worst].t)<allWR)
+        ins.push({g:false,ico:'🚫',l:'Избегай',v:`<b>${worst}:00</b> — ${Math.round(bH[worst].w/bH[worst].t*100)}% WR (${bH[worst].t} сд., не лучше ${Math.round(_wilsonHi(bH[worst].w,bH[worst].t)*100)}%)`});
     }
     // best protocol
     const bP={};trades.forEach(e=>{if(!e.protocol)return;if(!bP[e.protocol])bP[e.protocol]={w:0,t:0};bP[e.protocol].t++;if(e.outcome==='win')bP[e.protocol].w++;});
-    const bpr=Object.keys(bP).filter(p=>bP[p].t>=2).sort((a,b)=>bP[b].w/bP[b].t-bP[a].w/bP[a].t)[0];
-    if(bpr){const p=bP[bpr];ins.push({g:true,ico:'🎯',l:'Твой протокол',v:`<b>${bpr.replace('_',' ')}</b> — ${Math.round(p.w/p.t*100)}% из ${p.t} сд.`});}
+    // Тот же порог и та же поправка: «твой протокол» из двух сделок — не факт,
+    // а результат выбора максимума из нескольких кандидатов.
+    const bpr=Object.keys(bP).filter(p=>bP[p].t>=HR_MIN).sort((a,b)=>bP[b].w/bP[b].t-bP[a].w/bP[a].t)[0];
+    if(bpr&&_wOK){const p=bP[bpr], lo=_wilsonLo(p.w,p.t);
+      if(lo>allWR)ins.push({g:true,ico:'🎯',l:'Твой протокол',v:`<b>${bpr.replace('_',' ')}</b> — ${Math.round(p.w/p.t*100)}% из ${p.t} сд. (не хуже ${Math.round(lo*100)}%)`});}
     // discipline ROI
     const planT=trades.filter(e=>e.plan===true),nPlanT=trades.filter(e=>e.plan===false);
-    if(planT.length>=2&&nPlanT.length>=2){
+    if(planT.length>=HR_MIN&&nPlanT.length>=HR_MIN){
       const pWR=Math.round(planT.filter(e=>e.outcome==='win').length/planT.length*100);
       const nWR=Math.round(nPlanT.filter(e=>e.outcome==='win').length/nPlanT.length*100);
       const d=pWR-nWR;
@@ -6066,6 +6096,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const z=1.96,p=w/n,d=1+z*z/n;
     return Math.max(0,((p+z*z/(2*n))-z*Math.sqrt((p*(1-p)+z*z/(4*n))/n))/d);
   }
+  function _wilsonHi(w,n){                // верхняя граница доли: 0 из 3 ≠ 0%
+    if(!n)return 1;
+    const z=1.96,p=w/n,d=1+z*z/n;
+    return Math.min(1,((p+z*z/(2*n))+z*Math.sqrt((p*(1-p)+z*z/(4*n))/n))/d);
+  }
   // ПРИОР ОТ ЗВЁЗД — намеренно слабый и близкий к безубытку.
   // Замер показал, что звёзды почти не различают исход (fade·3★ отрабатывает
   // ХУЖЕ среднего по fade), поэтому приписывать им сильную предсказательную
@@ -7294,7 +7329,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const withM=done.filter(t=>t.mdir&&t.mdir!=='flat'&&((t.mdir==='up')===(t.side==='long'))&&t.regime!=='SAFE_SHUTDOWN');
     const agM=done.filter(t=>t.mdir&&t.mdir!=='flat'&&((t.mdir==='up')!==(t.side==='long'))&&t.regime!=='SAFE_SHUTDOWN');
     const sd=done.filter(t=>t.regime==='SAFE_SHUTDOWN');
-    const seg=(lbl,a)=>{ const w=wr(a); return w==null?null:lbl+' '+w+'% ('+a.length+')'; };
+    // Процент показываем только от выборки, на которой он что-то значит.
+    // Раньше при трёх замерах печаталось «с моделью 100% (2)» — жирная цифра
+    // от двух наблюдений рядом с настоящими числами читается как факт.
+    // Ниже порога честнее назвать количество и не считать долю.
+    const SEG_MIN=8;
+    const seg=(lbl,a)=>{
+      const d=a.filter(t=>_dlVerdict(t)!=='flat');
+      if(!d.length)return null;
+      if(d.length<SEG_MIN)return lbl+' — '+d.length+' из '+SEG_MIN+', доля пока не считается';
+      const w=wr(a), wins=d.filter(t=>_dlVerdict(t)==='win').length;
+      const lo=(typeof _wilsonLo==='function')?Math.round(_wilsonLo(wins,d.length)*100):null;
+      // Нижняя граница по Уилсону: 60% на 10 замерах и 60% на 200 — разной
+      // прочности утверждения, и разница обязана быть видна глазом.
+      return lbl+' '+w+'%'+(lo!=null?' (не хуже '+lo+'%)':'')+' ('+d.length+')';
+    };
     const parts=[seg('с моделью',withM),seg('против',agM),seg('в SHUTDOWN',sd)].filter(Boolean);
     el.innerHTML='ЧТЕНИЕ @30с: <b>'+done.length+'</b> замеров · <b>'+wins+'</b> win · ср <b>'+(a30>=0?'+':'')+a30+'</b> bps'+(a15!=null?' <span class="rs-note">(@15с: '+(a15>=0?'+':'')+a15+')</span>':'')
       +(parts.length?'<br>'+parts.join(' · '):'')
