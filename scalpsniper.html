@@ -1936,7 +1936,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="dl-pchart-wrap"><canvas id="dlPriceChart"></canvas></div>
     <div class="dl-canvas-lbl">Стакан <span id="dlSym">—</span> · <span id="dlSrc">подключение…</span> · <span id="dlUps">0</span> упд/с</div>
     <div class="dl-canvas-wrap"><canvas id="dlBook"></canvas></div>
-    <div class="dld-bar"><button type="button" class="dld-btn" id="apBtn" onclick="_apToggle()">▶ автопилот</button><span class="dld-card" id="apCard"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Единый движок-диспетчер, всё ВИРТУАЛЬНО: сам определяет сегмент рынка и выбирает исполнение · РЕЙНДЖ → разворачивает сетку (спрей: buy ниже / sell выше, профит = шаг за шагом) · ТРЕНД/ПОТОК → сворачивает сетку по рынку и торгует направленными триггерами стратегий из реестра (стены с возрастом, съедание, дельта-развороты, фиб-откаты, кластеры ликвидаций) · комиссия 5 bps в PnL, исходы копятся по сегментам · реальные ордера НЕ открывает</span></span></div>
+    <div class="dld-bar"><button type="button" class="dld-btn" id="apBtn" onclick="_apToggle()">▶ автопилот</button><button type="button" class="dld-btn" id="gsBtn" onclick="_gsToggle()" title="Сетка — независимый инструмент">▦ сетка</button><span class="dld-card" id="apCard"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Единый движок-диспетчер, всё ВИРТУАЛЬНО: сам определяет сегмент рынка и выбирает исполнение · РЕЙНДЖ → разворачивает сетку (спрей: buy ниже / sell выше, профит = шаг за шагом) · ТРЕНД/ПОТОК → сворачивает сетку по рынку и торгует направленными триггерами стратегий из реестра (стены с возрастом, съедание, дельта-развороты, фиб-откаты, кластеры ликвидаций) · комиссия 5 bps в PnL, исходы копятся по сегментам · реальные ордера НЕ открывает</span></span></div>
     <div class="ap-cfg" id="apCfg">
       <span class="ap-cfg-t">ПАРАМЕТРЫ ОРДЕРА</span>
       <label>маржа $<input type="number" id="cfgMargin" min="1" step="10" oninput="_apCfg('margin',this.value)"></label>
@@ -6881,7 +6881,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; _dlSrc='—'; _dlMsgCount=0; _dlHist=[];
     if(_ap.on)_apToggle(); // автопилот (и его сетка) гаснут вместе с тренажёром
-    _gsStop(); // страховка на случай осиротевшей сетки
+    _gsStop('осиротевшая'); // страховка на случай осиротевшей сетки
     if(typeof _bgStop==='function')_bgStop();
   }
   window.addEventListener('resize',()=>{ if(_dlRunning){_dlSetupCanvas();_dlSetupPriceCanvas();} });
@@ -7042,20 +7042,109 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     return {center:px,step,lo:px-step*(nB+0.5),hi:px+step*(nS+0.5),levels,bias,inv:[],fills:0,pairs:0,realized:0,rebuilds:0,t0:Date.now(),lastRb:Date.now(),lastPx:px};
   }
   // сетка управляется автопилотом-диспетчером (режим РЕЙНДЖ); ручного тумблера больше нет
+  // ═══════════════════════════════════════════════════════════════════════
+  //  РИСК-КОНТУР СЕТКИ. Разбор 19 прогонов: направленный движок дал +713 bps,
+  //  сетка −12703, из них ОДИН прогон 01.08 — минус 7872 (62% всего убытка):
+  //  837 пар, 910 филлов, 4.2 часа. Пары работали; убило то, что осталось
+  //  в инвентаре и закрылось по рынку.
+  //
+  //  Это не баг реализации, а природа инструмента. Сетка — короткая гамма:
+  //  устойчиво зарабатывает в диапазоне и отдаёт всё разом на тренде.
+  //  Без ограничителей её разорение — вопрос времени, а не удачи.
+  //  Поэтому четыре предохранителя, каждый превращает НЕОГРАНИЧЕННЫЙ убыток
+  //  в ограниченный. Порог — не «настройка вкуса», а параметр выживания.
+  // ═══════════════════════════════════════════════════════════════════════
+  const _GS={
+    maxInv:  8,      // потолок открытых ног. Было без предела → 910 филлов
+    maxDD:   120,    // стоп по совокупности, bps. Худший прогон −7872 = 65 таких стопов
+    maxMin:  50,     // стоп по времени. Прибыльные прогоны короткие; долгие = тренд
+    trendOff:2,      // сила тренда, при которой сетке в рынке делать нечего
+    minRange:6       // минимальный диапазон окна в bps: в мёртвом флэте нечего фармить
+  };
+  function _gsCfg(k,v){ if(v!=null&&isFinite(+v)&&+v>0){_GS[k]=+v; try{localStorage.setItem('msa_gs_v1',JSON.stringify(_GS));}catch(e){}} return _GS[k]; }
+  try{ const s=JSON.parse(localStorage.getItem('msa_gs_v1')||'null'); if(s)Object.assign(_GS,s); }catch(e){}
+  // Сила тренда сейчас — общий вход для гейта на старте и в работе
+  function _gsTrendStr(){
+    try{ const sym=document.getElementById('dlSym')?.textContent||'';
+      const dt=(_dayTrendCache[sym]&&_dayTrendCache[sym].val)||null;
+      return (dt&&dt.strength)||0; }catch(e){ return 0; }
+  }
+  // ПРЕДОХРАНИТЕЛИ. Возвращает причину остановки или null.
+  function _gsGuard(px){
+    if(!_gs)return null;
+    const dur=(Date.now()-_gs.t0)/60000;
+    if(dur>=_GS.maxMin)return 'время '+Math.round(dur)+' мин';
+    if(_gsTrendStr()>=_GS.trendOff)return 'тренд усилился';
+    // плавающий + зафиксированный: считаем ТО ЖЕ, что покажет закрытие
+    const fl=_gs.inv.reduce((s,x)=>s+((px-x.entry)/x.entry*1e4)*(x.side==='long'?1:-1),0);
+    const net=_gs.realized+fl-AP_FEE*_gs.pairs-AP_FEE*_gs.inv.length;
+    if(net<=-_GS.maxDD)return 'стоп по просадке '+Math.round(net)+' bps';
+    return null;
+  }
+  // ═══ ДВА НЕЗАВИСИМЫХ ИНСТРУМЕНТА ═══
+  // Раньше сетку включал диспетчер автопилота по режиму рынка: трейдер не мог
+  // запустить одну без другого, а разбор смешивал два разных инструмента.
+  // Теперь у сетки свой выключатель и своя жизнь. Диспетчер автопилота её
+  // не трогает, пока она в ручном режиме — иначе два хозяина у одного объекта.
+  let _gsManual=false;
+  function _gsToggle(){
+    _gsManual=!_gsManual;
+    if(_gsManual){
+      _gsStart();
+      if(!_gs)_gsManual=false;                    // гейт не пустил — кнопка не залипает
+    }else{
+      const st=_gsStop('ручная');
+      if(st){
+        if(typeof _proc==='function')_proc('сетка остановлена вручную · итог '+(st.net>=0?'+':'')+st.net+' bps · пар '+st.pairs,st.net>=0?'pr-up':'pr-dn');
+        if(st.fills>0&&_dlSnap&&typeof _apMicro==='function'){const m=_apMicro(); if(m)_apLogGrid(st,m);}
+      }
+    }
+    _gsBtnSync();
+  }
+  function _gsBtnSync(){
+    const b=document.getElementById('gsBtn'); if(!b)return;
+    const on=!!_gs;
+    b.textContent=on?'⏹ стоп сетки':'▦ сетка';
+    b.classList.toggle('on',on);
+    b.title=on?('Сетка работает. Предохранители: ног ≤'+_GS.maxInv+', просадка −'+_GS.maxDD+' bps, время '+_GS.maxMin+' мин, тренд ≥'+_GS.trendOff+' — стоп')
+              :('Запустить сетку отдельно от автопилота. Не стартует в тренде и в мёртвом флэте.');
+  }
   function _gsStart(){
     if(_gs)return;
+    // ГЕЙТ НА ВХОДЕ: сетку нельзя запускать в тренде — это вход в заведомо
+    // проигрышный для неё режим. Дешевле не начать, чем ограничивать убыток.
+    const str=_gsTrendStr();
+    if(str>=_GS.trendOff){
+      if(typeof _proc==='function')_proc('сетка не запущена: тренд силой '+str+' — режим не для сетки','pr-warn');
+      return;
+    }
+    const hh=_dlHist;
+    if(hh&&hh.length>=12){
+      const lo=Math.min.apply(null,hh), hi=Math.max.apply(null,hh), mid=(hi+lo)/2;
+      const rngBps=(hi-lo)/mid*1e4;
+      if(rngBps<_GS.minRange){
+        if(typeof _proc==='function')_proc('сетка не запущена: диапазон '+rngBps.toFixed(1)+' bps — фармить нечего','pr-warn');
+        return;
+      }
+    }
     const g=_gsBuild(_dlHist[_dlHist.length-1]); if(!g)return;
     _gs=g;
     if(_gsTimer)clearInterval(_gsTimer); _gsTimer=setInterval(_gsTick,250);
     const p=document.getElementById('gsPanel'); if(p)p.style.display='block';
+    _gsBtnSync();
   }
   // остановка с ЧЕСТНЫМ закрытием: инвентарь по рынку, комиссия 5 bps за каждую ногу/пару
-  function _gsStop(){
+  function _gsStop(why){
     if(!_gs)return null;
     const px=(_dlHist.length?_dlHist[_dlHist.length-1]:_gs.lastPx)||_gs.center;
     const fl=_gs.inv.reduce((s,x)=>s+((px-x.entry)/x.entry*1e4)*(x.side==='long'?1:-1),0);
-    const net=+(_gs.realized+fl-5*_gs.pairs-5*_gs.inv.length).toFixed(1);
-    const st={net,fills:_gs.fills,pairs:_gs.pairs,inv:_gs.inv.length,rebuilds:_gs.rebuilds,dur:Math.round((Date.now()-_gs.t0)/1e3)};
+    // Издержки берём из НАСТРОЙКИ, а не константой 5: при нулевом мейкере
+    // жёсткая пятёрка занижала результат каждой пары и искажала калибровку.
+    const net=+(_gs.realized+fl-AP_FEE*_gs.pairs-AP_FEE*_gs.inv.length).toFixed(1);
+    const st={net,fills:_gs.fills,pairs:_gs.pairs,inv:_gs.inv.length,rebuilds:_gs.rebuilds,
+      dur:Math.round((Date.now()-_gs.t0)/1e3),
+      why:why||'ручная',capHit:_gs.capHit||0,   // причина и упор в потолок — сырьё для калибровки
+      floatAtStop:Math.round(fl)};
     _gs=null; if(_gsTimer){clearInterval(_gsTimer);_gsTimer=null;}
     const p=document.getElementById('gsPanel'); if(p)p.style.display='none';
     return st;
@@ -7085,9 +7174,25 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // а не то, от чего прячемся. Позицию высиживаем, лесенка едет параллельно движению,
     // а убыточный хвост подтягивается прибылью выигравших ног (см. блок «подтягивание хвоста» ниже).
     // Лесенка идёт ЗА ценой: вышли из коробки — переносим уровни, инвентарь остаётся жить.
+    // ПРЕДОХРАНИТЕЛИ ПЕРВЫМ ДЕЛОМ — раньше филлов и раньше пересборки.
+    // Иначе цикл успеет добрать ног ровно в тот момент, когда пора выходить.
+    const stopWhy=_gsGuard(px);
+    if(stopWhy){
+      const st=_gsStop(stopWhy);
+      if(st&&typeof _proc==='function')
+        _proc('сетка остановлена: '+stopWhy+' · итог '+(st.net>=0?'+':'')+st.net+' bps · пар '+st.pairs,
+              st.net>=0?'pr-up':'pr-dn');
+      if(st&&_dlSnap&&typeof _apMicro==='function'){ const m=_apMicro(); if(m&&typeof _apLogGrid==='function')_apLogGrid(st,m); }
+      _gsManual=false; _gsBtnSync();
+      return;
+    }
     if((px>_gs.hi||px<_gs.lo)&&Date.now()-(_gs.lastRb||0)>15000){ _gsReframe(px); return; }
     for(const L of _gs.levels){
       if(!L.open)continue;
+      // ПОТОЛОК ИНВЕНТАРЯ. Уровень остаётся открытым — сетка ждёт, пока
+      // существующие ноги закроются, и только потом набирает новые.
+      // Это и есть граница между «фермой» и «усреднением до margin call».
+      if(_gs.inv.length>=_GS.maxInv){ _gs.capHit=(_gs.capHit||0)+1; continue; }
       const cr=L.cross||(L.side==='buy'?'down':'up');
       const hitL=(cr==='down')?(prev>L.px&&px<=L.px):(prev<L.px&&px>=L.px);
       if(!hitL)continue;
@@ -7753,7 +7858,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       // ── диспетчер режимов: РЕЙНДЖ → сетка · ТРЕНД/ПОТОК → направленные стратегии ──
       const rangeMode=(m.f.dir==='range'||m.f.str<=1)&&m.f.rv!=='high'&&!m.f.anom&&!(_ap.gridBlockUntil&&Date.now()<_ap.gridBlockUntil);
       const now=Date.now();
-      if(_ap.gridOn!==rangeMode && now-(_ap.modeSince||0)>60e3 && !_ap.pos){ // гистерезис 60с, не дёргаем при открытой позиции
+      // сетка в ручном режиме — диспетчер её не касается: один объект, один хозяин
+      if(!_gsManual && _ap.gridOn!==rangeMode && now-(_ap.modeSince||0)>60e3 && !_ap.pos){ // гистерезис 60с, не дёргаем при открытой позиции
         _ap.modeSince=now; _ap.gridOn=rangeMode;
         if(rangeMode){
           if(_gs){ _gsReframe(m.px); if(typeof _proc==='function')_proc('режим → СЕТКА: лесенка пересобрана вокруг цены, инвентарь сохранён ('+_gs.inv.length+' ног)'); }
@@ -7847,7 +7953,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }catch(e){ try{console.warn('[scalpsniper] _apToJournal:',e&&e.message);}catch(_){} }
   }
   function _apLogGrid(st,m){
-    const rec={t:Date.now(),proto:'GRID',side:'—',entry:0,exit:0,bps:st.net,seg:_apSegKey(m.f),reason:'mode',hold:st.dur,fills:st.fills,pairs:st.pairs,fee:AP_FEE};
+    // reason теперь несёт ПРИЧИНУ остановки, а не общее «mode»: без неё
+    // нельзя понять, что именно резать при калибровке — время, просадку
+    // или потолок инвентаря. Плюс floatAtStop: сколько висело незакрытым.
+    const rec={t:Date.now(),proto:'GRID',side:'—',entry:0,exit:0,bps:st.net,seg:_apSegKey(m.f),
+      reason:st.why||'mode',hold:st.dur,fills:st.fills,pairs:st.pairs,fee:AP_FEE,
+      invLeft:st.inv,capHit:st.capHit,floatAtStop:st.floatAtStop};
     _apArchive(rec);
     _apToJournal(rec,'grid');                       // сетка — в общий журнал, сегмент «grid»
     _ap.log.push(rec); if(_ap.log.length>300)_ap.log=_ap.log.slice(-300);
@@ -7944,7 +8055,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _ap.on=!_ap.on;
     if(!_ap.on){
       if(_ap.pos&&_dlHist.length)_apClose(_dlHist[_dlHist.length-1],'manual'); _ap.pos=null;
-      const st=_gsStop(); if(st&&st.fills>0&&_dlSnap){const m=_apMicro();if(m)_apLogGrid(st,m);} // сетка закрывается вместе с движком
+      const st=_gsStop('стоп движка'); if(st&&st.fills>0&&_dlSnap){const m=_apMicro();if(m)_apLogGrid(st,m);} // сетка закрывается вместе с движком
       _ap.gridOn=false; _ap.modeSince=0;
       if(typeof _proc==='function')_proc('автопилот остановлен · сегодня '+_ap.today.n+' сд · '+(_ap.today.sum>=0?'+':'')+_ap.today.sum+' bps');
       if(p)p.style.display='none'; if(b){b.textContent='▶ автопилот';b.classList.remove('on');} return; }
