@@ -6587,7 +6587,28 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       let mi=cand[a]; for(let k=a;k<=b;k++)if(rows[cand[k]][1]<rows[mi][1])mi=cand[k];
       lvn.push(rows[mi][0]); a=b+1;
     }
-    return {poc,val,vah,lvn:lvn.slice(0,12),tot,n,step,levels:rows.length,ts:Date.now()};
+    return {poc,val,vah,lvn:lvn.slice(0,12),tot,n,step,levels:rows.length,t0:0,ts:Date.now()};
+  }
+  // ═══ ПОРОГ ДОСТАТОЧНОСТИ ═══
+  // Замер на проде: через 14 секунд профиль дал зону стоимости шириной 1.6 bps
+  // по 122 сделкам в 6 корзинах — и метрика уверенно сообщила «ниже стоимости».
+  // Это описание последних секунд ленты, а не аукциона. Профиль сессии требует
+  // сессии; без явного порога он выглядит работающим и врёт.
+  // Три условия сразу: время (форма профиля успела сложиться), сделки (узлы
+  // не из десятка принтов) и число уровней (есть чему быть узлом и впадиной).
+  const _VP_MIN_MS=10*60e3, _VP_MIN_N=1500, _VP_MIN_LV=20;
+  function _vpReady(){
+    if(!_vp||!_vp.t0)return false;
+    return (Date.now()-_vp.t0)>=_VP_MIN_MS && _vp.n>=_VP_MIN_N && _vp.levels>=_VP_MIN_LV;
+  }
+  function _vpWait(){
+    if(!_vp||!_vp.t0)return 'профиль объёма ещё не начат';
+    const m=Math.max(0,Math.ceil((_VP_MIN_MS-(Date.now()-_vp.t0))/60000));
+    const need=[];
+    if(m>0)need.push('ещё '+m+' мин');
+    if(_vp.n<_VP_MIN_N)need.push('сделок '+_vp.n+'/'+_VP_MIN_N);
+    if(_vp.levels<_VP_MIN_LV)need.push('уровней '+_vp.levels+'/'+_VP_MIN_LV);
+    return 'профиль копится: '+(need.join(', ')||'почти готов');
   }
   // ПРОИЗВОДНАЯ МЕТРИКА: режим аукциона. Отвечает на вопрос, на который ER
   // ответить не может: принят ли рынком текущий диапазон или цена его покидает.
@@ -6595,7 +6616,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // проекции одного вопроса «диапазон ли это», и совпадать они не обязаны:
   // цена может ходить туда-сюда (ER низкий), уже уйдя за зону стоимости.
   function _vpRegime(px){
-    if(!_vp||!(px>0))return null;
+    if(!_vpReady()||!(px>0))return null;      // не знаю — честнее, чем уверенное число
     const {poc,val,vah}=_vp;
     const w=vah-val;
     const vap=w>0?+(((px-val)/w)).toFixed(3):null;          // 0 — у нижней границы, 1 — у верхней
@@ -6608,7 +6629,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // Метка уровня по профилю. Считается для ЦЕНЫ ЗОНЫ, а не для текущей:
   // вопрос «что за уровень эта зона» не зависит от того, где цена сейчас.
   function _vpTagPx(p){
-    if(!_vp||!(p>0))return null;
+    if(!_vpReady()||!(p>0))return null;       // зона без метки лучше зоны с выдуманной
     const tolP=Math.max(_vp.step*1.5,p*0.0004);
     if(Math.abs(p-_vp.poc)<=tolP)return 'poc';
     if(_vp.lvn.some(l=>Math.abs(l-p)<=tolP))return 'lvn';
@@ -6642,9 +6663,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // соединений и нагрузки на сеть ноль, стоимость на сделку O(1).
     // Лента китов для этого не годится: она порезана порогом и дала бы профиль
     // одних крупных принтов, а не аукциона.
-    let vpMap=new Map(), vpStep=0, vpN=0, vpSent=0;
+    let vpMap=new Map(), vpStep=0, vpN=0, vpSent=0, vpT0=0;
     function vpAdd(px,q,isSell){
       if(!(px>0)||!(q>0))return;
+      if(!vpT0)vpT0=Date.now();
       if(!vpStep){ const a=Math.abs(px); vpStep=a>=1e4?1:a>=1e3?0.1:a>=100?0.05:a>=1?0.001:a>=0.01?1e-5:1e-7; }
       const k=Math.round(px/vpStep);
       let c=vpMap.get(k);
@@ -6769,7 +6791,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(now-vpSent>=2000 && vpMap.size>4){
         vpSent=now;
         const rows=[]; vpMap.forEach((c,k)=>rows.push([k*vpStep,c.v,c.b-c.s]));
-        self.postMessage({t:'vp',step:vpStep,n:vpN,rows:rows});
+        self.postMessage({t:'vp',step:vpStep,n:vpN,t0:vpT0,rows:rows});
       }
     }
   `; }
@@ -7142,7 +7164,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{ const blob=new Blob([_dlWorkerCode()],{type:'application/javascript'});
       _dlWorker=new Worker(URL.createObjectURL(blob));
       _dlWorker.onmessage=e=>{ const d=e.data;
-        if(d&&d.t==='vp'){ try{ _vp=_vpCompute(d.rows,d.step,d.n); }catch(_){ } return; }
+        if(d&&d.t==='vp'){ try{ const v=_vpCompute(d.rows,d.step,d.n); if(v){v.t0=d.t0||0; _vp=v;} }catch(_){ } return; }
         if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); _dlTick++; _dlLastSnap=Date.now(); if(_dlHist.length>180)_dlHist.shift(); _gsHistPush(_dlSnap[0]);}
         // Трекер стен нужен ВСЕГДА: на нём держатся сценарии в стакане (отскок / пробой / разъедают).
         // При включённом автопилоте микро считает сам _apOnSnap; при выключенном — ведём его отдельно.
@@ -7395,7 +7417,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{
       const px=(_dlHist&&_dlHist.length)?_dlHist[_dlHist.length-1]:0;
       const vr=_vpRegime(px);
-      if(!vr)return ' · профиль объёма ещё копится';
+      if(!vr)return ' · '+_vpWait();
       return ' · аукцион: '+vr.state+' (POC '+(vr.pocBps>0?'+':'')+vr.pocBps+' bps, ширина стоимости '+vr.vaBps+' bps)'+(vr.nearLvn?', цена в LVN':'');
     }catch(e){ return ''; }
   }
