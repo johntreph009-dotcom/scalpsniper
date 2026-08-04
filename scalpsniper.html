@@ -1751,14 +1751,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <span class="live-status" id="liveStatus" style="color:var(--text-dim)">введи цену</span>
       <span id="streakBadge" class="streak-badge" style="display:none"></span>
     </div>
-    <div class="sess-walls" id="sessWalls" title="Сводная карта ликвидности: ближайшие концентрации в книге (агрегация нескольких площадок в долях) и дистанции до них"></div>
-    <div class="whale-panel" id="whaleSess"></div>
-    <div class="whale-panel" id="liqSess"></div>
-    <div class="session-ctx" id="sessionCtx"><div class="sc-bias" id="scBias"></div><div class="sc-guards" id="scGuards"></div></div>
     <div class="sess-pchart">
       <div class="dl-price" onclick="_sessPcToggle()" style="cursor:pointer" title="Свернуть/развернуть график цены"><span class="dl-price-now" id="sessPxNow">—</span><span class="dl-price-chg" id="sessPxChg"></span><span class="dl-price-lbl">цена · live <span id="sessPcChev">▾</span></span></div>
       <div class="dl-pchart-wrap" id="sessPcWrap"><canvas id="sessPriceChart"></canvas></div>
     </div>
+    <div class="sess-walls" id="sessWalls" title="Сводная карта ликвидности: ближайшие концентрации в книге (агрегация нескольких площадок в долях) и дистанции до них"></div>
+    <div class="whale-panel" id="whaleSess"></div>
+    <div class="whale-panel" id="liqSess"></div>
     <div class="mini-chart-wrap" id="miniChartWrap">
       <div class="mini-chart-hdr">
         <span class="mc-tf" id="mcTfLabel">—</span>
@@ -1805,6 +1804,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       </div>
     </div>
     <div class="zone-ladder" id="zoneLadder"></div>
+    <div class="session-ctx" id="sessionCtx"><div class="sc-bias" id="scBias"></div><div class="sc-guards" id="scGuards"></div></div>
     <div class="pos-block" id="posBlock"></div>
   </div>
   <!-- ===== RISK CALC (shared, сворачиваемый) ===== -->
@@ -4978,7 +4978,24 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const cv=document.getElementById('miniChart');if(!cv)return;
     const W=cv.parentElement.clientWidth||600;
     const mob=W<560;
-    const H=mob?Math.round(Math.min(Math.max(W*0.95,290),440)):((typeof _mcTall!=='undefined'&&_mcTall)?Math.round(Math.min(window.innerHeight*0.68,560)):260),LBL=mob?64:86;
+    /* ═══ ВЫСОТА ГРАФИКА. НА ТЕЛЕФОНЕ ТОЖЕ СЛУШАЕТ КНОПКУ ⤢ ═══
+     * Раньше мобильная ветка считала высоту ТОЛЬКО от ширины, а `_mcTall`
+     * в расчёт не входил вовсе. Кнопка переключалась, состояние сохранялось,
+     * подсветка менялась, перерисовка вызывалась — и высота оставалась той же
+     * до пикселя. Снаружи это выглядит как «кнопка щёлкает, график не меняется»,
+     * и найти такое глазами по коду нельзя: обе ветки по отдельности верны.
+     *
+     * Развёрнутая высота на телефоне считается от ЭКРАНА, а не от ширины:
+     * смысл кнопки в том, чтобы отдать графику вертикаль, а вертикаль есть
+     * свойство экрана. Нижняя граница гарантирует, что развёрнутый всегда
+     * заметно выше обычного даже на широком планшете, иначе кнопка снова
+     * окажется бутафорией.
+     */
+    const tall=(typeof _mcTall!=='undefined'&&_mcTall);
+    const hNorm=mob?Math.round(Math.min(Math.max(W*0.95,290),440)):260;
+    const hTall=mob?Math.round(Math.max(hNorm+140,Math.min(window.innerHeight*0.78,760)))
+                   :Math.round(Math.min(window.innerHeight*0.68,560));
+    const H=tall?hTall:hNorm, LBL=mob?64:86;
     const dpr=Math.min(window.devicePixelRatio||1,3);
     cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);
     cv.style.width=W+'px';cv.style.height=H+'px';
