@@ -5879,6 +5879,29 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       try{const kl=await _klRaw(sym,tfKl[0],tfKl[1]); if(!kl)throw 0; const m={}; kl.forEach(k=>{const tp=(+k[2]+ +k[3]+ +k[4])/3,v=+k[5],key=Math.round(tp/b)*b; m[key]=(m[key]||0)+v;}); let bv=-1; for(const k in m){if(m[k]>bv){bv=m[k];poc=+k;}}
         swH=Math.max(...kl.map(k=>+k[2])); swL=Math.min(...kl.map(k=>+k[3]));
         const closes=kl.map(k=>+k[4]).slice(-20); const ma=closes.reduce((a,c)=>a+c,0)/(closes.length||1); momUp = price>ma*1.0005?true : price<ma*0.9995?false : null; }catch(e){}
+      // ═══ СТАРШИЙ ГОРИЗОНТ: РАЗМЕТКА ВИДИТ НЕ ТОЛЬКО СВОЙ ТФ ═══
+      // Раньше вся структура бралась с одного рабочего ТФ: на 1m «хай периода» —
+      // это хай четырёх часов, и уровень, который на часовике держит неделю,
+      // в разметке не появлялся вовсе. Тянем один ряд примерно в 12 раз старше
+      // и берём с него ТОЛЬКО контекст: где стоит объём и где структурные края.
+      // Звёзды и протоколы намеренно не трогаем — скоринг сейчас под замером,
+      // менять его молча во время прогона значит испортить выборку.
+      const htfMap={'1m':'15m','3m':'30m','5m':'1h','15m':'4h','30m':'4h','1h':'1d','4h':'1d','1d':null};
+      const htf=htfMap[tf]||null;
+      let hPoc=null,hH=null,hL=null,hDir=null;
+      if(htf){
+        try{
+          const hk=await _klRaw(sym,htf,120);
+          if(hk&&hk.length){
+            const hb=_niceBucket(price)*Math.max(1,tfMult*3);   // корзина крупнее: на старшем ТФ объём размазан шире
+            const hm={}; hk.forEach(k=>{const tp=(+k[2]+ +k[3]+ +k[4])/3; const key=Math.round(tp/hb)*hb; hm[key]=(hm[key]||0)+ +k[5];});
+            let bv=-1; for(const k in hm){ if(hm[k]>bv){bv=hm[k];hPoc=+k;} }
+            hH=Math.max(...hk.map(k=>+k[2])); hL=Math.min(...hk.map(k=>+k[3]));
+            const hc=hk.map(k=>+k[4]).slice(-20), hma=hc.reduce((a,c)=>a+c,0)/(hc.length||1);
+            hDir = price>hma*1.001?'up' : price<hma*0.999?'down' : 'flat';
+          }
+        }catch(e){}
+      }
       try{funding=await _fundingAny(sym);}catch(e){}
       try{oi=await _oiAny(sym);}catch(e){}
       const agg=arr=>{const m={}; arr.forEach(a=>{const p=+a[0],q=+a[1],key=Math.round(p/b)*b; m[key]=(m[key]||0)+p*q;}); return m;};
@@ -5911,6 +5934,31 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const farFromAll=p=>z.every(zz=>Math.abs(zz.px-p)/p>0.0015);
       if(swH&&swH>price*1.003&&swH<=price*(1+within)&&farFromAll(swH))z.push({px:_rpx(swH),kind:'watch',note:'хай периода '+tf+' — структурный уровень',stop:null,proto:null,stars:2,createdAt:Date.now(),origin:'auto'});
       if(swL&&swL<price*0.997&&swL>=price*(1-within)&&farFromAll(swL))z.push({px:_rpx(swL),kind:'watch',note:'лоу периода '+tf+' — структурный уровень',stop:null,proto:null,stars:2,createdAt:Date.now(),origin:'auto'});
+      // Структурные края СТАРШЕГО ТФ. Именно их не хватало: на минутке хай периода —
+      // это хай четырёх часов, а уровень, который держит неделю, не появлялся вовсе.
+      if(htf){
+        if(hH&&hH>price*1.003&&hH<=price*(1+within)&&farFromAll(hH))
+          z.push({px:_rpx(hH),kind:'watch',note:'хай '+htf+' — структура старшего ТФ',stop:null,proto:null,stars:2,createdAt:Date.now(),origin:'auto',htf:'high'});
+        if(hL&&hL<price*0.997&&hL>=price*(1-within)&&farFromAll(hL))
+          z.push({px:_rpx(hL),kind:'watch',note:'лоу '+htf+' — структура старшего ТФ',stop:null,proto:null,stars:2,createdAt:Date.now(),origin:'auto',htf:'low'});
+        if(hPoc&&Math.abs(hPoc-price)/price>0.003&&Math.abs(hPoc-price)/price<=within&&farFromAll(hPoc))
+          z.push({px:_rpx(hPoc),kind:'watch',note:'POC '+htf+' — где стоит объём старшего ТФ',stop:null,proto:null,stars:2,createdAt:Date.now(),origin:'auto',htf:'poc'});
+      }
+      // СОВПАДЕНИЕ СО СТАРШИМ ГОРИЗОНТОМ — помечаем как наблюдение, не как оценку.
+      // Звёзды не двигаем: базовая линия показала, что для fade они и так указывают
+      // в неверную сторону, и подмешивать туда ещё один множитель до накопления
+      // статистики значит смешать два эффекта и не суметь их потом разделить.
+      if(htf){
+        const near=(a,b)=>a&&b&&Math.abs(a-b)/b<=0.002;
+        z.forEach(o=>{
+          if(o.htf)return;                       // сам уровень старшего ТФ себе не совпадение
+          let m=null;
+          if(near(o.px,hPoc))m='POC '+htf;
+          else if(near(o.px,hH))m='хаем '+htf;
+          else if(near(o.px,hL))m='лоу '+htf;
+          if(m){ o.htfHit=m; o.note+=' · совпадает с '+m; }
+        });
+      }
       // пространство вариантов в разметке: у боевой зоны сразу виден альтернативный сценарий —
       // что произойдёт, если рынок опровергнет основной (fade ↔ пробой одной и той же стены).
       z.forEach(o=>{ if(o.kind==='fade')o.note+=' · если стену съедят → сценарий SQUEEZE (пробой)';
@@ -5926,7 +5974,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const cvTxt=cvdDir==='buy'?'CVD↑':cvdDir==='sell'?'CVD↓':'CVD≈';
       const _ms=_zMergeStat;
       const _mTxt=_ms.kept?zones.length+' зон (+'+_ms.added+' из стакана, '+_ms.kept+' своих сохранено)':zones.length+' зон';
-      if(st)st.textContent='✓ '+raw+': '+_mTxt+' ('+mix+') · ТФ '+tf+' ±'+(within*100).toFixed(1)+'% · '+trTxt+'×'+trend.strength+' · '+cvTxt+' · RVOL '+ctx.rvol.val+'× · цена '+price+' · POC '+(poc??'н/д')+(funding!=null?' · фанд '+funding+'%':'')+' · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+      if(st)st.textContent='✓ '+raw+': '+_mTxt+' ('+mix+') · ТФ '+tf+(htf?' + контекст '+htf+(hDir?' ('+(hDir==='up'?'выше MA':hDir==='down'?'ниже MA':'у MA')+')':''):'')+' ±'+(within*100).toFixed(1)+'% · '+trTxt+'×'+trend.strength+' · '+cvTxt+' · RVOL '+ctx.rvol.val+'× · цена '+price+' · POC '+(poc??'н/д')+(funding!=null?' · фанд '+funding+'%':'')+' · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
     }catch(e){ if(st)st.textContent='⚠ '+sym+': '+(e.message||'ошибка')+' (пара есть на бирже?)'; }
     finally{ _quickBusy=false; if(btn){btn.disabled=false;btn.textContent=oldT||'⚡ Обновить зоны (без скринов)';} }
   }
