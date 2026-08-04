@@ -7166,8 +7166,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{
       const hh=_dlHist; if(!hh||hh.length<12)return null;
       const w=hh.slice(-120);
-      let path=0; for(let i=1;i<w.length;i++)path+=Math.abs(w[i]-w[i-1]);
+      let path=0, moves=0;
+      for(let i=1;i<w.length;i++){ const d=Math.abs(w[i]-w[i-1]); if(d>0){path+=d;moves++;} }
       if(path<=0)return null;
+      // Замер на проде: в окне из 120 отсчётов бывает всего 5 разных цен —
+      // остальное плато. ER на десятке движений скачет (0.41 → 0.54 за минуту),
+      // и гейт на нём решал бы по шуму. Пока движений мало, честнее вернуть
+      // «не знаю», чем уверенное число: null означает «не блокировать».
+      if(moves<8)return null;
       return +(Math.abs(w[w.length-1]-w[0])/path).toFixed(3);
     }catch(e){ return null; }
   }
@@ -7212,6 +7218,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function _gsBtnSync(){
     const b=document.getElementById('gsBtn'); if(!b)return;
+    // Не затирать надпись отказа. _gsToggle зовёт синхронизацию ПОСЛЕ _gsRefuse,
+    // и без этой строки предложение «ещё раз — всё равно» жило миллисекунды:
+    // трейдер видел обычную кнопку и не знал, что гейт можно обойти.
+    if(b.classList.contains('refuse'))return;
     const on=!!_gs;
     b.textContent=on?'⏹ стоп сетки':'▦ сетка';
     b.classList.toggle('on',on);
