@@ -7590,7 +7590,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(dst0){ const hb=H('hub'); if(hb)dst0.appendChild(hb); }
     const bookLbl=[...document.querySelectorAll('.dl-canvas-lbl')].find(e=>/^Стакан/i.test(e.textContent));
     move('hubBook',[bookLbl,'dlBook'].filter(Boolean));
-    move('hubAuto',['apBtn','apCfg','apPanel','dlPriceChart'].filter(Boolean));
+    // gsBtn переносим ВМЕСТЕ с apBtn: список переезда идёт по именам, и кнопка,
+    // добавленная в разметку рядом, оставалась в осиротевшей полосе — в DOM была,
+    // на экране нет. Добавляя элемент в .dld-bar, добавляй его и сюда.
+    move('hubAuto',['apBtn','gsBtn','apCfg','apPanel','dlPriceChart'].filter(Boolean));
     move('hubProc',['procFeed']);
     move('hubAudit',[lAud,'apAudit'].filter(Boolean));
     move('hubPass',[lPas,'cpPanel'].filter(Boolean));
@@ -7858,21 +7861,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       // ── диспетчер режимов: РЕЙНДЖ → сетка · ТРЕНД/ПОТОК → направленные стратегии ──
       const rangeMode=(m.f.dir==='range'||m.f.str<=1)&&m.f.rv!=='high'&&!m.f.anom&&!(_ap.gridBlockUntil&&Date.now()<_ap.gridBlockUntil);
       const now=Date.now();
-      // сетка в ручном режиме — диспетчер её не касается: один объект, один хозяин
-      if(!_gsManual && _ap.gridOn!==rangeMode && now-(_ap.modeSince||0)>60e3 && !_ap.pos){ // гистерезис 60с, не дёргаем при открытой позиции
-        _ap.modeSince=now; _ap.gridOn=rangeMode;
-        if(rangeMode){
-          if(_gs){ _gsReframe(m.px); if(typeof _proc==='function')_proc('режим → СЕТКА: лесенка пересобрана вокруг цены, инвентарь сохранён ('+_gs.inv.length+' ног)'); }
-          else { _gsStart(); if(typeof _proc==='function')_proc('режим → СЕТКА: сегмент '+_apSegKey(m.f)+' — разворачиваю спрей'); }
-        }
-        else{
-          // Раньше здесь стоял _gsStop(): импульс ломал рейндж → диспетчер сбрасывал ВСЕ ноги по рынку
-          // на экстремуме движения. Это и был «стоп сетки в момент импульса».
-          // Теперь лесенка продолжает работать и в тренде: едет за ценой и отторговывает импульс.
-          if(typeof _proc==='function')_proc('режим → НАПРАВЛЕННЫЙ: лесенка продолжает работу и едет за движением'+(_gs?(' · инвентарь '+_gs.inv.length):''));
-        }
+      // ═══ ДИСПЕТЧЕР БОЛЬШЕ НЕ ВКЛЮЧАЕТ СЕТКУ ═══
+      // Трейдер запросил два НЕЗАВИСИМЫХ инструмента. Прошлая правка защищала
+      // сетку от диспетчера только когда она уже запущена вручную — то есть
+      // от чего угодно, кроме самого автозапуска. Сетка включалась сама.
+      // Теперь автопилот — исключительно направленный движок. Сетка живёт
+      // только по кнопке. Это же чинит разбор: два инструмента не смешиваются
+      // в одной статистике, и калибровать их можно порознь.
+      _ap.gridOn=false;
+      if(rangeMode&&!_gs&&!_ap.gridHinted&&now-(_ap.modeSince||0)>60e3){
+        _ap.gridHinted=true; _ap.modeSince=now;
+        if(typeof _proc==='function')_proc('сегмент '+_apSegKey(m.f)+' — рейндж, условия для сетки. Запуск вручную кнопкой «▦ сетка»');
       }
-      if(_ap.gridOn){ if(!_gs)_gsStart(); _apRender(m); return; } // сетка торгует, направленные молчат
+      if(!rangeMode)_ap.gridHinted=false;
       if(_ap.pos){_apManage(m);_apRender(m);return;}
       if(now<_ap.cdUntil){_apRender(m);return;}
       // фиты по всем стратегиям (уже с поправкой на синергию), лидер ≥ порога, контекст + триггер
