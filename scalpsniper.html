@@ -2507,11 +2507,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // Уилсона): на малой выборке она честнее сырой доли.
     let ev=null; try{ ev=_zEV(z); }catch(e){}
     if(ev){
-      const cls=ev.evLo>0.05?'zl-ev-pos':ev.evLo<-0.05?'zl-ev-neg':'zl-ev-flat';
+      const cls=ev.evAdj>0.05?'zl-ev-pos':ev.evAdj<-0.05?'zl-ev-neg':'zl-ev-flat';
       bits.push('<span class="'+cls+'" title="Класс «'+ev.bucket+'»: отработала '+ev.w+' из '+ev.n
-        +' ('+ev.p+'%). Порог безубытка при R:R '+_EV_RR+' — '+ev.be+'%. Матожидание '+(ev.ev>=0?'+':'')+ev.ev
-        +'R, консервативная оценка '+(ev.evLo>=0?'+':'')+ev.evLo+'R (нижняя граница Уилсона, поправка на размер выборки)."'
-        +'EV '+(ev.evLo>=0?'+':'')+ev.evLo+'R</span>');
+        +' ('+ev.p+'%). Порог безубытка при R:R '+_EV_RR+' — '+ev.be+'%.'
+        +' Сжатая к приору оценка '+ev.pAdj+'% → EV '+(ev.evAdj>=0?'+':'')+ev.evAdj+'R.'
+        +' Сырое EV '+(ev.ev>=0?'+':'')+ev.ev+'R, нижняя граница Уилсона '+(ev.evLo>=0?'+':'')+ev.evLo+'R.'
+        +' Вес факта в оценке: '+Math.round(ev.n/(ev.n+_EV_K)*100)+'%."'
+        +'EV '+(ev.evAdj>=0?'+':'')+ev.evAdj+'R</span>');
     }
     return bits.length?'<span class="zl-m">'+bits.join(' · ')+'</span>':'<span class="zl-m"></span>';
   }
@@ -2873,6 +2875,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const doneA=za.closed||za.expired,doneB=zb.closed||zb.expired;
       if(doneA&&!doneB)return 1;if(!doneA&&doneB)return-1;
       if(a===act)return-1;if(b===act)return 1;
+      // ПОРЯДОК ПО МАТОЖИДАНИЮ, а не по звёздам. Звёзды — гипотеза о качестве,
+      // и замер показал, что для fade они указывают в НЕВЕРНУЮ сторону
+      // (3★ отрабатывают хуже 2★). План должен начинаться с того, что работает.
+      const rk=_zRank(zb,lp)-_zRank(za,lp);
+      if(Math.abs(rk)>1e-6)return rk;
       return(zb.stars||2)-(za.stars||2)||(a-b);
     });
     // ═══ БЕЗ ДУБЛИРОВАНИЯ СПИСКА ЗОН ═══
@@ -5898,6 +5905,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const z=1.96,p=w/n,d=1+z*z/n;
     return Math.max(0,((p+z*z/(2*n))-z*Math.sqrt((p*(1-p)+z*z/(4*n))/n))/d);
   }
+  // ПРИОР ОТ ЗВЁЗД — намеренно слабый и близкий к безубытку.
+  // Замер показал, что звёзды почти не различают исход (fade·3★ отрабатывает
+  // ХУЖЕ среднего по fade), поэтому приписывать им сильную предсказательную
+  // силу нечестно. Приор нужен не для точности, а чтобы новый класс зон
+  // не получал случайную оценку с двух наблюдений.
+  function _zPrior(z){
+    const st=Math.max(1,Math.min(3,(z&&z.stars)||2));
+    return ({1:0.38,2:0.42,3:0.46})[st];
+  }
+  const _EV_K=25;   // псевдо-наблюдения приора: при n=178 факт весит 88%, при n=5 — 17%
   function _zEV(z){
     if(!z)return null;
     const done=zoneReviews.filter(r=>r.verdict==='worked'||r.verdict==='failed');
@@ -5914,11 +5931,28 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const n=b.rows.length, w=b.rows.filter(r=>r.verdict==='worked').length;
     if(!n)return null;
     const p=w/n, pLo=_wilsonLo(w,n);
+    // ═══ СЖАТИЕ К ПРИОРУ (байесовское сглаживание) ═══
+    // Почему не сырая доля: 62% по 79 наблюдениям и 62% по 790 — разной прочности
+    // утверждения, а решение по ним принимается одинаковое. Сжатие делает вес
+    // факта пропорциональным выборке: p_adj = (n·p_факт + K·p_приор)/(n+K).
+    // Это же защищает от переобучения: класс с двумя удачами не станет «лучшим».
+    const pr=_zPrior(z);
+    const pAdj=(n*p+_EV_K*pr)/(n+_EV_K);
+    const evAdj=+(pAdj*_EV_RR-(1-pAdj)).toFixed(3);
     // EV в R при R:R 1.5. Безубыток на p=40%: 0.4×1.5−0.6=0
     const ev=+(p*_EV_RR-(1-p)).toFixed(3);
     const evLo=+(pLo*_EV_RR-(1-pLo)).toFixed(3);
-    return {n,w,p:+(p*100).toFixed(1),pLo:+(pLo*100).toFixed(1),ev,evLo,bucket:b.name,
+    return {n,w,p:+(p*100).toFixed(1),pLo:+(pLo*100).toFixed(1),
+            pAdj:+(pAdj*100).toFixed(1),evAdj,ev,evLo,bucket:b.name,
             be:+(100/(1+_EV_RR)).toFixed(0)};   // порог безубытка в %
+  }
+  // Ранг зоны для сортировки плана: сначала матожидание класса, потом близость.
+  // Звёзды остаются на экране как признак, но порядок задаёт факт, а не гипотеза.
+  function _zRank(z,lp){
+    let e=null; try{ e=_zEV(z); }catch(_){}
+    const ev=e?e.evAdj:0;
+    const near=(lp&&isFinite(+z.px))?-Math.abs(+z.px-lp)/lp:0;
+    return ev*10+near*100;
   }
   function zoneReadBreakdown(field){
     const g={};
