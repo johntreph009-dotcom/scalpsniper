@@ -2248,7 +2248,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const tk=_tkKey(), key=_revKey(tk,z.px,z.kind);
     let r=zoneReviews.find(x=>x.key===key);
     if(!z.verdict){ if(r)zoneReviews=zoneReviews.filter(x=>x!==r); saveReviews(); return; }
-    if(!r){ r={key,id:Date.now(),ts:new Date().toISOString(),ticker:tk,zPx:z.px,zKind:z.kind,protocol:z.proto||null,stars:z.stars||2}; zoneReviews.unshift(r); }
+    // Признаки ситуации переносим в вердикт. Записи ДО этой правки их не имеют —
+    // это нормально: они просто не попадут в узкие корзины и останутся работать
+    // в широких. Дозаполнять их задним числом нельзя, контекст того момента утрачен.
+    if(!r){ r={key,id:Date.now(),ts:new Date().toISOString(),ticker:tk,zPx:z.px,zKind:z.kind,protocol:z.proto||null,stars:z.stars||2,
+      al:z.al||null, hc:!!z.hc, vp:z.vp||null, tf:(document.getElementById('tf')?.value||null)}; zoneReviews.unshift(r); }
     r.verdict=z.verdict; r.adhered=(z.verdict==='notreached')?null:(z.adhered||null);
     saveReviews();
   }
@@ -5925,11 +5929,27 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       asks.forEach(o=>{ let kind,proto,note,long;
         if(tdir==='up'&&o===nearestAsk){kind='break';proto='SQUEEZE';long=true;note='пробой ask-стены '+fmtM(o.n)+' по тренду↑';}
         else{kind='fade';proto='VALENTINI';long=false;note='отбой ask-стены '+fmtM(o.n)+(tdir==='up'?' (контр-тренд)':tdir==='down'?' по тренду↓':'');}
-        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*(long?(1-stopK):(1+stopK))),proto,stars:fStars(o,long),createdAt:Date.now(),origin:'auto'}); }); // стоп по НАПРАВЛЕНИЮ сделки и масштабу ТФ
+        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*(long?(1-stopK):(1+stopK))),proto,stars:fStars(o,long),createdAt:Date.now(),origin:'auto',
+          // ПРИЗНАКИ СИТУАЦИИ. Без них условное матожидание посчитать не из чего:
+          // 434 накопленных вердикта знают только класс и звёзды, поэтому вопрос
+          // «а работает ли fade ПРОТИВ тренда» по ним неотвечаем. Пишем сейчас,
+          // чтобы через N сессий было что считать. Два признака, не двадцать:
+          // каждый следующий делит выборку пополам и приближает момент, когда
+          // в корзине останется три наблюдения и любое число станет выдумкой.
+          al:(align(long)>0?'with':align(long)<0?'against':'flat'), hc:false,
+          vp:(typeof _vpTagPx==='function'?_vpTagPx(o.p):null)}); }); // стоп по НАПРАВЛЕНИЮ сделки и масштабу ТФ
       bids.forEach(o=>{ let kind,proto,note,long;
         if(tdir==='down'&&o===nearestBid){kind='break';proto='SQUEEZE';long=false;note='пробой bid-стены '+fmtM(o.n)+' по тренду↓';}
         else{kind='fade';proto='VALENTINI';long=true;note='отбой bid-стены '+fmtM(o.n)+(tdir==='down'?' (контр-тренд)':tdir==='up'?' по тренду↑':'');}
-        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*(long?(1-stopK):(1+stopK))),proto,stars:fStars(o,long),createdAt:Date.now(),origin:'auto'}); });
+        z.push({px:_rpx(o.p),kind,note,stop:_rpx(o.p*(long?(1-stopK):(1+stopK))),proto,stars:fStars(o,long),createdAt:Date.now(),origin:'auto',
+          // ПРИЗНАКИ СИТУАЦИИ. Без них условное матожидание посчитать не из чего:
+          // 434 накопленных вердикта знают только класс и звёзды, поэтому вопрос
+          // «а работает ли fade ПРОТИВ тренда» по ним неотвечаем. Пишем сейчас,
+          // чтобы через N сессий было что считать. Два признака, не двадцать:
+          // каждый следующий делит выборку пополам и приближает момент, когда
+          // в корзине останется три наблюдения и любое число станет выдумкой.
+          al:(align(long)>0?'with':align(long)<0?'against':'flat'), hc:false,
+          vp:(typeof _vpTagPx==='function'?_vpTagPx(o.p):null)}); });
       // структура выбранного ТФ: экстремумы периода как watch-уровни (самодостаточность старших ТФ, где стакан мелок)
       const farFromAll=p=>z.every(zz=>Math.abs(zz.px-p)/p>0.0015);
       if(swH&&swH>price*1.003&&swH<=price*(1+within)&&farFromAll(swH))z.push({px:_rpx(swH),kind:'watch',note:'хай периода '+tf+' — структурный уровень',stop:null,proto:null,stars:2,createdAt:Date.now(),origin:'auto'});
@@ -5961,7 +5981,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           let best=null,bd=Infinity;
           z.forEach(o=>{ if(o.htf||o.htfHit)return;
             const d=Math.abs(o.px-lv); if(d<=tol&&d<bd){bd=d;best=o;} });
-          if(best){ best.htfHit=lbl; best.note+=' · совпадает с '+lbl; }
+          if(best){ best.htfHit=lbl; best.hc=true; best.note+=' · совпадает с '+lbl; }
         });
       }
       // пространство вариантов в разметке: у боевой зоны сразу виден альтернативный сценарий —
@@ -6063,11 +6083,28 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const st=Math.max(1,Math.min(3,z.stars||2)), kind=z.kind||'—';
     // от узкого к широкому: класс+звёзды → класс → всё подряд.
     // Узкая корзина точнее, широкая надёжнее — берём первую, где хватает выборки.
-    const buckets=[
+    // Условные корзины идут ПЕРЕД безусловными: вопрос «работает ли fade против
+    // тренда» важнее вопроса «работает ли fade вообще». Порядок строго от узкого
+    // к широкому, берётся первая с достаточной выборкой — так узкое утверждение
+    // используется только когда оно обеспечено данными, а не когда оно приятнее.
+    const al=z.al||null, hc=!!z.hc;
+    const AL={with:'по тренду',against:'против тренда',flat:'в рейндже'};
+    const buckets=[];
+    if(al)buckets.push(
+      {name:kind+'·'+st+'★·'+AL[al], rows:done.filter(r=>r.zKind===kind&&(r.stars||2)===st&&r.al===al)},
+      {name:kind+'·'+AL[al],         rows:done.filter(r=>r.zKind===kind&&r.al===al)});
+    if(hc)buckets.push(
+      {name:kind+'·совпадение со старшим ТФ', rows:done.filter(r=>r.zKind===kind&&r.hc)});
+    // Профиль объёма как признак. Гипотеза аукциона: у POC цена залипает
+    // (fade живёт, break глохнет), в LVN проскакивает (наоборот). Проверяем,
+    // а не постулируем: корзина заработает, когда наберётся выборка.
+    const VP={poc:'на POC',lvn:'в LVN',va:'в зоне стоимости',out:'вне стоимости'};
+    if(z.vp&&VP[z.vp])buckets.push(
+      {name:kind+'·'+VP[z.vp], rows:done.filter(r=>r.zKind===kind&&r.vp===z.vp)});
+    buckets.push(
       {name:kind+'·'+st+'★', rows:done.filter(r=>r.zKind===kind&&(r.stars||2)===st)},
       {name:kind,            rows:done.filter(r=>r.zKind===kind)},
-      {name:'все зоны',      rows:done}
-    ];
+      {name:'все зоны',      rows:done});
     const b=buckets.find(x=>x.rows.length>=12)||buckets[buckets.length-1];
     const n=b.rows.length, w=b.rows.filter(r=>r.verdict==='worked').length;
     if(!n)return null;
@@ -6513,6 +6550,70 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // Здесь один отсчёт в секунду и глубина 300 — ровно 5 минут независимо
   // от того, как часто болтает поток. _dlHist не трогаем: на нём спарклайн
   // и якоря событий, у него своя задача.
+  // ═══ ПРОФИЛЬ ОБЪЁМА: POC / ЗОНА СТОИМОСТИ / LVN ═══
+  // Приходит из воркера раз в 2 секунды. Здесь только свёртка — тяжёлого ничего.
+  let _vp=null;
+  function _vpCompute(rows,step,n){
+    if(!rows||rows.length<5)return null;
+    rows.sort((a,b)=>a[0]-b[0]);
+    const tot=rows.reduce((s,r)=>s+r[1],0); if(tot<=0)return null;
+    let pi=0; for(let i=1;i<rows.length;i++)if(rows[i][1]>rows[pi][1])pi=i;
+    const poc=rows[pi][0], pocV=rows[pi][1];
+    // ЗОНА СТОИМОСТИ 70%: от POC расширяемся к соседу с бо́льшим объёмом.
+    // Это классический метод аукциона, а не «среднее ± сигма»: границы встают
+    // там, где реально торговали, а не там, где красиво по нормальному закону.
+    let lo=pi,hi=pi,acc=pocV;
+    while(acc<tot*0.7&&(lo>0||hi<rows.length-1)){
+      const dn=lo>0?rows[lo-1][1]:-1, up=hi<rows.length-1?rows[hi+1][1]:-1;
+      if(up>=dn){ hi++; acc+=rows[hi][1]; } else { lo--; acc+=rows[lo][1]; }
+    }
+    const val=rows[lo][0], vah=rows[hi][0];
+    // LVN — впадина между двумя значимыми узлами. Не «просто мало объёма»:
+    // край профиля тоже пустой, но это не LVN, там цена ещё не была.
+    const cand=[];
+    for(let i=2;i<rows.length-2;i++){
+      if(rows[i][1]>pocV*0.18)continue;
+      let l=false,r=false;
+      for(let j=i-1;j>=Math.max(0,i-12);j--)if(rows[j][1]>pocV*0.5){l=true;break;}
+      for(let j=i+1;j<=Math.min(rows.length-1,i+12);j++)if(rows[j][1]>pocV*0.5){r=true;break;}
+      if(l&&r)cand.push(i);
+    }
+    // Впадина шириной в пять корзин — это ОДНА впадина, а не пять уровней.
+    // Схлопываем непрерывные серии в корзину с минимальным объёмом: именно там
+    // цена проходит быстрее всего, и именно она нужна как уровень.
+    const lvn=[];
+    for(let a=0;a<cand.length;){
+      let b=a; while(b+1<cand.length&&cand[b+1]===cand[b]+1)b++;
+      let mi=cand[a]; for(let k=a;k<=b;k++)if(rows[cand[k]][1]<rows[mi][1])mi=cand[k];
+      lvn.push(rows[mi][0]); a=b+1;
+    }
+    return {poc,val,vah,lvn:lvn.slice(0,12),tot,n,step,levels:rows.length,ts:Date.now()};
+  }
+  // ПРОИЗВОДНАЯ МЕТРИКА: режим аукциона. Отвечает на вопрос, на который ER
+  // ответить не может: принят ли рынком текущий диапазон или цена его покидает.
+  // ER меряет ЭФФЕКТИВНОСТЬ пути, здесь — ПРИНЯТИЕ цены объёмом. Две независимые
+  // проекции одного вопроса «диапазон ли это», и совпадать они не обязаны:
+  // цена может ходить туда-сюда (ER низкий), уже уйдя за зону стоимости.
+  function _vpRegime(px){
+    if(!_vp||!(px>0))return null;
+    const {poc,val,vah}=_vp;
+    const w=vah-val;
+    const vap=w>0?+(((px-val)/w)).toFixed(3):null;          // 0 — у нижней границы, 1 — у верхней
+    const state=px>vah?'выше стоимости':px<val?'ниже стоимости':'в стоимости';
+    return {state, inVA:(px<=vah&&px>=val), vap,
+      pocBps:+(((px-poc)/px)*1e4).toFixed(1),
+      vaBps:+((w/px)*1e4).toFixed(1),
+      nearLvn:_vp.lvn.some(l=>Math.abs(l-px)/px<0.0006)};
+  }
+  // Метка уровня по профилю. Считается для ЦЕНЫ ЗОНЫ, а не для текущей:
+  // вопрос «что за уровень эта зона» не зависит от того, где цена сейчас.
+  function _vpTagPx(p){
+    if(!_vp||!(p>0))return null;
+    const tolP=Math.max(_vp.step*1.5,p*0.0004);
+    if(Math.abs(p-_vp.poc)<=tolP)return 'poc';
+    if(_vp.lvn.some(l=>Math.abs(l-p)<=tolP))return 'lvn';
+    return (p<=_vp.vah&&p>=_vp.val)?'va':'out';
+  }
   let _gsHist=[],_gsHistLast=0;
   const _GSH_STEP=1000, _GSH_CAP=300;
   function _gsHistPush(px){
@@ -6535,6 +6636,27 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _dlWorkerCode(){ return `
     let symbol='BTCUSDT', N=20;   // было 12 — 12 уровней покрывали 0.6 bps, никакой глубины не видно
     let asks=[], bids=[], mid=0, midEma=0, cumDelta=0, tapeEma=0, tapeEmaPrev=0, tradeCount=0, gotDepth=false;
+    // ═══ ПРОФИЛЬ ОБЪЁМА СЕССИИ ═══
+    // Поток @aggTrade уже подключён и до сих пор использовался только для дельты:
+    // каждая сделка приходила и выбрасывалась. Копим её в корзины по цене — новых
+    // соединений и нагрузки на сеть ноль, стоимость на сделку O(1).
+    // Лента китов для этого не годится: она порезана порогом и дала бы профиль
+    // одних крупных принтов, а не аукциона.
+    let vpMap=new Map(), vpStep=0, vpN=0, vpSent=0;
+    function vpAdd(px,q,isSell){
+      if(!(px>0)||!(q>0))return;
+      if(!vpStep){ const a=Math.abs(px); vpStep=a>=1e4?1:a>=1e3?0.1:a>=100?0.05:a>=1?0.001:a>=0.01?1e-5:1e-7; }
+      const k=Math.round(px/vpStep);
+      let c=vpMap.get(k);
+      if(!c){ c={v:0,b:0,s:0}; vpMap.set(k,c); }
+      c.v+=q; if(isSell)c.s+=q; else c.b+=q;      // дельта НА УРОВНЕ: где именно поглощали
+      vpN++;
+      // Профиль сессии не должен расти без границ на суточном ходе.
+      if(vpMap.size>4000){
+        const arr=[...vpMap.entries()].sort((x,y)=>y[1].v-x[1].v).slice(0,2500);
+        vpMap=new Map(arr);
+      }
+    }
     let depthWS=null, tradeWS=null, pollT=null, mxWS=null, mxPing=null, lastMx=0;
     let okWS=null, okPing=null, lastOk=0, lastBinTrade=0, srcName='—';
     self.onmessage=function(e){ if(e.data&&e.data.cmd==='init'){ symbol=e.data.symbol||'BTCUSDT'; startStreams(); } };
@@ -6594,7 +6716,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       // лента сделок для дельты — как было
       try{
         tradeWS=new WebSocket('wss://stream.binance.com:9443/ws/'+s+'@aggTrade');
-        tradeWS.onmessage=function(ev){ try{ const t=JSON.parse(ev.data); lastBinTrade=Date.now(); tradeCount++; cumDelta=cumDelta*0.999+(t.m? -(+t.q):(+t.q)); }catch(e){} };
+        tradeWS.onmessage=function(ev){ try{ const t=JSON.parse(ev.data); lastBinTrade=Date.now(); tradeCount++; cumDelta=cumDelta*0.999+(t.m? -(+t.q):(+t.q)); vpAdd(+t.p,+t.q,!!t.m); }catch(e){} };
       }catch(e){}
       setInterval(tick, 100);
     }
@@ -6640,6 +6762,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(!asks.length||!bids.length)return;
       lastAny=Date.now();                                  // поток жив — сторожу перезапуск не нужен
       const b=snap(); self.postMessage({t:'snap',buf:b.buffer,m:model(),src:(pollT?'poll':srcName)},[b.buffer]);
+      // Профиль — МЕДЛЕННЫЙ путь. Он статистика сессионного масштаба, и слать
+      // его на каждом снимке значит грузить UI-нить ради данных, которые за
+      // 100 мс не меняются. Раз в 2 секунды, отдельным сообщением.
+      const now=Date.now();
+      if(now-vpSent>=2000 && vpMap.size>4){
+        vpSent=now;
+        const rows=[]; vpMap.forEach((c,k)=>rows.push([k*vpStep,c.v,c.b-c.s]));
+        self.postMessage({t:'vp',step:vpStep,n:vpN,rows:rows});
+      }
     }
   `; }
   let _dlRows=[], _dlHover=null, _dlBookBound=false, _dlSm=null;   // _dlSm — сглаженные объёмы корзин
@@ -7010,7 +7141,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(_dlRunning)return; _dlRunning=true;
     try{ const blob=new Blob([_dlWorkerCode()],{type:'application/javascript'});
       _dlWorker=new Worker(URL.createObjectURL(blob));
-      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); _dlTick++; _dlLastSnap=Date.now(); if(_dlHist.length>180)_dlHist.shift(); _gsHistPush(_dlSnap[0]);}
+      _dlWorker.onmessage=e=>{ const d=e.data;
+        if(d&&d.t==='vp'){ try{ _vp=_vpCompute(d.rows,d.step,d.n); }catch(_){ } return; }
+        if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); _dlTick++; _dlLastSnap=Date.now(); if(_dlHist.length>180)_dlHist.shift(); _gsHistPush(_dlSnap[0]);}
         // Трекер стен нужен ВСЕГДА: на нём держатся сценарии в стакане (отскок / пробой / разъедают).
         // При включённом автопилоте микро считает сам _apOnSnap; при выключенном — ведём его отдельно.
         if(typeof _ap!=='undefined'&&_ap.on){ if(typeof _apOnSnap==='function')_apOnSnap(); }
@@ -7255,6 +7388,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const dt=(_dayTrendCache[sym]&&_dayTrendCache[sym].val)||null;
       return (dt&&dt.strength)||0; }catch(e){ return 0; }
   }
+  // Профиль в подсказке — как НАБЛЮДЕНИЕ рядом с ER, не как второй гейт.
+  // Пока признак не подтверждён выборкой, он информирует трейдера и пишется
+  // в журнал, но ничего не запрещает.
+  function _vpNote(){
+    try{
+      const px=(_dlHist&&_dlHist.length)?_dlHist[_dlHist.length-1]:0;
+      const vr=_vpRegime(px);
+      if(!vr)return ' · профиль объёма ещё копится';
+      return ' · аукцион: '+vr.state+' (POC '+(vr.pocBps>0?'+':'')+vr.pocBps+' bps, ширина стоимости '+vr.vaBps+' bps)'+(vr.nearLvn?', цена в LVN':'');
+    }catch(e){ return ''; }
+  }
   // ПРЕДОХРАНИТЕЛИ. Возвращает причину остановки или null.
   function _gsGuard(px){
     if(!_gs)return null;
@@ -7299,7 +7443,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     b.classList.toggle('on',on);
     const er=_gsER();
     b.title=on?('Сетка работает. Предохранители: ног ≤'+_GS.maxInv+', просадка −'+_GS.maxDD+' bps, время '+_GS.maxMin+' мин, ER ≥'+_GS.erOff+' — стоп')
-              :('Запустить сетку отдельно от автопилота. Режим сейчас: ER '+(er==null?'—':er)+' при пороге '+_GS.erOff+' (ниже — диапазон, сетке годится; выше — направленный ход). Гейт советует, но не запирает: повторное нажатие запускает принудительно.');
+              :('Запустить сетку отдельно от автопилота. Режим сейчас: ER '+(er==null?'—':er)+' при пороге '+_GS.erOff+' (ниже — диапазон, сетке годится; выше — направленный ход)'+_vpNote()+'. Гейт советует, но не запирает: повторное нажатие запускает принудительно.');
   }
   // Отказ должен быть ВИДЕН на кнопке. Раньше причина уходила только в Процессинг,
   // и снаружи это выглядело как мёртвая кнопка — трейдер жал и ничего не понимал.
@@ -7346,6 +7490,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const g=_gsBuild(hh[hh.length-1]);
     if(!g){ _gsRefuse('сетка не построилась на текущей цене',false); return; }
     _gs=g; _gs.forced=forced; _gs.erIn=er; _gs.rngIn=+rngBps.toFixed(1); _gsArm=0;
+    // Режим аукциона на входе — В ЗАПИСЬ, но НЕ в расстановку уровней.
+    // Гипотеза «сетка внутри зоны стоимости живёт, снаружи умирает» правдоподобна
+    // и ровно поэтому опасна: правдоподобие — не выборка. Сначала 15–20 прогонов
+    // с записанным признаком, потом решение, гейт это или нет.
+    try{ const vr=_vpRegime(hh[hh.length-1]);
+      if(vr){ _gs.vpIn=vr.state; _gs.vapIn=vr.vap; _gs.pocBpsIn=vr.pocBps; } }catch(_){ }
     if(forced&&typeof _proc==='function')_proc('сетка запущена ПРИНУДИТЕЛЬНО вопреки гейту · ER '+er+' · это попадёт в статистику прогона','pr-warn');
     if(_gsTimer)clearInterval(_gsTimer); _gsTimer=setInterval(_gsTick,250);
     const p=document.getElementById('gsPanel'); if(p)p.style.display='block';
@@ -7367,6 +7517,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       // калиброваться по замусоренной выборке.
       forced:!!_gs.forced, erIn:(_gs.erIn!=null?_gs.erIn:null), rngIn:(_gs.rngIn!=null?_gs.rngIn:null),
       erOut:_gsER(),
+      vpIn:_gs.vpIn||null, vapIn:(_gs.vapIn!=null?_gs.vapIn:null), pocBpsIn:(_gs.pocBpsIn!=null?_gs.pocBpsIn:null),
       floatAtStop:Math.round(fl)};
     _gs=null; if(_gsTimer){clearInterval(_gsTimer);_gsTimer=null;}
     const p=document.getElementById('gsPanel'); if(p)p.style.display='none';
