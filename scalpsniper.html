@@ -6451,7 +6451,25 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       }
     },30000);
   }
-  let _dlHist=[],_dlPCtx=null,_dlPW=0,_dlPH=0,_dlTick=0;   // _dlTick — монотонный счётчик тиков: якорь событий сетки на оси X (сам _dlHist обрезается)
+  let _dlHist=[],_dlPCtx=null,_dlPH=0,_dlPW=0,_dlTick=0;   // _dlTick — монотонный счётчик тиков: якорь событий сетки на оси X (сам _dlHist обрезается)
+  // ═══ РЯД ДЛЯ ЗАМЕРА РЕЖИМА: ШАГ ПО ВРЕМЕНИ, А НЕ ПО СООБЩЕНИЯМ ═══
+  // _dlHist растёт на КАЖДЫЙ снимок воркера, поэтому его 180 отсчётов — это
+  // всего несколько десятков секунд, и на медленной паре в них попадает
+  // 5 разных цен. Решать по такому окну судьбу 50-минутной сетки нельзя:
+  // замеренный диапазон скакал с 43.6 bps на 1.7 bps за минуту.
+  // Здесь один отсчёт в секунду и глубина 300 — ровно 5 минут независимо
+  // от того, как часто болтает поток. _dlHist не трогаем: на нём спарклайн
+  // и якоря событий, у него своя задача.
+  let _gsHist=[],_gsHistLast=0;
+  const _GSH_STEP=1000, _GSH_CAP=300;
+  function _gsHistPush(px){
+    if(!(px>0))return;
+    const now=Date.now();
+    if(now-_gsHistLast<_GSH_STEP)return;
+    _gsHistLast=now;
+    _gsHist.push(px);
+    if(_gsHist.length>_GSH_CAP)_gsHist.shift();
+  }
   let _sessHist=[],_sessPCtx=null,_sessPW=0,_sessPH=0;
   const DLJ_KEY='msa_demo_journal_v1';
   // знаки после запятой по реальному шагу цены инструмента (из стакана) — корректно для любой монеты
@@ -6939,7 +6957,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(_dlRunning)return; _dlRunning=true;
     try{ const blob=new Blob([_dlWorkerCode()],{type:'application/javascript'});
       _dlWorker=new Worker(URL.createObjectURL(blob));
-      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); _dlTick++; _dlLastSnap=Date.now(); if(_dlHist.length>180)_dlHist.shift();}
+      _dlWorker.onmessage=e=>{ const d=e.data; if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); _dlTick++; _dlLastSnap=Date.now(); if(_dlHist.length>180)_dlHist.shift(); _gsHistPush(_dlSnap[0]);}
         // Трекер стен нужен ВСЕГДА: на нём держатся сценарии в стакане (отскок / пробой / разъедают).
         // При включённом автопилоте микро считает сам _apOnSnap; при выключенном — ведём его отдельно.
         if(typeof _ap!=='undefined'&&_ap.on){ if(typeof _apOnSnap==='function')_apOnSnap(); }
@@ -6951,7 +6969,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const _dt=document.getElementById('demoTicker'); if(_dt&&document.activeElement!==_dt)_dt.value=_raw;
     }catch(err){ const r=document.getElementById('dlRate'); if(r)r.textContent='worker N/A'; }
     _dlStartedAt=Date.now(); _dlLastSnap=Date.now(); _dlWatchdog(); try{_hubInit();}catch(e){}
-    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dlSetRegime(_dlRegime,true); _bgStart();
+    _dlSetupCanvas(); _dlSetupPriceCanvas(); _dlHist=[]; _gsHist=[]; _gsHistLast=0; _dlLoadJournal(); _dlBindSwipes(); _dlRenderTrades(); _dlRenderOutcomes(); _dlSetRegime(_dlRegime,true); _bgStart();
     _dlLastSec=performance.now(); _dlFrames=0; _dlEngLast=0;
     const loop=ts=>{ if(!_dlRunning)return; _dlDraw(); _dlDrawPrice(); _dlFrames++;
       if(ts-_dlEngLast>=200){ _dlEngLast=ts; _dlEngine(ts); }
@@ -6967,7 +6985,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       _dlRAF=requestAnimationFrame(loop); };
     _dlRAF=requestAnimationFrame(loop);
   }
-  function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; _dlSrc='—'; _dlMsgCount=0; _dlHist=[];
+  function _demoStop(){ _dlRunning=false; if(_dlRAF){cancelAnimationFrame(_dlRAF);_dlRAF=null;} if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} _dlSnap=null; _dlModel=null; _dlSrc='—'; _dlMsgCount=0; _dlHist=[]; _gsHist=[]; _gsHistLast=0;
     if(_ap.on)_apToggle(); // автопилот (и его сетка) гаснут вместе с тренажёром
     _gsStop('осиротевшая'); // страховка на случай осиротевшей сетки
     if(typeof _bgStop==='function')_bgStop();
@@ -7164,15 +7182,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // Величина безразмерна и не зависит от волатильности инструмента.
   function _gsER(){
     try{
-      const hh=_dlHist; if(!hh||hh.length<12)return null;
-      const w=hh.slice(-120);
+      // Считаем по ряду с шагом в секунду: 90 отсчётов = полторы минуты рынка.
+      // На _dlHist те же 90 отсчётов были бы десятью секундами.
+      const w=_gsHist; if(!w||w.length<90)return null;
       let path=0, moves=0;
       for(let i=1;i<w.length;i++){ const d=Math.abs(w[i]-w[i-1]); if(d>0){path+=d;moves++;} }
       if(path<=0)return null;
-      // Замер на проде: в окне из 120 отсчётов бывает всего 5 разных цен —
-      // остальное плато. ER на десятке движений скачет (0.41 → 0.54 за минуту),
-      // и гейт на нём решал бы по шуму. Пока движений мало, честнее вернуть
-      // «не знаю», чем уверенное число: null означает «не блокировать».
+      // Даже на правильном окне бывает мало реальных движений — на неликвиде
+      // цена стоит минутами. ER на десятке движений скачет, и гейт решал бы
+      // по шуму. Честнее вернуть «не знаю», чем уверенное число: null означает
+      // «не блокировать» — инструмент не мешает там, где не может измерить.
       if(moves<8)return null;
       return +(Math.abs(w[w.length-1]-w[0])/path).toFixed(3);
     }catch(e){ return null; }
@@ -7262,7 +7281,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!forced&&er!=null&&er>=_GS.erOff){
       _gsRefuse('ход направленный, ER '+er+' при пороге '+_GS.erOff,true); return;
     }
-    const lo=Math.min.apply(null,hh), hi=Math.max.apply(null,hh), mid=(hi+lo)/2;
+    // Диапазон меряем по тому же секундному ряду, что и ER. По _dlHist он
+    // считался за десятки секунд и прыгал с 43.6 на 1.7 bps между нажатиями —
+    // порог minRange на таком замере срабатывал случайным образом.
+    const rw=(_gsHist&&_gsHist.length>=90)?_gsHist:hh;
+    const lo=Math.min.apply(null,rw), hi=Math.max.apply(null,rw), mid=(hi+lo)/2;
     const rngBps=(hi-lo)/mid*1e4;
     if(!forced&&rngBps<_GS.minRange){
       _gsRefuse('диапазон '+rngBps.toFixed(1)+' bps — фармить нечего',true); return;
