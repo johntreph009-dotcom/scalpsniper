@@ -1616,6 +1616,42 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .zl-ev-neg{color:var(--danger,#f0454a);font-weight:700}
   .zl-ev-flat{color:var(--text-faint)}
   @media(max-width:720px){ .zl-m{display:none} }   /* на телефоне ширины нет — не мельчим */
+
+  /* ═══ МЕНЮ ШАПКИ ГРАФИКА ═══
+     Действия (обновить зоны, слои) живут рядом с тикером и ТФ — там, где
+     на них смотрят. Раньше слои занимали отдельную строку под шапкой и ели
+     высоту у самого графика; теперь это выпадашка.
+     Правила стоят последними в файле: перебить их нечем. */
+  /* Отказ сетки — видимый, по центру, той же ширины что и панель под ним:
+     элемент симметричен относительно своего места, а не висит слева. */
+  .gs-why{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.3px;
+    text-align:center;padding:7px 10px;margin-bottom:8px;border-radius:6px;
+    color:var(--warn,#e3b341);background:rgba(227,179,65,.08);
+    border:1px solid rgba(227,179,65,.32)}
+  #gsBtn.refuse{color:var(--warn,#e3b341);border-color:rgba(227,179,65,.55);
+    background:rgba(227,179,65,.10);animation:gsShake .28s ease}
+  @keyframes gsShake{
+    0%,100%{transform:translateX(0)} 25%{transform:translateX(-3px)}
+    75%{transform:translateX(3px)}}
+  @media(prefers-reduced-motion:reduce){ #gsBtn.refuse{animation:none} }
+
+  .mc-hdr-gap{flex:1 1 auto;min-width:0}          /* единственный распор: слева ТФ, справа действия */
+  .mc-act{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.3px;
+    padding:3px 9px;background:transparent;border:1px solid var(--line);border-radius:3px;
+    color:var(--text-dim);cursor:pointer;white-space:nowrap;flex:0 0 auto;line-height:1.5;
+    transition:color .12s,border-color .12s,background .12s}
+  .mc-act:hover{color:var(--accent);border-color:var(--accent-dim)}
+  .mc-act.active{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+  .mc-act.busy{color:var(--accent);border-color:var(--accent-dim);opacity:.65;pointer-events:none}
+  /* слои: скрыты, пока не позвали. Базовое .mc-layers{display:flex} объявлено
+     выше по файлу — здесь оно перебивается порядком, без !important. */
+  .mc-layers{display:none}
+  .mc-layers.open{display:flex;justify-content:center}
+  @media(max-width:600px){
+    /* палец, и действия не жмутся в нитку рядом с лентой ТФ */
+    .mc-act{padding:7px 10px;font-size:11px}
+    .mc-hdr-gap{flex-basis:100%;height:0}
+  }
 </style>
 </head>
 <body>
@@ -1736,6 +1772,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           <button class="mc-tfbtn" data-tf="4h" onclick="setChartTf('4h')">4h</button>
           <button class="mc-tfbtn" data-tf="1d" onclick="setChartTf('1d')">1D</button>
         </div>
+        <span class="mc-hdr-gap"></span>
+        <button type="button" class="mc-act" id="mcZonesBtn" onclick="_mcZonesRefresh()" title="Пересобрать зоны из стакана под текущий таймфрейм. Ручные зоны и вставка из разбора не пострадают.">↻ зоны</button>
+        <button type="button" class="mc-act" id="mcLyrBtn" onclick="_mcLayersToggle()" title="Слои графика">◈ слои</button>
         <span class="mc-status" id="mcStatus">загрузка…</span>
         <button type="button" class="mc-tfbtn" id="mcTallBtn" onclick="_mcToggleTall()" title="Развернуть/свернуть график по высоте">⤢</button>
         <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Колесо / пинч — зум · зажми и тяни — прокрутка истории · двойной тап — сброс к последним свечам · потяни бейдж зоны у правой шкалы — перенос уровня · Полосы — твои зоны (ярче = приоритет) · синий пунктир — MAX PAIN · розовое/голубое — модель ликвидаций · ⤢ — выше график</span></span>
@@ -1992,6 +2031,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     </div>
     <div class="dl-canvas-lbl" style="margin-top:8px">РАЗБОР АВТОПИЛОТА <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Матожидание (среднее bps на сделку) по протоколам, сегментам рынка и причинам выхода. Считается по журналу движка при ТЕКУЩИХ издержках — старые записи пересчитываются к ним же. Матожидание важнее WR: высокий процент побед при отрицательном среднем — убыточная машина.</span></span></div>
     <div id="apAudit" class="gs-panel"><span class="gs-note">нажми «Пересчитать» — покажу матожидание по протоколам и сегментам</span></div>
+    <div id="gsWhy" class="gs-why" style="display:none"></div>
     <div id="gsPanel" class="gs-panel" style="display:none"></div>
     <div id="mktBg" class="gs-panel" style="display:none"></div>
     <div class="dl-canvas-lbl" style="margin-top:8px">ПРОЦЕССИНГ ДВИЖКА <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Живой лог решений: режимы диспетчера, входы/выходы стратегий, итоги сетки, сдвиги толпы/китов, новостные триггеры · наблюдение, не сигналы</span></span></div>
@@ -4461,6 +4501,34 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _saveChartLayers(){try{localStorage.setItem('msa_chart_layers_v1',JSON.stringify(_chartLayers));}catch(e){}}
   function _markLayers(){document.querySelectorAll('.mc-lyr').forEach(b=>b.classList.toggle('active',!!_chartLayers[b.dataset.lyr]));}
   function toggleLayer(k){_chartLayers[k]=!_chartLayers[k];_saveChartLayers();_markLayers();if(typeof _chartRedraw==='function')_chartRedraw();}
+  // ── меню шапки графика: слои прячутся в выпадашку, действия рядом с тикером ──
+  let _mcLyrOpen=(function(){try{return localStorage.getItem('msa_mc_lyr_open_v1')==='1';}catch(e){return false;}})();
+  function _mcLayersSync(){
+    const box=document.getElementById('mcLayers'), b=document.getElementById('mcLyrBtn');
+    if(box)box.classList.toggle('open',_mcLyrOpen);
+    if(b){
+      b.classList.toggle('active',_mcLyrOpen);
+      const n=Object.keys(_chartLayers).filter(k=>_chartLayers[k]).length;
+      b.textContent='◈ слои '+n+'/5';
+    }
+  }
+  function _mcLayersToggle(){
+    _mcLyrOpen=!_mcLyrOpen;
+    try{localStorage.setItem('msa_mc_lyr_open_v1',_mcLyrOpen?'1':'0');}catch(e){}
+    _mcLayersSync();
+    if(typeof _chartRedraw==='function')_chartRedraw();   // высота канвы меняется вместе с шапкой
+  }
+  // Счётчик на кнопке обязан жить: иначе, закрыв выпадашку, трейдер не видит,
+  // сколько слоёв включено, и читает график, не помня, что на нём нарисовано.
+  (function(){ const orig=_markLayers; _markLayers=function(){ orig(); _mcLayersSync(); }; })();
+  // Обновление зон прямо с графика: та же работа, что у кнопки в панели зон.
+  // Кнопка обязана показывать, что процесс идёт, иначе её жмут повторно.
+  function _mcZonesRefresh(){
+    const b=document.getElementById('mcZonesBtn');
+    if(b){ b.classList.add('busy'); b.textContent='↻ …'; }
+    try{ _schedRun('zones',true); }catch(e){}
+    setTimeout(()=>{ if(b){ b.classList.remove('busy'); b.textContent='↻ зоны'; } },1600);
+  }
   let _lastAlertZone=-2,_lastApproachZone=-1;
   function _approachBeep(){
     if(window._sndMuted)return;
@@ -7078,12 +7146,32 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     maxInv:  8,      // потолок открытых ног. Было без предела → 910 филлов
     maxDD:   120,    // стоп по совокупности, bps. Худший прогон −7872 = 65 таких стопов
     maxMin:  50,     // стоп по времени. Прибыльные прогоны короткие; долгие = тренд
-    trendOff:2,      // сила тренда, при которой сетке в рынке делать нечего
+    erOff:   0.62,   // коэффициент эффективности: выше — направленный ход, сетке там не место
     minRange:6       // минимальный диапазон окна в bps: в мёртвом флэте нечего фармить
   };
   function _gsCfg(k,v){ if(v!=null&&isFinite(+v)&&+v>0){_GS[k]=+v; try{localStorage.setItem('msa_gs_v1',JSON.stringify(_GS));}catch(e){}} return _GS[k]; }
   try{ const s=JSON.parse(localStorage.getItem('msa_gs_v1')||'null'); if(s)Object.assign(_GS,s); }catch(e){}
-  // Сила тренда сейчас — общий вход для гейта на старте и в работе
+  // ═══ РЕЖИМ ИЗМЕРЯЕТСЯ НА ТОМ ЖЕ ТАЙМФРЕЙМЕ, НА КОТОРОМ ТОРГУЕТ СЕТКА ═══
+  // Первая версия гейта смотрела на ТРЕНД ДНЯ. Это ошибка масштаба: сетка живёт
+  // минутами, а дневной тренд может быть силой 2 при отличном текущем диапазоне
+  // в 43 bps. Замер на живой сессии это и показал — сетка не запускалась там,
+  // где условия для неё были идеальными.
+  //
+  // Правильная мера — коэффициент эффективности Кауфмана по окну сетки:
+  //   ER = |чистое смещение| / сумма модулей приращений
+  // ER→1 — цена шла в одну сторону, это тренд, сетке там нечего делать.
+  // ER→0 — цена ходила туда-обратно, это и есть рынок для сетки.
+  // Величина безразмерна и не зависит от волатильности инструмента.
+  function _gsER(){
+    try{
+      const hh=_dlHist; if(!hh||hh.length<12)return null;
+      const w=hh.slice(-120);
+      let path=0; for(let i=1;i<w.length;i++)path+=Math.abs(w[i]-w[i-1]);
+      if(path<=0)return null;
+      return +(Math.abs(w[w.length-1]-w[0])/path).toFixed(3);
+    }catch(e){ return null; }
+  }
+  // Оставлено для справки в подсказках: дневной тренд как контекст, НЕ как гейт
   function _gsTrendStr(){
     try{ const sym=document.getElementById('dlSym')?.textContent||'';
       const dt=(_dayTrendCache[sym]&&_dayTrendCache[sym].val)||null;
@@ -7094,7 +7182,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!_gs)return null;
     const dur=(Date.now()-_gs.t0)/60000;
     if(dur>=_GS.maxMin)return 'время '+Math.round(dur)+' мин';
-    if(_gsTrendStr()>=_GS.trendOff)return 'тренд усилился';
+    const er=_gsER();
+    if(er!=null&&er>=_GS.erOff)return 'ход стал направленным (ER '+er+')';
     // плавающий + зафиксированный: считаем ТО ЖЕ, что покажет закрытие
     const fl=_gs.inv.reduce((s,x)=>s+((px-x.entry)/x.entry*1e4)*(x.side==='long'?1:-1),0);
     const net=_gs.realized+fl-AP_FEE*_gs.pairs-AP_FEE*_gs.inv.length;
@@ -7126,29 +7215,52 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const on=!!_gs;
     b.textContent=on?'⏹ стоп сетки':'▦ сетка';
     b.classList.toggle('on',on);
-    b.title=on?('Сетка работает. Предохранители: ног ≤'+_GS.maxInv+', просадка −'+_GS.maxDD+' bps, время '+_GS.maxMin+' мин, тренд ≥'+_GS.trendOff+' — стоп')
-              :('Запустить сетку отдельно от автопилота. Не стартует в тренде и в мёртвом флэте.');
+    const er=_gsER();
+    b.title=on?('Сетка работает. Предохранители: ног ≤'+_GS.maxInv+', просадка −'+_GS.maxDD+' bps, время '+_GS.maxMin+' мин, ER ≥'+_GS.erOff+' — стоп')
+              :('Запустить сетку отдельно от автопилота. Режим сейчас: ER '+(er==null?'—':er)+' при пороге '+_GS.erOff+' (ниже — диапазон, сетке годится; выше — направленный ход). Гейт советует, но не запирает: повторное нажатие запускает принудительно.');
+  }
+  // Отказ должен быть ВИДЕН на кнопке. Раньше причина уходила только в Процессинг,
+  // и снаружи это выглядело как мёртвая кнопка — трейдер жал и ничего не понимал.
+  let _gsArm=0;
+  function _gsRefuse(why,armable){
+    const b=document.getElementById('gsBtn');
+    if(typeof _proc==='function')_proc('сетка не запущена: '+why,'pr-warn');
+    if(b){
+      b.classList.add('refuse');
+      b.textContent=armable?'ещё раз — всё равно':'✕ '+why;
+      setTimeout(()=>{ b.classList.remove('refuse'); _gsBtnSync(); }, armable?7000:2600);
+    }
+    const n=document.getElementById('gsWhy');
+    if(n){ n.textContent=why+(armable?' · повторное нажатие запустит принудительно':'');
+           n.style.display='block';
+           setTimeout(()=>{ n.style.display='none'; }, armable?7000:2600); }
+    try{ if(navigator.vibrate)navigator.vibrate([18,40,18]); }catch(e){}
+    if(armable)_gsArm=Date.now();
   }
   function _gsStart(){
     if(_gs)return;
+    // Гейт СОВЕТУЕТ, но не запирает. Философия продукта: инструмент показывает,
+    // что видит, финальное решение за трейдером. Первое нажатие в плохом режиме
+    // объясняет отказ, повторное в течение 7 секунд запускает принудительно —
+    // и этот факт пишется в запись прогона, чтобы потом было видно в статистике.
+    const forced=(Date.now()-_gsArm)<7000;
     // ГЕЙТ НА ВХОДЕ: сетку нельзя запускать в тренде — это вход в заведомо
     // проигрышный для неё режим. Дешевле не начать, чем ограничивать убыток.
-    const str=_gsTrendStr();
-    if(str>=_GS.trendOff){
-      if(typeof _proc==='function')_proc('сетка не запущена: тренд силой '+str+' — режим не для сетки','pr-warn');
-      return;
-    }
     const hh=_dlHist;
-    if(hh&&hh.length>=12){
-      const lo=Math.min.apply(null,hh), hi=Math.max.apply(null,hh), mid=(hi+lo)/2;
-      const rngBps=(hi-lo)/mid*1e4;
-      if(rngBps<_GS.minRange){
-        if(typeof _proc==='function')_proc('сетка не запущена: диапазон '+rngBps.toFixed(1)+' bps — фармить нечего','pr-warn');
-        return;
-      }
+    if(!hh||hh.length<12){ _gsRefuse('мало данных: '+((hh&&hh.length)||0)+' из 12 тиков',false); return; }
+    const er=_gsER();
+    if(!forced&&er!=null&&er>=_GS.erOff){
+      _gsRefuse('ход направленный, ER '+er+' при пороге '+_GS.erOff,true); return;
     }
-    const g=_gsBuild(_dlHist[_dlHist.length-1]); if(!g)return;
-    _gs=g;
+    const lo=Math.min.apply(null,hh), hi=Math.max.apply(null,hh), mid=(hi+lo)/2;
+    const rngBps=(hi-lo)/mid*1e4;
+    if(!forced&&rngBps<_GS.minRange){
+      _gsRefuse('диапазон '+rngBps.toFixed(1)+' bps — фармить нечего',true); return;
+    }
+    const g=_gsBuild(hh[hh.length-1]);
+    if(!g){ _gsRefuse('сетка не построилась на текущей цене',false); return; }
+    _gs=g; _gs.forced=forced; _gs.erIn=er; _gs.rngIn=+rngBps.toFixed(1); _gsArm=0;
+    if(forced&&typeof _proc==='function')_proc('сетка запущена ПРИНУДИТЕЛЬНО вопреки гейту · ER '+er+' · это попадёт в статистику прогона','pr-warn');
     if(_gsTimer)clearInterval(_gsTimer); _gsTimer=setInterval(_gsTick,250);
     const p=document.getElementById('gsPanel'); if(p)p.style.display='block';
     _gsBtnSync();
@@ -7164,6 +7276,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const st={net,fills:_gs.fills,pairs:_gs.pairs,inv:_gs.inv.length,rebuilds:_gs.rebuilds,
       dur:Math.round((Date.now()-_gs.t0)/1e3),
       why:why||'ручная',capHit:_gs.capHit||0,   // причина и упор в потолок — сырьё для калибровки
+      // Условия НА ВХОДЕ и факт обхода гейта. Без этого прогоны, запущенные
+      // вопреки предупреждению, смешаются с обычными, и порог ER будет
+      // калиброваться по замусоренной выборке.
+      forced:!!_gs.forced, erIn:(_gs.erIn!=null?_gs.erIn:null), rngIn:(_gs.rngIn!=null?_gs.rngIn:null),
+      erOut:_gsER(),
       floatAtStop:Math.round(fl)};
     _gs=null; if(_gsTimer){clearInterval(_gsTimer);_gsTimer=null;}
     const p=document.getElementById('gsPanel'); if(p)p.style.display='none';
