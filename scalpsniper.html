@@ -1909,7 +1909,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
   <div class="t-side">
   <!-- ===== ZONES (shared, always visible) ===== -->
-  <div class="section-title" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация зоны по времени · Клик по цене внутри карточки зоны копирует её в буфер</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
+  <div class="section-title" id="zonesTitle" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация зоны по времени · Клик по цене внутри карточки зоны копирует её в буфер</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
   <div class="zones-fresh" id="zonesFresh"><span id="zonesFreshTxt"></span><button class="zf-plan" onclick="_prepToggle()" title="План: протоколы с фитом, чеклист входа, готовность — разворачивается на месте">◈ план</button><button class="zf-refresh" onclick="_schedRun('zones',true)" title="Пересобрать зоны из стакана сейчас (без скринов). Автообновление это не отменяет">↻ Обновить</button><button class="zf-refresh" id="schedBtn" onclick="_schedToggle()" title="Автообновление зон и разбора">⏱ авто</button><button class="zf-refresh" id="hapBtn" onclick="_hapticToggle()" title="Тактильная отдача на телефоне (Android; в iOS Safari Web Vibration API отсутствует)">◈ вибро</button></div>
   <div id="dayTrend" class="day-trend" style="display:none"></div>
   <div id="dayCtx" class="day-ctx" style="display:none"></div>
@@ -8110,27 +8110,32 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
      * чтения жили в колонке зон и на телефоне оказывались ниже всего экрана.
      * Это то, с чего начинается решение, — значит должно быть первым.
      * Узлы только переносятся: id, обработчики и рендеры не тронуты. */
-    ['dayTrend','dayCtx','mpChip','zoneRead'].forEach(id=>{
+    // Сюда же: заголовок зон с кнопками обновления (встанет НАД графиком) и
+    // точность чтения (уедет вниз, к байасу — это статистика, а не оперативка).
+    ['dayTrend','dayCtx','mpChip','zonesTitle','zonesFresh','zoneRead'].forEach(id=>{
       const el=document.getElementById(id); if(el)root.appendChild(el);
     });
     const ORDER=[
       '#dayTrend',       // 0. куда идёт день — первое, что нужно знать
       '#dayCtx',         // 0. поток, объём, фандинг
       '#mpChip',         // 0. опционный магнит
-      '#zoneRead',       // 0. насколько точно я читаю зоны
       '.section-title',  // 2. инструмент
       '.live-bar',       // 3. цена — где я
       '#prepPhase',      // 4. план (свёрнут, разворачивается кнопкой)
       '#hub',            // 5. стакан и автопилот — то, во что смотришь постоянно
       '.sess-pchart',    // 6. пульс цены — сразу под хабом, это оперативные данные
       '#sessWalls',      // 7. стены у цены
-      '#miniChartWrap',  // 8. график с зонами
+      '#zonesTitle',     // 8. заголовок зон и кнопки обновления — НАД графиком:
+      '#zonesFresh',     //    свежесть разметки нужна раньше, чем сама разметка
+      '#miniChartWrap',  // 9. график с зонами
       '#liveCard',       // 9. активная зона: план читается после контекста графика
       '#zoneLadder',     // 10. весь план целиком
       '#sessionCtx',     // 11. байас и контекст дня — КОНТЕКСТ, а не оперативка:
                          //     приоритет стороны, лимиты, режим волатильности.
                          //     Читается после того, как увидел цену, график и зоны.
-      '#posBlock'        // 12. исполнение: позиция и калькулятор риска
+      '#zoneRead',       // 12. точность чтения и дисциплина — рядом с байасом,
+                         //     это оценка себя, а не рынка
+      '#posBlock'        // 13. исполнение: позиция и калькулятор риска
     ];
     const kids=[...root.children];
     const rank=el=>{for(let i=0;i<ORDER.length;i++){try{if(el.matches(ORDER[i]))return i;}catch(e){}} return ORDER.length;};
@@ -9122,6 +9127,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // целиком занимает ~40% экрана 390×844, и липкая шапка такой высоты не
   // оставила бы места плану. Развёрнутая доступна тапом и запоминается.
   function _hdrStickInit(){
+    /* ═══ ОТКЛЮЧЕНО: ОДИН ВЛАДЕЛЕЦ РАСКЛАДКИ ═══
+     * Липкая шапка собирала заголовок зон и кнопки обновления в свою обёртку
+     * внутри колонки зон. Теперь эти узлы расставляет _layoutSession по явному
+     * порядку — заголовок с кнопками встал над графиком. Если оставить обе
+     * механики, они начнут перетягивать одни и те же элементы, а результат
+     * будет зависеть от того, какая отработала последней. Такое ловится не
+     * сразу и выглядит как «блок иногда пропадает».
+     * Функция оставлена пустой: у неё есть вызывающие, и убирать их отдельно
+     * значит плодить правки там, где достаточно одной.
+     */
+    return;
+    // eslint-disable-next-line no-unreachable
     const side=document.querySelector('.t-side'); if(!side||side.querySelector('.hdr-stick'))return;
     const start=side.firstElementChild; if(!start)return;
     // ЯВНЫЙ СПИСОК, А НЕ ОБХОД ДО МАРКЕРА. Первая версия шла по соседям до текста
