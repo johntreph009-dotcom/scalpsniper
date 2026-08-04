@@ -5949,14 +5949,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       // в неверную сторону, и подмешивать туда ещё один множитель до накопления
       // статистики значит смешать два эффекта и не суметь их потом разделить.
       if(htf){
-        const near=(a,b)=>a&&b&&Math.abs(a-b)/b<=0.002;
-        z.forEach(o=>{
-          if(o.htf)return;                       // сам уровень старшего ТФ себе не совпадение
-          let m=null;
-          if(near(o.px,hPoc))m='POC '+htf;
-          else if(near(o.px,hH))m='хаем '+htf;
-          else if(near(o.px,hL))m='лоу '+htf;
-          if(m){ o.htfHit=m; o.note+=' · совпадает с '+m; }
+        // Допуск НЕ в процентах от цены. Плоские 0.2% на ETH дают ±3.8 —
+        // замер на проде показал три соседние зоны, все «совпавшие» с одним
+        // хаем 15m. Метка, которой помечено всё вокруг, не несёт информации.
+        // Берём корзину агрегации b — это и есть шаг ценовой сетки разбора.
+        const tol=Math.max(b*0.6,price*0.0003);
+        // И помечаем ТОЛЬКО ближайшую зону к уровню: совпадение — это «вот этот
+        // уровень», а не «где-то здесь». Иначе метка размывается по кластеру.
+        [['POC '+htf,hPoc],['хаем '+htf,hH],['лоу '+htf,hL]].forEach(([lbl,lv])=>{
+          if(!(lv>0))return;
+          let best=null,bd=Infinity;
+          z.forEach(o=>{ if(o.htf||o.htfHit)return;
+            const d=Math.abs(o.px-lv); if(d<=tol&&d<bd){bd=d;best=o;} });
+          if(best){ best.htfHit=lbl; best.note+=' · совпадает с '+lbl; }
         });
       }
       // пространство вариантов в разметке: у боевой зоны сразу виден альтернативный сценарий —
