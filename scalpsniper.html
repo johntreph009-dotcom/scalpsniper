@@ -408,6 +408,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .day-trend.dt-up .dt-dir{color:var(--green)}.day-trend.dt-down .dt-dir{color:var(--danger)}.day-trend.dt-range .dt-dir{color:var(--text-dim)}
   .dt-str{font-size:11px;letter-spacing:2px}
   .day-trend.dt-up .dt-str{color:var(--green)}.day-trend.dt-down .dt-str{color:var(--danger)}.day-trend.dt-range .dt-str{color:var(--text-faint)}
+  .dt-mp{margin-left:auto;display:inline-flex;align-items:baseline;gap:6px;white-space:nowrap}
+  .dt-mp:empty{display:none}
+  .dt-mp .mp-lbl{font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--text-faint);font-family:'JetBrains Mono',monospace}
+  .dt-mp .mp-val{font-family:'Archivo',sans-serif;font-weight:700;font-size:13px;color:var(--text)}
+  .dt-mp .mp-det{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim)}
+  @media(max-width:600px){ .dt-mp{margin-left:0;flex-basis:100%;justify-content:center;margin-top:4px} }
   .dt-sub{margin-left:auto;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-dim)}
   .day-ctx{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:-4px 0 8px;padding:7px 11px;border-radius:8px;background:var(--panel);border:1px solid var(--line);font-family:'Rajdhani',sans-serif}
   .dc-lbl{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-faint);font-family:'JetBrains Mono',monospace}
@@ -1741,7 +1747,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <!-- ===== LIVE PHASE ===== -->
   <div id="livePhase" class="hide">
     <div id="readinessBar" class="readiness-bar" style="display:none"></div>
-    <div class="section-title">Текущая цена <span class="ticker-input-wrap sess-tkwrap" id="sessTkWrap"><input id="sessTicker" class="sess-tk" autocomplete="off" placeholder="BTC/USDT" onfocus="_openSessDD()" oninput="_filterSessDD()" onchange="setSessionTicker(this.value)" title="Переключить инструмент в сессии"><button type="button" class="ticker-dd-toggle" id="sessDDToggle" onclick="_toggleSessDD(event)" aria-label="Список тикеров">▾</button><div class="ticker-dd" id="sessTickerDD"></div></span> <span class="tag" id="liveZoneCount"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Композитная цена — медиана спот-бирж (Binance/Bybit/OKX, выбросы отсекаются) · обновляется каждые 5с · индикатор «CMP N» показывает, сколько бирж согласны (наведи для источников) · Переключай инструмент тут — зоны и позиции подхватятся · При входе в зону — звук + вспышка · Тап по строке лестницы зон — полные детали (план, стоп, объём) и действия</span></span></div>
+    <div class="section-title" id="priceTitle">Текущая цена <span class="ticker-input-wrap sess-tkwrap" id="sessTkWrap"><input id="sessTicker" class="sess-tk" autocomplete="off" placeholder="BTC/USDT" onfocus="_openSessDD()" oninput="_filterSessDD()" onchange="setSessionTicker(this.value)" title="Переключить инструмент в сессии"><button type="button" class="ticker-dd-toggle" id="sessDDToggle" onclick="_toggleSessDD(event)" aria-label="Список тикеров">▾</button><div class="ticker-dd" id="sessTickerDD"></div></span> <span class="tag" id="liveZoneCount"></span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Композитная цена — медиана спот-бирж (Binance/Bybit/OKX, выбросы отсекаются) · обновляется каждые 5с · индикатор «CMP N» показывает, сколько бирж согласны (наведи для источников) · Переключай инструмент тут — зоны и позиции подхватятся · При входе в зону — звук + вспышка · Тап по строке лестницы зон — полные детали (план, стоп, объём) и действия</span></span></div>
     <div class="live-bar">
       <span class="label" style="margin:0">Цена сейчас</span>
       <input id="livePrice" type="number" placeholder="103200" oninput="onLivePriceInput()" style="max-width:180px;font-size:16px;font-weight:700">
@@ -5691,7 +5697,32 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const map={up:{a:'↑',t:'ВВЕРХ',c:'dt-up'},down:{a:'↓',t:'ВНИЗ',c:'dt-down'},range:{a:'↔',t:'РЕЙНДЖ',c:'dt-range'}};
     const m=map[v.dir]||map.range;
     el.className='day-trend '+m.c;
-    el.innerHTML='<span class="dt-lbl">ТРЕНД ДНЯ</span><span class="dt-dir">'+m.a+' '+m.t+'</span><span class="dt-str" title="сила тренда">'+('▮'.repeat(v.strength)||'·')+'</span><span class="dt-sub" title="от дневного открытия">'+(v.vsOpen>=0?'+':'')+v.vsOpen+'%</span>';
+    /* ОДНА СТРОКА ВМЕСТО ДВУХ БЛОКОВ.
+     * Max Pain занимал отдельный блок почти во весь экран ради трёх чисел,
+     * а в строке тренда посередине зияла пустота. Теперь опционный магнит
+     * живёт по центру этой же строки: слева направление и сила, по центру
+     * магнит, справа процент от открытия. Три группы, каждая на своём месте.
+     * Пустое место — тоже стоимость: на телефоне это был лишний экран прокрутки. */
+    el.innerHTML='<span class="dt-lbl">ТРЕНД ДНЯ</span><span class="dt-dir">'+m.a+' '+m.t+'</span><span class="dt-str" title="сила тренда">'+('▮'.repeat(v.strength)||'·')+'</span>'
+      +'<span class="dt-mp" id="mpInline"></span>'
+      +'<span class="dt-sub" title="от дневного открытия">'+(v.vsOpen>=0?'+':'')+v.vsOpen+'%</span>';
+    // Строку тренда перерисовывают чаще, чем тянут Max Pain, поэтому магнит
+    // возвращается из кеша сразу же — иначе он мигал бы и пропадал.
+    if(typeof _mpPaint==='function')_mpPaint();
+  }
+  /* Магнит рисуется ИЗ КЕША и отдельно от загрузки. Так его можно вернуть на
+   * место после любой перерисовки строки тренда, не дёргая сеть. */
+  let _mpLast=null;
+  function _mpPaint(){
+    const box=document.getElementById('mpInline'); if(!box)return;
+    if(!_mpLast){ box.innerHTML=''; return; }
+    const v=_mpLast;
+    let grav='';
+    try{ const px=parseFloat(document.getElementById('livePrice')?.value)||parseFloat(document.getElementById('price')?.value);
+      if(px&&isFinite(px)){ const g=(v.mp-px)/px*100; grav=' · '+(g>=0?'+':'')+g.toFixed(1)+'%'; } }catch(e){}
+    box.innerHTML='<span class="mp-lbl">MAX PAIN</span><span class="mp-val">'+v.mp+'</span>'
+      +'<span class="mp-det">'+v.daysLeft+'д'+grav+'</span>'
+      +'<span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Max Pain — страйк ближайшей опционной экспирации ('+v.expiry+'), где покупатели опционов теряют больше всего по открытому интересу · цена часто гравитирует к нему перед экспирацией · вторая цифра — текущая дистанция · синий пунктир на графике · наблюдение, не прогноз</span></span>';
   }
   // ── Контекст дня: CVD (дельта агрессии) + RVOL (относительный объём) ──
   let _dayCtxCache={};
@@ -5820,13 +5851,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     let grav='';
     try{ const px=parseFloat(document.getElementById('livePrice')?.value)||parseFloat(document.getElementById('price')?.value);
       if(px&&isFinite(px))grav=' · гравитация '+(((v.mp-px)/px*100)>=0?'+':'')+((v.mp-px)/px*100).toFixed(1)+'%'; }catch(e){}
-    el.style.display='';
-    // СИММЕТРИЯ: метка — значение — детали, три выровненные части, а не поток.
-    // Раньше всё лежало одним чипом, и при переносе значение уезжало от метки.
-    el.innerHTML='<span class="mp-row"><span class="mp-lbl">OPT MAX PAIN</span>'
-      +'<span class="mp-val">'+v.mp+'</span>'
-      +'<span class="mp-det">эксп '+v.expiry+' · '+v.daysLeft+'д'+grav+'</span></span>'
-      +'<span class="mp-note">опционный уровень-магнит · наблюдение</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Max Pain — страйк ближайшей опционной экспирации, где покупатели опционов теряют больше всего (по открытому интересу) · цена часто гравитирует к нему перед экспирацией · гравитация — текущая дистанция · синий пунктир на графике · наблюдение, не прогноз</span></span>';
+    // Отдельный блок больше не показываем: его содержимое переехало в строку
+    // тренда дня. Узел оставлен — на нём висит чтение значения другими местами.
+    el.style.display='none';
+    _mpLast={mp:v.mp,expiry:v.expiry,daysLeft:v.daysLeft};
+    _mpPaint();
     if(typeof _chartRedraw==='function')_chartRedraw();
   }
   // ── протокол-радар: одновременный фит-расчёт ВСЕХ стратегий к текущим условиям (наблюдение, не выбор) ──
@@ -8112,14 +8141,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
      * Узлы только переносятся: id, обработчики и рендеры не тронуты. */
     // Сюда же: заголовок зон с кнопками обновления (встанет НАД графиком) и
     // точность чтения (уедет вниз, к байасу — это статистика, а не оперативка).
-    ['dayTrend','dayCtx','mpChip','zonesTitle','zonesFresh','zoneRead'].forEach(id=>{
+    ['dayTrend','dayCtx','zonesTitle','zonesFresh','zoneRead'].forEach(id=>{
       const el=document.getElementById(id); if(el)root.appendChild(el);
     });
     const ORDER=[
       '#dayTrend',       // 0. куда идёт день — первое, что нужно знать
       '#dayCtx',         // 0. поток, объём, фандинг
-      '#mpChip',         // 0. опционный магнит
-      '.section-title',  // 2. инструмент
+      '#priceTitle',     // 2. инструмент. ИМЕННО ID, а не .section-title:
+                         //    у заголовка зон тот же класс, и общий селектор
+                         //    перекрывал частный — ранг берётся по первому
+                         //    совпадению, и заголовок зон уезжал сюда же.
       '.live-bar',       // 3. цена — где я
       '#prepPhase',      // 4. план (свёрнут, разворачивается кнопкой)
       '#hub',            // 5. стакан и автопилот — то, во что смотришь постоянно
