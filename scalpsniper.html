@@ -1449,6 +1449,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
      правила padding, и «последнее в файле» этот спор не решало. */
   .zl-row{padding:3px 10px!important}
   .zone-ladder{gap:2px!important}
+  /* ── ПРАВИЛО СИММЕТРИИ (просьба трейдера, соблюдать во всех новых блоках) ──
+     Элемент выравнивается относительно своего места, а не «как получится».
+     Метка, значение и детали — три части одной строки с общей базовой линией;
+     значение никогда не отрывается от своей метки при переносе. */
+  .mp-row{display:flex;align-items:baseline;justify-content:center;gap:10px;
+    flex-wrap:wrap;row-gap:4px;width:100%;text-align:center}
+  .mp-lbl{font-size:9.5px;letter-spacing:.8px;color:var(--text-faint);
+    text-transform:uppercase;white-space:nowrap;flex:0 0 auto}
+  .mp-val{font-family:'Archivo',sans-serif;font-weight:700;font-size:15px;
+    color:var(--text);white-space:nowrap;flex:0 0 auto}
+  .mp-det{font-family:'JetBrains Mono',monospace;font-size:10px;
+    color:var(--text-dim);white-space:nowrap;flex:0 0 auto}
+  .mp-note{display:block;width:100%;text-align:center;margin-top:5px;
+    font-size:9px;color:var(--text-faint)}
   .zl-more-note{font-size:10px;color:var(--text-faint);line-height:1.5;
     padding:9px 11px;margin-top:8px;border:1px dashed var(--line-soft);border-radius:8px;
     font-family:'JetBrains Mono',monospace}
@@ -1559,8 +1573,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
     /* 3. ТАБЛИЧНЫЕ БЛОКИ (OPT MAX / PAIN) — метка и значение в две колонки,
           иначе значение отрывается от своей метки и строка читается неверно. */
-    .t-side #mpChip{display:grid!important;grid-template-columns:auto 1fr!important;
-      gap:3px 10px!important;align-items:baseline!important}
+    /* grid auto|1fr здесь был ошибкой: содержимое — не пары «метка-значение»,
+       а строка чипа, и сетка растаскивала значение от его метки. Симметрию
+       задаёт сам блок ниже (.mp-row), медиазапросу вмешиваться незачем. */
 
     /* 4. ПАРНЫЕ ПАНЕЛИ (точность чтения / дисциплина) — равные половины,
           а не «широкая и узкая»: сравнение глазами требует равных рамок. */
@@ -5687,7 +5702,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{ const px=parseFloat(document.getElementById('livePrice')?.value)||parseFloat(document.getElementById('price')?.value);
       if(px&&isFinite(px))grav=' · гравитация '+(((v.mp-px)/px*100)>=0?'+':'')+((v.mp-px)/px*100).toFixed(1)+'%'; }catch(e){}
     el.style.display='';
-    el.innerHTML='<span class="dc-chip">OPT MAX PAIN <b>'+v.mp+'</b> · эксп '+v.expiry+' ('+v.daysLeft+'д)'+grav+'</span> <span style="color:var(--text-faint);font-size:9px">опционный уровень-магнит · наблюдение</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Max Pain — страйк ближайшей опционной экспирации, где покупатели опционов теряют больше всего (по открытому интересу) · цена часто гравитирует к нему перед экспирацией · гравитация — текущая дистанция · синий пунктир на графике · наблюдение, не прогноз</span></span>';
+    // СИММЕТРИЯ: метка — значение — детали, три выровненные части, а не поток.
+    // Раньше всё лежало одним чипом, и при переносе значение уезжало от метки.
+    el.innerHTML='<span class="mp-row"><span class="mp-lbl">OPT MAX PAIN</span>'
+      +'<span class="mp-val">'+v.mp+'</span>'
+      +'<span class="mp-det">эксп '+v.expiry+' · '+v.daysLeft+'д'+grav+'</span></span>'
+      +'<span class="mp-note">опционный уровень-магнит · наблюдение</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Max Pain — страйк ближайшей опционной экспирации, где покупатели опционов теряют больше всего (по открытому интересу) · цена часто гравитирует к нему перед экспирацией · гравитация — текущая дистанция · синий пунктир на графике · наблюдение, не прогноз</span></span>';
     if(typeof _chartRedraw==='function')_chartRedraw();
   }
   // ── протокол-радар: одновременный фит-расчёт ВСЕХ стратегий к текущим условиям (наблюдение, не выбор) ──
@@ -7852,7 +7872,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(dU>0&&(liqNearBps==null||dU<liqNearBps)){liqNearBps=dU;liqNearSide='up';}
       if(dD>0&&(liqNearBps==null||dD<liqNearBps)){liqNearBps=dD;liqNearSide='down';}
     });
-    return {px,avg,walls,deltaSlope,deltaCalm:dAbs,tapeNow,tapeAvg,accel:tapeNow/Math.max(tapeAvg,0.1),absorb:!!_dlModel.absorb,pxSlope,swingHi,swingLo,retrUp,retrDn,liqNearBps,liqNearSide,f:_apCtxF()};
+    // СПРЕД — недостающая издержка. Движок пишет вход по m.px, то есть по MID.
+    // По миду не входят никогда: тейкер платит дальнюю сторону, мейкер ждёт,
+    // пока рынок придёт к нему. Разница — половина спреда, и так дважды за круг.
+    // Пока это не измерено, EV движка завышен ровно на эту величину.
+    const bestA=aP[0]||0, bestB=bP[0]||0;
+    const spreadBps=(bestA&&bestB&&px)?+(((bestA-bestB)/px)*1e4).toFixed(3):null;
+    return {px,bestA,bestB,spreadBps,avg,walls,deltaSlope,deltaCalm:dAbs,tapeNow,tapeAvg,accel:tapeNow/Math.max(tapeAvg,0.1),absorb:!!_dlModel.absorb,pxSlope,swingHi,swingLo,retrUp,retrDn,liqNearBps,liqNearSide,f:_apCtxF()};
   }
   function _apOnSnap(){
     if(!_ap.on)return;
@@ -7993,7 +8019,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   function _apOpen(proto,plan,m,fit,conf,against){
     const dir=plan.side==='long'?1:-1;
-    _ap.pos={proto,side:plan.side,entry:m.px,stop:m.px*(1-dir*plan.stopBps/1e4),tp:m.px*(1+dir*plan.tpBps/1e4),t0:Date.now(),seg:_apSegKey(m.f),ref:plan.ref||null,fit,conf:conf||[],against:against||[]};
+    // spreadIn фиксируем в момент входа: задним числом его уже не узнать,
+    // а без него нельзя отличить эдж от заработка на собственном допущении.
+    _ap.pos={proto,side:plan.side,entry:m.px,spreadIn:(m.spreadBps!=null?m.spreadBps:null),stop:m.px*(1-dir*plan.stopBps/1e4),tp:m.px*(1+dir*plan.tpBps/1e4),t0:Date.now(),seg:_apSegKey(m.f),ref:plan.ref||null,fit,conf:conf||[],against:against||[]};
     if(typeof _proc==='function')_proc('вход: <b>'+proto+'</b> '+(plan.side==='long'?'LONG':'SHORT')+' @ '+m.px.toFixed(_dlDec)+' · стоп '+plan.stopBps+' / тейк '+plan.tpBps+' bps · фит '+fit+'%'
       +((conf&&conf.length)?' · конфлюенс: '+conf.join(', '):'')+((against&&against.length)?' · спорили: '+against.join(', '):''));
   }
@@ -8033,9 +8061,24 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // итог = зафиксированная часть (разгрузка 30%) + остаток объёма по цене выхода − комиссия круга
     const q=p.qty==null?1:p.qty;
     const bps=+((((px-p.entry)/p.entry*1e4)*dir)*q+(p.realBps||0)-AP_FEE).toFixed(1);
+    // ═══ МОДЕЛЬ РЕАЛЬНОГО ИСПОЛНЕНИЯ ═══
+    // Вход по сигналу — всегда тейкер: решение принято, ждать нельзя → платим
+    // половину спреда. Выход по тейку — лимит стоял заранее, мейкер, платим 0.
+    // Выход по стопу/времени/отмене — тейкер, ещё половина спреда.
+    // Это НИЖНЯЯ оценка издержек: очередь, частичные заливки и проскальзывание
+    // на объёме сюда не входят. Реальность будет не лучше этой цифры.
+    let sOut=null; try{ const mm=_apMicro(); sOut=mm?mm.spreadBps:null; }catch(e){}
+    const sIn=(p.spreadIn!=null?p.spreadIn:sOut);
+    const takerExit=(reason!=='tp');
+    const costBps=(sIn!=null||sOut!=null)
+      ? +(((sIn!=null?sIn:sOut)/2) + (takerExit?((sOut!=null?sOut:sIn)/2):0)).toFixed(3)
+      : null;
+    // netReal — то, что осталось бы на счёте. bps остаётся как есть, чтобы не
+    // ломать сравнение со старыми записями: две колонки честнее одной подкрученной.
+    const netReal=(costBps!=null)?+(bps-costBps).toFixed(2):null;
     // fit и fee пишем в запись: без них журнал нельзя честно разбирать задним числом
     // (фит не логировался вообще → порог подбирать было не на чем; издержки менялись → старые bps несравнимы с новыми)
-    const rec={t:Date.now(),proto:p.proto,side:p.side,entry:+p.entry.toFixed(6),exit:+px.toFixed(6),bps,seg:p.seg,reason,hold:Math.round((Date.now()-p.t0)/1e3),part:!!p.part,conf:p.conf||[],against:p.against||[],fit:p.fit!=null?p.fit:null,fee:AP_FEE};
+    const rec={t:Date.now(),proto:p.proto,side:p.side,entry:+p.entry.toFixed(6),exit:+px.toFixed(6),bps,netReal,costBps,spreadIn:sIn,spreadOut:sOut,takerExit,seg:p.seg,reason,hold:Math.round((Date.now()-p.t0)/1e3),part:!!p.part,conf:p.conf||[],against:p.against||[],fit:p.fit!=null?p.fit:null,fee:AP_FEE};
     _apArchive(rec);                                   // полная копия в IDB — окно ниже обрезается, архив нет
     _apToJournal(rec,'autopilot');                     // и в общий журнал, сегмент «autopilot»
     _ap.log.push(rec); if(_ap.log.length>300)_ap.log=_ap.log.slice(-300);
@@ -8113,10 +8156,34 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const row=(name,st,extra)=>st?('<br>'+name+': <b>'+st.n+'</b> сд · WR '+st.wr+'% · матож. <b class="'+cls(st.ev)+'">'+_usd(st.ev)+'</b>/сд · итог <b class="'+cls(st.sum)+'">'+_usd(st.sum)+'</b>'+(extra||'')):'';
     const grp=(arr,key)=>{const m={};arr.forEach(r=>{const k=(typeof key==='function'?key(r):r[key])||'—';(m[k]=m[k]||[]).push(r);});
       return Object.entries(m).map(([k,v])=>[k,S(v)]).filter(x=>x[1]).sort((a,b)=>b[1].ev-a[1].ev);};
+    // ═══ ДВЕ КОЛОНКИ: ИДЕАЛ И РЕАЛЬНОСТЬ ═══
+    // Записи со spreadIn несут измеренную стоимость круга. Показываем её рядом
+    // с идеализированной: разница между ними и есть ответ на вопрос, эдж это
+    // или заработок на допущении «вход по миду».
+    const withCost=raw.filter(r=>r.costBps!=null&&r.netReal!=null);
+    let realHtml='';
+    if(withCost.length>=10){
+      const n=withCost.length;
+      const evIdeal=withCost.reduce((s,r)=>s+r.bps,0)/n;
+      const evReal=withCost.reduce((s,r)=>s+r.netReal,0)/n;
+      const avgCost=withCost.reduce((s,r)=>s+r.costBps,0)/n;
+      const wrReal=withCost.filter(r=>r.netReal>0).length/n*100;
+      const cls=evReal>0?'gs-up':'gs-dn';
+      realHtml='<br><b>РЕАЛЬНОЕ ИСПОЛНЕНИЕ</b> <span class="gs-note">по замеренному спреду, '+n+' сд</span>'
+        +'<br>средняя стоимость круга: <b>'+avgCost.toFixed(2)+' bps</b>'
+        +' · матож. идеал <b>'+evIdeal.toFixed(2)+'</b> → реальность <b class="'+cls+'">'+evReal.toFixed(2)+'</b> bps/сд'
+        +' · WR '+wrReal.toFixed(1)+'%'
+        +'<br><span class="gs-note">Вход считается тейкером (полспреда), выход по тейку — мейкером (0), '
+        +'по стопу/времени/отмене — тейкером. Это НИЖНЯЯ оценка: очередь, частичные заливки '
+        +'и проскальзывание на объёме не учтены.</span>';
+    } else if(raw.length){
+      realHtml='<br><span class="gs-note">реальное исполнение: нужно ≥10 сделок с замером спреда (есть '+withCost.length+')</span>';
+    }
     let h='<b>РАЗБОР</b> при издержках <b>'+AP_FEE+' bps</b> · записей '+L.length
       +' <span class="gs-note">(старые пересчитаны к текущим издержкам)</span>';
     h+=row('ВСЕ направленные',S(dir));
     h+=row('СЕТКА (сессии)',S(grid));
+    h+=realHtml;                     // реальное исполнение — сразу под итогом, а не в конце
     h+='<br><span class="gs-note">по протоколам — сортировка по матожиданию:</span>';
     grp(dir,'proto').forEach(([k,st])=>{ h+=row('&nbsp;&nbsp;'+k,st,(st.n>=8&&st.ev<-1?' <span class="gs-dn">— кандидат на отключение</span>':'')); });
     h+='<br><span class="gs-note">по причине выхода:</span>';
