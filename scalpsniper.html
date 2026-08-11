@@ -6882,6 +6882,63 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }
     let depthWS=null, tradeWS=null, pollT=null, mxWS=null, mxPing=null, lastMx=0;
     let okWS=null, okPing=null, lastOk=0, lastBinTrade=0, srcName='—';
+
+    /* ═══ ГЛУБОКАЯ КНИГА ПО ИНКРЕМЕНТАМ (сегмент B) ═══
+     * ЗАЧЕМ. Канал sub.depth.full отдаёт двадцать уровней. Замер Wall.js на
+     * 119 часах показал, что размер очереди у цены несёт информацию (p=0.002),
+     * а искать стенку приходится в диапазоне до тридцати тиков — на ETH это
+     * регулярно глубже, чем двадцать уровней. То есть терминал не видит части
+     * того, что уже доказано важным.
+     *
+     * Инкрементальный канал sub.depth отдаёт ВСЕ уровни дельтами. Книга
+     * собирается в памяти по тем же правилам, что в боевом коннекторе, где
+     * сборка сверена с биржей на 100.00%.
+     *
+     * НЕПРЕРЫВНОСТЬ СЧИТАЕТСЯ ПО begin, А НЕ ПО version+1. Это не мелочь:
+     * замер на живом сокете дал совпадение version+1 в 8 случаях из 27, а
+     * begin==предыдущий end — в 27 из 27. Проверка «как в документации»
+     * загнала бы книгу в вечный ресинк. Диапазоны вдобавок перекрываются,
+     * поэтому дырой считается только НАЧАЛО НОВЕЕ ожидаемого; повторное
+     * применение безвредно, обновления абсолютные.
+     *
+     * ПОЧЕМУ РЯДОМ, А НЕ ВМЕСТО. Существующий путь работает. Новый включается
+     * в отрисовку только после того, как СОВПАДЁТ со снапшотами подряд
+     * несколько раз — сверка идёт непрерывно и бесплатно, потому что снапшоты
+     * и так приходят. Разошлось — молча возвращаемся к снапшотам. Замена без
+     * доказательства здесь стоила бы главного экрана. */
+    var iBids=new Map(), iAsks=new Map(), iVer=0, iSynced=false;
+    var iAgree=0, iMiss=0, iOn=false, iLast=0;
+    const I_NEED=8;               // столько совпадений подряд до доверия
+    function iApply(d){
+      var A=d.asks||[], B=d.bids||[], i;
+      for(i=0;i<B.length;i++){ var p=+B[i][0], s=+B[i][1]; if(s>0)iBids.set(p,s); else iBids.delete(p); }
+      for(i=0;i<A.length;i++){ var q=+A[i][0], t=+A[i][1]; if(t>0)iAsks.set(q,t); else iAsks.delete(q); }
+      iLast=Date.now();
+    }
+    function iTop(map,desc,n){
+      var arr=[]; map.forEach(function(s,p){ if(s>0)arr.push({p:p,s:s}); });
+      arr.sort(function(x,y){ return desc? y.p-x.p : x.p-y.p; });
+      return arr.slice(0,n);
+    }
+    /* Сверка: верх инкрементальной книги обязан совпасть со снапшотом.
+     * Сравниваем ЦЕНЫ пяти лучших уровней, а не объёмы: объём меняется между
+     * двумя сообщениями законно, а порядок цен — нет. Сравнение объёмов дало бы
+     * ложные расхождения на каждом апдейте. */
+    function iCheck(snapA,snapB){
+      if(!iSynced||!snapA.length||!snapB.length)return;
+      var a=iTop(iAsks,false,5), b=iTop(iBids,true,5), ok=true, k;
+      if(a.length<5||b.length<5)return;
+      for(k=0;k<5;k++){
+        if(Math.abs(a[k].p-(+snapA[k][0]))>1e-9)ok=false;
+        if(Math.abs(b[k].p-(+snapB[k][0]))>1e-9)ok=false;
+      }
+      if(ok){ iAgree++; iMiss=0; if(!iOn&&iAgree>=I_NEED){ iOn=true; self.postMessage({t:'deep',on:true,levels:iBids.size+iAsks.size}); } }
+      else { iMiss++; iAgree=0;
+        // Одно расхождение — это гонка сообщений, а не поломка. Три подряд —
+        // книга действительно разошлась, и доверять ей больше нельзя.
+        if(iMiss>=3&&iOn){ iOn=false; self.postMessage({t:'deep',on:false,reason:'разошлась со снапшотом'}); }
+      }
+    }
     self.onmessage=function(e){ if(e.data&&e.data.cmd==='init'){ symbol=e.data.symbol||'BTCUSDT'; startStreams(); } };
     // СТОРОЖ ПЕРЕПОДКЛЮЧЕНИЯ. Обработчики ошибок были пустыми, onclose не было вовсе:
     // упавший ночью сокет никто не поднимал — воркер молча замолкал, движок «зависал» до утра.
@@ -6905,10 +6962,37 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       try{
         const ms=symbol.replace(/USDT$/,'_USDT');
         mxWS=new WebSocket('wss://contract.mexc.com/edge');
-        mxWS.onopen=function(){ try{mxWS.send(JSON.stringify({method:'sub.depth.full',param:{symbol:ms,limit:20}}));}catch(e){}
+        mxWS.onopen=function(){
+          try{mxWS.send(JSON.stringify({method:'sub.depth.full',param:{symbol:ms,limit:20}}));}catch(e){}
+          // Инкрементальный канал — вторая подписка в ТОМ ЖЕ сокете. Отдельное
+          // соединение ради него было бы лишним: и трафик, и ещё одна точка,
+          // где что-то тихо отвалится.
+          try{mxWS.send(JSON.stringify({method:'sub.depth',param:{symbol:ms}}));}catch(e){}
+          iBids=new Map(); iAsks=new Map(); iVer=0; iSynced=false; iAgree=0; iMiss=0; iOn=false;
           mxPing=setInterval(function(){ try{mxWS.send(JSON.stringify({method:'ping'}));}catch(e){} },15000); };
         mxWS.onmessage=function(ev){ try{ var d=JSON.parse(ev.data);
-          if(d.channel==='push.depth.full'&&d.data&&d.data.asks&&d.data.asks.length){ lastMx=Date.now(); srcName='перп A'; applyDepth({asks:d.data.asks,bids:d.data.bids||[]}); } }catch(e){} };
+          if(d.channel==='push.depth.full'&&d.data&&d.data.asks&&d.data.asks.length){
+            lastMx=Date.now(); srcName='перп A';
+            // Снапшот служит двум делам сразу: он и рисует, и проверяет
+            // инкрементальную книгу. Первый снапшот её же и засевает.
+            if(!iSynced){ iBids=new Map(); iAsks=new Map(); iApply(d.data); iVer=+d.data.version||0; iSynced=true; }
+            else iCheck(d.data.asks, d.data.bids||[]);
+            applyDepth({asks:d.data.asks,bids:d.data.bids||[]});
+          }
+          else if(d.channel==='push.depth'&&d.data){
+            if(!iSynced)return;                       // дельты до снапшота — мусор
+            var v=+d.data.version||0, beg=+d.data.begin||0;
+            if(v&&v<=iVer)return;                     // целиком старое
+            // Дыра — только когда НАЧАЛО новее ожидаемого. Перекрытие диапазонов
+            // безвредно: обновления абсолютные, повтор ничего не портит.
+            if(beg? (iVer&&beg>iVer+1) : (iVer&&v&&v>iVer+1)){
+              iSynced=false; iOn=false; iAgree=0;
+              self.postMessage({t:'deep',on:false,reason:'разрыв версий'});
+              try{mxWS.send(JSON.stringify({method:'sub.depth.full',param:{symbol:ms,limit:20}}));}catch(e){}
+              return;
+            }
+            iApply(d.data); iVer=v||iVer;
+          } }catch(e){} };
         mxWS.onerror=function(){}; mxWS.onclose=function(){ lastMx=0; };   // упал — сторож поднимет
       }catch(e){}
       // вторая опора — перп OKX. Список инструментов в приложении берётся из вселенной OKX,
@@ -6994,8 +7078,42 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         const rows=[]; vpMap.forEach((c,k)=>rows.push([k*vpStep,c.v,c.b-c.s]));
         self.postMessage({t:'vp',step:vpStep,n:vpN,t0:vpT0,rows:rows});
       }
+      /* ═══ ЧТО ОТДАЁТ ГЛУБОКАЯ КНИГА ═══
+       * НЕ подменяем asks/bids: верхние двадцать уровней снапшот отдаёт и так,
+       * и они уже нарисованы. Инкрементальная книга нужна ради того, чего
+       * в снапшоте НЕТ — крупных уровней ЗА пределами топ-20. Именно они
+       * оказались значимыми в замере (p=0.002), и именно их терминал до сих
+       * пор не видел.
+       *
+       * Отношение к МЕДИАНЕ, а не к среднему: одна стенка тянет среднее вверх
+       * и делает себя «обычной». Ровно эту ошибку легко не заметить.
+       *
+       * Раз в секунду: глубина — величина сессионного масштаба, слать её
+       * десять раз в секунду значило бы грузить UI ради неменяющегося числа. */
+      if(iOn && now-(self._deepSent||0)>=1000 && mid>0){
+        self._deepSent=now;
+        var all=[], mx=null;
+        iBids.forEach(function(s,p){ if(s>0)all.push({p:p,s:s,b:1}); });
+        iAsks.forEach(function(s,p){ if(s>0)all.push({p:p,s:s,b:0}); });
+        if(all.length>=12){
+          var sz=all.map(function(x){return x.s;}).sort(function(x,y){return x-y;});
+          var med=sz[sz.length>>1]||1;
+          for(var i2=0;i2<all.length;i2++){
+            var d2=Math.abs(all[i2].p-mid)/mid;
+            if(d2>0.01)continue;                     // дальше 1% — уже не «рядом с ценой»
+            if(!mx||all[i2].s>mx.s)mx=all[i2];
+          }
+          self.postMessage({t:'deepbook', levels:all.length, med:med,
+            wall: mx? {px:mx.p, ratio:+(mx.s/med).toFixed(1), bid:!!mx.b,
+                       dist:+(((mx.p-mid)/mid)*100).toFixed(3)} : null});
+        }
+      }
     }
   `; }
+  /* Состояние глубокой книги. Живёт отдельно от снапшота намеренно: пока
+   * `on` false, ни одна ветка отрисовки о ней не знает и терминал работает
+   * как до правки. */
+  let _deep={on:false,levels:0,med:0,wall:null,at:0,since:0,why:''};
   let _dlRows=[], _dlHover=null, _dlBookBound=false, _dlSm=null;   // _dlSm — сглаженные объёмы корзин
   function _dlBindBook(cv){
     if(_dlBookBound||!cv)return; _dlBookBound=true;
@@ -7366,6 +7484,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       _dlWorker=new Worker(URL.createObjectURL(blob));
       _dlWorker.onmessage=e=>{ const d=e.data;
         if(d&&d.t==='vp'){ try{ const v=_vpCompute(d.rows,d.step,d.n); if(v){v.t0=d.t0||0; _vp=v;} }catch(_){ } return; }
+        /* ═══ ГЛУБОКАЯ КНИГА ═══
+         * Состояние держим отдельно от снапшота и НИЧЕГО им не подменяем.
+         * Пока сверка не пройдена, `_deep.on` false и терминал ведёт себя
+         * ровно как до правки — это и есть страховка: новый путь может только
+         * добавить, но не сломать. */
+        if(d&&d.t==='deep'){ _deep.on=!!d.on; _deep.why=d.reason||''; _deep.since=Date.now();
+          if(typeof _proc==='function')_proc(d.on?('глубокая книга подключена: '+(d.levels||0)+' уровней')
+            :('глубокая книга отключена'+(d.reason?' — '+d.reason:'')),d.on?'':'pr-warn'); return; }
+        if(d&&d.t==='deepbook'){ _deep.levels=d.levels||0; _deep.med=d.med||0; _deep.wall=d.wall||null; _deep.at=Date.now(); return; }
         if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); _dlTick++; _dlLastSnap=Date.now(); if(_dlHist.length>180)_dlHist.shift(); _gsHistPush(_dlSnap[0]);}
         // Трекер стен нужен ВСЕГДА: на нём держатся сценарии в стакане (отскок / пробой / разъедают).
         // При включённом автопилоте микро считает сам _apOnSnap; при выключенном — ведём его отдельно.
