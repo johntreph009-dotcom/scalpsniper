@@ -1736,6 +1736,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           <button class="mc-tfbtn" data-tf="15m" onclick="setChartTf('15m')">15m</button>
           <button class="mc-tfbtn" data-tf="30m" onclick="setChartTf('30m')">30m</button>
           <button class="mc-tfbtn" data-tf="1h" onclick="setChartTf('1h')">1h</button>
+          <button class="mc-tfbtn" data-tf="2h" onclick="setChartTf('2h')">2h</button>
           <button class="mc-tfbtn" data-tf="4h" onclick="setChartTf('4h')">4h</button>
           <button class="mc-tfbtn" data-tf="1d" onclick="setChartTf('1d')">1D</button>
         </div>
@@ -4920,7 +4921,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         return j.map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5],tb:+k[9]})); }
     }catch(e){}
     const base=sym.replace(/USDT$/,''), inst=base+'-USDT';
-    const okxBar={'1m':'1m','3m':'3m','5m':'5m','15m':'15m','30m':'30m','1h':'1H','4h':'4H','1d':'1D'}[tf]||'1m';
+    const okxBar={'1m':'1m','3m':'3m','5m':'5m','15m':'15m','30m':'30m','1h':'1H','2h':'2H','4h':'4H','1d':'1D'}[tf]||'1m';
     // 2) OKX свечи (сначала перп SWAP, затем спот) — OKX формат newest-first, разворачиваем
     for(const iid of [inst+'-SWAP', inst]){
       try{
@@ -4955,7 +4956,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   async function _klRaw(sym,tf,limit){   // → массив в форме Binance klines [[t,o,h,l,c,v]…] по возрастанию времени
     try{const r=await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval='+tf+'&limit='+limit,{cache:'no-store'}); if(r.ok){const j=await r.json(); if(Array.isArray(j)&&j.length)return j;}}catch(e){}
-    const okxBar={'1m':'1m','3m':'3m','5m':'5m','15m':'15m','30m':'30m','1h':'1H','4h':'4H','1d':'1D'}[tf]||tf;
+    const okxBar={'1m':'1m','3m':'3m','5m':'5m','15m':'15m','30m':'30m','1h':'1H','2h':'2H','4h':'4H','1d':'1D'}[tf]||tf;
     for(const iid of [_okxInst(sym), sym.replace(/USDT$/,'')+'-USDT']){
       try{const r=await fetch('https://www.okx.com/api/v5/market/candles?instId='+iid+'&bar='+okxBar+'&limit='+Math.min(limit,300),{cache:'no-store'}); if(r.ok){const d=(await r.json()).data; if(Array.isArray(d)&&d.length)return d.map(k=>[+k[0],+k[1],+k[2],+k[3],+k[4],+k[5]]).reverse();}}catch(e){}
     }
@@ -5558,8 +5559,49 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     _chartRedraw();
   }
   function _mcResetView(){ _mcView={t0:null,t1:null}; _chartRedraw(); }
+
+  /* ═══ U5: ЖИВАЯ СВЕЧА ═══
+   * Свечи грузятся пачкой и до следующей загрузки не меняются. На минутке это
+   * значит, что последняя свеча стоит мёртвой до минуты, а цена тем временем
+   * уехала — график расходится с ценой, которая рядом на экране. Для терминала,
+   * где решение принимается по уровню, такое расхождение хуже отсутствия
+   * графика: оно выглядит достоверно.
+   *
+   * Достраиваем последнюю свечу из живого потока цены. Данные для этого уже
+   * есть — новых запросов ноль.
+   *
+   * ОБЪЁМ НЕ ТРОГАЕМ. Поток даёт цену, а не объём сделок за интервал; рисовать
+   * туда что-либо значило бы выдумать. Живая свеча честно остаётся с нулевым
+   * приростом объёма до прихода настоящих данных.
+   *
+   * ГРАНИЦУ СВЕЧИ СЧИТАЕМ ПО СЕТКЕ БИРЖИ, а не «прошло N миллисекунд с прошлой».
+   * Второе накапливает дрейф и через сотню свечей рисует их со сдвигом. */
+  const _TF_MS={'1m':6e4,'3m':18e4,'5m':3e5,'15m':9e5,'30m':18e5,'1h':36e5,'2h':72e5,'4h':144e5,'1d':864e5};
+  function _klLive(px){
+    if(!(px>0)||!_klines.length)return false;
+    const ms=_TF_MS[_klTf]; if(!ms)return false;
+    const last=_klines[_klines.length-1];
+    const bucket=Math.floor(Date.now()/ms)*ms;
+    if(bucket<=last.t){
+      // та же свеча: двигаем закрытие и границы
+      last.c=px;
+      if(px>last.h)last.h=px;
+      if(px<last.l)last.l=px;
+      return true;
+    }
+    // Новая свеча. Открытие берём от закрытия предыдущей, а не от текущей цены:
+    // между тиками бывает разрыв, и открытие «где попало» нарисовало бы гэп,
+    // которого на бирже нет.
+    if(bucket-last.t>ms*3)return false;      // пропуск больше трёх свечей — ждём загрузку
+    _klines.push({t:bucket,o:last.c,h:Math.max(last.c,px),l:Math.min(last.c,px),c:px,v:0,live:true});
+    if(_klines.length>400)_klines.shift();
+    return true;
+  }
   function _chartRedraw(){
     const lp=parseFloat(document.getElementById('livePrice').value)||parseFloat(document.getElementById('price').value)||null;
+    // Достраиваем последнюю свечу ПЕРЕД отрисовкой: иначе кадр покажет
+    // состояние до тика, и живой она будет выглядеть с задержкой в один кадр.
+    if(lp)try{_klLive(lp);}catch(e){}
     if(_klines.length)_drawChart(_mcVisible(),lp);
     const st=document.getElementById('mcStatus');
     if(st){ if(_mcView.t0!=null){ if(!st.textContent.includes('зум'))st.textContent='зум · 2×клик сброс'; } else if(st.textContent.includes('зум'))st.textContent='live'; }
