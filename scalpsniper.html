@@ -1581,6 +1581,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     .zr-reset{min-height:32px;padding:6px 10px;display:inline-flex;align-items:center}
     .clear-zones-btn{min-height:32px;padding:6px 12px}
     .sw-deep{font-size:10px}
+    .zl-liq{font-size:8px;letter-spacing:-1px;opacity:.5;flex:0 0 auto;
+      font-family:'JetBrains Mono',monospace;color:var(--text-dim)}
+    .zl-liq.hi{opacity:.85}
+    .zl-liq.mid{opacity:.65}
+
     /* ═══ F5: КЛЮЧЕВОЕ ВСЕГДА В ПОЛЕ ЗРЕНИЯ ═══
      * Появляется ТОЛЬКО когда живая цена ушла за верх экрана. Постоянная
      * панель отняла бы строку у и без того тесного экрана и мешала бы там,
@@ -2613,6 +2618,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <span class="zl-px">${z.px}</span>
         ${stars}${bar}
         <span class="zl-note">${z.note?escapeHtml(z.note):''}</span>
+        ${_zlLiq(z)}
         ${_zlMetrics(z)}
         ${vb}
         ${lp?`<span class="${distCls}">${distTxt}</span>`:''}
@@ -2621,6 +2627,34 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     });
     if(lp&&!divPlaced)html+=divHtml;
     el.innerHTML=html;
+  }
+  /* ═══ ЛИКВИДНОСТЬ ПОД СТРОКОЙ ПЛАНА ═══
+   * Тот же принцип, что и в карте: книга обслуживает план. Здесь она отвечает
+   * на вопрос исполнения — сколько объёма стоит за ЭТИМ уровнем.
+   *
+   * Значок появляется только когда книга подтверждена сверкой и под зоной
+   * действительно что-то есть. Отсутствие значка означает «неизвестно», и это
+   * честнее нуля: нулём легко прочитать «там пусто», хотя мы просто не знаем.
+   *
+   * Три ступени вместо числа: на строке плана точное значение не нужно,
+   * нужно различить «пусто», «есть» и «плотно». Цифра осталась в подсказке
+   * для тех случаев, когда она действительно нужна.
+   *
+   * ЗАМЕР, КОТОРЫЙ ЗДЕСЬ ВАЖЕН: плотная книга под уровнем — НЕ повод считать
+   * его надёжнее. Пассивный залив внутри стенки оказался самым токсичным
+   * входом (p=0.002). Поэтому значок нейтрален по цвету и ничего не
+   * рекомендует: он сообщает факт, а вывод остаётся за трейдером. */
+  function _zlLiq(z){
+    try{
+      if(typeof _deepAtZone!=='function')return '';
+      const lv=_deepAtZone(+z.px);
+      if(!lv||!(lv.share>0))return '';
+      const s=lv.share;
+      const cls=s>=15?'zl-liq hi':s>=5?'zl-liq mid':'zl-liq lo';
+      const bars=s>=15?'▮▮▮':s>=5?'▮▮':'▮';
+      return '<span class="'+cls+'" title="За уровнем '+s+'% ликвидности окна ±1% (локальная книга по инкрементам). '+
+             'Плотнее — не значит надёжнее: замер 119 ч показал, что пассивный залив внутри стенки самый токсичный вход.">'+bars+'</span>';
+    }catch(e){ return ''; }
   }
   // раскрытые строки лестницы (ключ — цена зоны, переживает перерисовку)
   let _zlOpen=new Set();
@@ -4856,18 +4890,59 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
            * насколько книга заполнена. На 259 уровнях оно было 1.9×, на 424 —
            * 108×, потому что дальние мелкие уровни опускают медиану. Поэтому
            * рядом печатается число уровней: без него величина не читается. */
+          /* ═══ ГЛУБОКАЯ КНИГА ОБСЛУЖИВАЕТ ПЛАН, А НЕ ЗАМЕНЯЕТ ЕГО ═══
+           * ПЕРВАЯ ВЕРСИЯ ЭТОЙ СТРОКИ БЫЛА ПРОТИВ ФИЛОСОФИИ ПРОДУКТА.
+           * Она показывала «крупнейший уровень 1863.88, 12% ликвидности» —
+           * то есть готовую новость в моменте. А продукт стоит на обратном:
+           * тяжёлое думанье до сессии, в моменте только исполнение. Свободно
+           * висящий уровень приглашает анализировать на ходу и торговать то,
+           * чего нет в плане, — ровно то, против чего построен весь терминал.
+           *
+           * Переписано на два вопроса, оба про ПЛАН:
+           *   1. Сколько ликвидности стоит за МОИМИ размеченными зонами.
+           *      Это поддержка исполнения: зона, за которой пусто, и зона,
+           *      за которой четверть книги, исполняются по-разному.
+           *   2. Какие крупные уровни В ПЛАН НЕ ПОПАЛИ. Это не приглашение
+           *      их торговать, а сообщение о пробеле в разметке — и оно
+           *      адресовано фазе подготовки, куда и надо вернуться.
+           *
+           * Разница тонкая, но она и есть продукт: терминал не подсказывает
+           * сделку, он показывает, где план расходится с рынком. */
           let deepLine='';
-          if(typeof _deep!=='undefined'&&_deep.on&&_deep.wall&&Date.now()-_deep.at<15000){
-            const w=_deep.wall, dir=w.dist>0?'↑':'↓';
-            deepLine='<div class="sw-deep">своя книга ('+_deep.levels+' ур., в окне ±1% — '+(_deep.near||0)+'): '+
-              'крупнейший уровень '+w.px+' '+dir+' '+Math.abs(w.dist).toFixed(2)+'% · '+
-              (w.share!=null?(w.share+'% ликвидности окна'):(w.ratio+'× медианы'))+' · '+(w.bid?'бид':'аск')+' '+
-              '<span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">'+
-              'Книга собрана локально по инкрементам и сверена со снапшотами (8 совпадений подряд до включения). '+
-              'Видит уровни за пределами топ-20, которых нет в карте выше. Показана ДОЛЯ уровня в суммарном объёме окна ±1%, а не '+
-              'отношение к медиане: доля не зависит от того, на сколько уровней этот объём разложен, а отношение к медиане '+
-              'зависело — замер на живой странице дал корреляцию 0.87 с числом уровней, то есть мерило заполненность книги. Замер на 119 часах: пассивный залив ВНУТРИ '+
-              'стенки — самый токсичный вход (p=0.002). Наблюдение, не сигнал.</span></span></div>';
+          if(typeof _deep!=='undefined'&&_deep.on&&_deep.top&&_deep.top.length&&Date.now()-_deep.at<15000){
+            const zs=(typeof zones!=='undefined'&&zones)?zones.filter(z=>!z.closed&&!z.expired&&+z.px>0):[];
+            const covered=new Set();
+            const mine=[];
+            zs.forEach(z=>{
+              const lv=(typeof _deepAtZone==='function')?_deepAtZone(+z.px):null;
+              if(!lv)return;
+              covered.add(lv.px);
+              mine.push({px:+z.px, share:lv.share, kind:z.kind||''});
+            });
+            const gaps=_deep.top.filter(lv=>!covered.has(lv.px)&&lv.share>=8)
+                                .sort((x,y)=>y.share-x.share).slice(0,2);
+            const bits=[];
+            if(mine.length){
+              // сортируем по ликвидности: зона с самой плотной книгой важнее
+              mine.sort((x,y)=>y.share-x.share);
+              bits.push('за зонами: '+mine.slice(0,3).map(m=>m.px+' — '+m.share+'%').join(' · '));
+            }
+            if(gaps.length){
+              bits.push('<b style="color:var(--accent)">не в плане:</b> '+
+                gaps.map(g=>g.px+' ('+g.share+'%, '+(g.dist>0?'↑':'↓')+Math.abs(g.dist).toFixed(2)+'%)').join(' · '));
+            }
+            if(bits.length){
+              deepLine='<div class="sw-deep">книга ('+_deep.levels+' ур., в окне '+(_deep.near||0)+'): '+
+                bits.join(' | ')+
+                '<span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">'+
+                'Локальная книга по инкрементам, сверена со снапшотами. «За зонами» — доля ликвидности окна ±1% '+
+                'под твоими размеченными уровнями: зона, за которой пусто, и зона, за которой четверть книги, '+
+                'исполняются по-разному. «Не в плане» — крупный уровень, которого в разметке нет; это повод '+
+                'вернуться в подготовку, а не торговать его с ходу. Доля не зависит от заполненности книги, '+
+                'в отличие от отношения к медиане (проверено: корреляция 0.94 против 0.09). '+
+                'Замер 119 ч: пассивный залив ВНУТРИ стенки — самый токсичный вход (p=0.002). Наблюдение, не сигнал.'+
+                '</span></span></div>';
+            }
           }
           el.innerHTML=(parts.length?('ликвидность: '+parts.join(' · ')):'ликвидность: концентраций рядом нет')+deepLine+' <span class="sw-src">сводно'+(books.length>1?' ×2':'')+'</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Сводная карта ликвидности из нескольких книг (перп+спот) · стена = узел ≥1.8× среднего, % — доля стороны книги · стрелка и % — где и как далеко от цены · возраст: ‹1м — свежая/переставляется, долгожитель — реальный интерес · наблюдение, не сигнал</span></span>';
           el.title='Сводная карта ликвидности: несколько книг (перп+спот) нормируются в доли своей стороны и усредняются. Стена = уровень с долей >1.8× среднего. Проценты — доля стороны книги.';
@@ -6082,9 +6157,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       let h2H=null,h2L=null,h2Poc=null;
       /* Один и тот же расчёт для обоих горизонтов: копия кода разошлась бы
        * через месяц, и уровни двух ТФ считались бы по-разному. */
-      const structOf=async(itf)=>{
+      /* ГЛУБИНА ОБЗОРА РАЗНАЯ ДЛЯ ДВУХ ГОРИЗОНТОВ, и это не настройка вкуса.
+       * Замер на живой странице (ETH, 1m, окно разбора ±2.5%):
+       *     хай/лоу 15m за 120 баров  →  +2.38% / −0.96%   ПОПАДАЮТ в окно
+       *     хай/лоу 4h  за 120 баров  →  +5.05% / −3.39%   не попадают
+       *     хай/лоу 1d  за 120 баров  →  +30.7% / −20.2%   не попадают близко
+       * То есть экстремумы 120 баров дальнего ТФ — это события многонедельной
+       * давности, и к стопу в 0.3% они отношения не имеют. Уровень, которого
+       * никогда нет в окне, не помогает, а создаёт иллюзию, что горизонт учтён.
+       *
+       * Дальнему горизонту даём КОРОТКИЙ обзор: свежая структура вместо
+       * исторических краёв. POC при этом остаётся осмысленным на любой глубине —
+       * он там, где реально торговали, а не на краю диапазона. */
+      const structOf=async(itf,bars)=>{
         try{
-          const hk=await _klRaw(sym,itf,120);
+          const hk=await _klRaw(sym,itf,bars||120);
           if(!hk||!hk.length)return null;
           const hb=_niceBucket(price)*Math.max(1,tfMult*3);   // корзина крупнее: на старшем ТФ объём размазан шире
           const hm={}; hk.forEach(k=>{const tp=(+k[2]+ +k[3]+ +k[4])/3; const key=Math.round(tp/hb)*hb; hm[key]=(hm[key]||0)+ +k[5];});
@@ -6094,8 +6181,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           return {poc,H,L,dir:price>hma*1.001?'up':price<hma*0.999?'down':'flat'};
         }catch(e){ return null; }
       };
-      if(htf){ const s1=await structOf(htf); if(s1){hPoc=s1.poc;hH=s1.H;hL=s1.L;hDir=s1.dir;} }
-      if(htf2){ const s2=await structOf(htf2); if(s2){h2Poc=s2.poc;h2H=s2.H;h2L=s2.L;} }
+      if(htf){ const s1=await structOf(htf,120); if(s1){hPoc=s1.poc;hH=s1.H;hL=s1.L;hDir=s1.dir;} }
+      if(htf2){ const s2=await structOf(htf2,30); if(s2){h2Poc=s2.poc;h2H=s2.H;h2L=s2.L;} }
+      /* ЕСЛИ УРОВЕНЬ НЕ ПОМЕСТИЛСЯ В ОКНО — СКАЗАТЬ ОБ ЭТОМ. Молчаливое
+       * отсутствие неотличимо от «горизонт учтён и там ничего нет», а это
+       * разные вещи: в первом случае трейдер считает, что структура проверена,
+       * хотя она просто далеко. */
+      setTimeout(()=>{ try{
+        if(typeof _proc!=='function')return;
+        const far=[];
+        const chk=(lbl,lv)=>{ if(lv>0&&Math.abs(lv-price)/price>within)far.push(lbl+' '+_rpx(lv)); };
+        if(htf){ chk('хай '+htf,hH); chk('лоу '+htf,hL); }
+        if(htf2){ chk('хай '+htf2,h2H); chk('лоу '+htf2,h2L); }
+        if(far.length)_proc('структура старших ТФ вне окна ±'+(within*100).toFixed(1)+'%: '+far.join(', ')+
+          ' — на этом масштабе она в разметку не попадает');
+      }catch(e){} },0);
       try{funding=await _fundingAny(sym);}catch(e){}
       try{oi=await _oiAny(sym);}catch(e){}
       const agg=arr=>{const m={}; arr.forEach(a=>{const p=+a[0],q=+a[1],key=Math.round(p/b)*b; m[key]=(m[key]||0)+p*q;}); return m;};
@@ -6228,7 +6328,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         const fromWall=/(ask|bid)-стены/.test(o.note||'');
         if(o.kind==='fade'){
           o.note+=' · если стену съедят → сценарий SQUEEZE (пробой)';
-          if(fromWall)o.note+=' · лимитка В стене: сам залив = стену съели (замер 119 ч: −3.1 тика против −0.8 в тонкой очереди)';
+          if(fromWall)o.note+=' · залив внутри стены = стену съели (замер: −3.1 против −0.8 тика)';
         } else if(o.kind==='break')o.note+=' · если стена устоит → сценарий VALENTINI (отбой)';
       });
       z.sort((a,c)=>c.px-a.px);
@@ -7232,8 +7332,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           for(var k4=PB-2;k4>=0;k4--)prof[k4]+=prof[k4+1];
           self.postMessage({t:'deepbook', levels:all.length, near:near.length, med:med,
             prof:Array.from(prof).map(function(x){return Math.round(x);}), profSpan:span, profN:PB,
-            wall: mx? {px:mx.p, ratio:+(mx.s/med).toFixed(1),
-                       share:+(tot>0?(mx.s/tot*100):0).toFixed(1), bid:!!mx.b,
+            /* ═══ ОТДАЁМ СПИСОК, А НЕ ОДИН МАКСИМУМ ═══
+             * Один «крупнейший уровень» — это готовая новость в моменте,
+             * а продукт стоит на том, что решения приняты до сессии.
+             * Список же нужен для другого: сопоставить ликвидность с ЗОНАМИ
+             * трейдера, то есть обслужить его план, а не предложить свой.
+             *
+             * Пять штук: больше на экране всё равно не читается, а меньше
+             * не покроет обе стороны книги.
+             *
+             * «ratio» больше не шлём. Он измерен и признан негодным:
+             * корреляция с заполненностью книги 0.94, то есть он мерил
+             * возраст подписки. Оставлять рядом с исправной величиной
+             * сломанную — верный способ однажды взять не ту. */
+            top: near.slice().sort(function(a,b){return b.s-a.s;}).slice(0,5)
+                 .map(function(x){ return {px:x.p, share:+(tot>0?(x.s/tot*100):0).toFixed(1),
+                                           bid:!!x.b, dist:+(((x.p-mid)/mid)*100).toFixed(3)}; }),
+            wall: mx? {px:mx.p, share:+(tot>0?(mx.s/tot*100):0).toFixed(1), bid:!!mx.b,
                        dist:+(((mx.p-mid)/mid)*100).toFixed(3)} : null});
         }
       }
@@ -7242,7 +7357,27 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   /* Состояние глубокой книги. Живёт отдельно от снапшота намеренно: пока
    * `on` false, ни одна ветка отрисовки о ней не знает и терминал работает
    * как до правки. */
-  let _deep={on:false,levels:0,near:0,med:0,wall:null,prof:null,profSpan:0.01,profN:40,at:0,since:0,why:''};
+  let _deep={on:false,levels:0,near:0,med:0,wall:null,top:null,prof:null,profSpan:0.01,profN:40,at:0,since:0,why:''};
+
+  /* ═══ ЛИКВИДНОСТЬ ПОД КОНКРЕТНОЙ ЗОНОЙ ═══
+   * Философия продукта: тяжёлое думанье до сессии, в моменте только
+   * исполнение. Значит глубокая книга обязана отвечать на вопрос
+   * «сколько стоит за МОИМ уровнем», а не подсовывать новый уровень.
+   *
+   * Допуск берём от шага цены инструмента, а не плоскими процентами:
+   * на ETH 0.05% это 95 тиков — под такой допуск попадёт пол-книги, и
+   * метка перестанет что-либо значить. Та же ошибка уже ловилась
+   * на совпадениях со старшим ТФ. */
+  function _deepAtZone(zpx){
+    if(!_deep.on||!_deep.top||!_deep.top.length||!(zpx>0))return null;
+    const tol=Math.max(zpx*0.0004, (_dlDec?Math.pow(10,-_dlDec):0.01)*8);
+    let best=null;
+    for(const lv of _deep.top){
+      const d=Math.abs(lv.px-zpx);
+      if(d<=tol&&(!best||d<Math.abs(best.px-zpx)))best=lv;
+    }
+    return best;
+  }
 
   /* ═══ НАКОПЛЕННАЯ ГЛУБИНА ПОД ЛЕСТНИЦЕЙ ═══
    * Отвечает на вопрос, на который крылья не отвечают: сколько объёма стоит
@@ -7660,7 +7795,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         if(d&&d.t==='deep'){ _deep.on=!!d.on; _deep.why=d.reason||''; _deep.since=Date.now();
           if(typeof _proc==='function')_proc(d.on?('глубокая книга подключена: '+(d.levels||0)+' уровней')
             :('глубокая книга отключена'+(d.reason?' — '+d.reason:'')),d.on?'':'pr-warn'); return; }
-        if(d&&d.t==='deepbook'){ _deep.levels=d.levels||0; _deep.near=d.near||0; _deep.med=d.med||0;
+        if(d&&d.t==='deepbook'){ _deep.levels=d.levels||0; _deep.near=d.near||0; _deep.med=d.med||0; _deep.top=d.top||null;
           _deep.prof=d.prof||null; _deep.profSpan=d.profSpan||0.01; _deep.profN=d.profN||40; _deep.wall=d.wall||null; _deep.at=Date.now(); return; }
         if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); _dlTick++; _dlLastSnap=Date.now(); if(_dlHist.length>180)_dlHist.shift(); _gsHistPush(_dlSnap[0]);}
         // Трекер стен нужен ВСЕГДА: на нём держатся сценарии в стакане (отскок / пробой / разъедают).
