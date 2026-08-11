@@ -1676,6 +1676,24 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     .zr-reset{min-height:32px;padding:6px 10px;display:inline-flex;align-items:center}
     .clear-zones-btn{min-height:32px;padding:6px 12px}
     .sw-deep{font-size:10px}
+    /* ═══ F5: КЛЮЧЕВОЕ ВСЕГДА В ПОЛЕ ЗРЕНИЯ ═══
+     * Появляется ТОЛЬКО когда живая цена ушла за верх экрана. Постоянная
+     * панель отняла бы строку у и без того тесного экрана и мешала бы там,
+     * где всё и так видно. */
+    #keyBar{position:fixed;left:0;right:0;top:0;z-index:60;display:none;
+      align-items:center;gap:10px;padding:7px 10px;
+      background:rgba(12,14,18,.96);backdrop-filter:blur(10px);
+      border-bottom:1px solid var(--line);font-family:'JetBrains Mono',monospace;
+      box-shadow:0 6px 18px rgba(0,0,0,.45)}
+    #keyBar.on{display:flex}
+    #keyBar .kb-px{font-size:16px;font-weight:600;color:var(--text)}
+    #keyBar .kb-zone{font-size:11px;color:var(--text-dim);flex:1;min-width:0;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    #keyBar .kb-d{font-size:12px;font-weight:600;min-width:52px;text-align:right}
+    #keyBar.exp{flex-wrap:wrap}
+    #keyBar .kb-more{flex:1 1 100%;font-size:10.5px;color:var(--text-dim);
+      border-top:1px solid var(--line-soft);padding-top:5px;margin-top:2px;display:none}
+    #keyBar.exp .kb-more{display:block}
     /* ═══ ОСТАЛЬНЫЕ МЕЛКИЕ КНОПКИ (замерено на живой странице 2026-08-10) ═══
      * Первый заход поднял только три штуки — по памяти, а не по замеру. Обход
      * страницы показал ещё восемь классов ниже порога: иконки шапки 23px,
@@ -7166,7 +7184,37 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         if(near.length>=12){
           var sz=near.map(function(x){return x.s;}).sort(function(x,y){return x-y;});
           var med=sz[sz.length>>1]||1;
+          /* ═══ НАКОПЛЕННАЯ ГЛУБИНА ═══
+           * Крылья в лестнице показывают объём НА уровне. Вопрос «где на самом
+           * деле сосредоточена ликвидность» они не отвечают: десять средних
+           * уровней подряд весят больше одной стенки, но выглядят скромнее
+           * каждый по отдельности.
+           *
+           * Профиль строится ОТ ЦЕНЫ НАРУЖУ и накапливается — это ответ на
+           * вопрос «сколько придётся съесть, чтобы дойти отсюда дотуда».
+           * Именно он имеет смысл для стопа и цели, а не высота одной полосы.
+           *
+           * Из топ-20 такой профиль строить бессмысленно — он обрывался бы
+           * на первых нескольких тиках. Здесь он есть только потому, что
+           * появилась глубокая книга. */
+          /* Раскладка массива, чтобы её не пришлось разгадывать:
+           *   индексы 0 … PB-1     — НИЖЕ цены, причём PB-1 ближе всего к ней,
+           *                          а 0 — самый дальний вниз;
+           *   индексы PB … 2PB-1   — ВЫШЕ цены, PB ближе всего.
+           * То есть массив читается сверху вниз так же, как лестница на экране. */
+          var PB=40, span=0.01, prof=new Float64Array(PB*2);
+          for(var i3=0;i3<near.length;i3++){
+            var rel=(near[i3].p-mid)/mid;
+            var slot=Math.floor(Math.abs(rel)/span*PB);
+            if(slot>=PB)continue;
+            var idx=(rel>=0)? (PB+slot) : (PB-1-slot);
+            prof[idx]+=near[i3].s;
+          }
+          // Накапливаем ОТ ЦЕНЫ НАРУЖУ: вверх — вправо по индексам, вниз — влево.
+          for(var k3=PB+1;k3<PB*2;k3++)prof[k3]+=prof[k3-1];
+          for(var k4=PB-2;k4>=0;k4--)prof[k4]+=prof[k4+1];
           self.postMessage({t:'deepbook', levels:all.length, near:near.length, med:med,
+            prof:Array.from(prof).map(function(x){return Math.round(x);}), profSpan:span, profN:PB,
             wall: mx? {px:mx.p, ratio:+(mx.s/med).toFixed(1), bid:!!mx.b,
                        dist:+(((mx.p-mid)/mid)*100).toFixed(3)} : null});
         }
@@ -7176,7 +7224,30 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   /* Состояние глубокой книги. Живёт отдельно от снапшота намеренно: пока
    * `on` false, ни одна ветка отрисовки о ней не знает и терминал работает
    * как до правки. */
-  let _deep={on:false,levels:0,near:0,med:0,wall:null,at:0,since:0,why:''};
+  let _deep={on:false,levels:0,near:0,med:0,wall:null,prof:null,profSpan:0.01,profN:40,at:0,since:0,why:''};
+
+  /* ═══ НАКОПЛЕННАЯ ГЛУБИНА ПОД ЛЕСТНИЦЕЙ ═══
+   * Отвечает на вопрос, на который крылья не отвечают: сколько объёма стоит
+   * между текущей ценой и вот этим уровнем. Десять средних уровней подряд
+   * весят больше одной стенки, но по отдельности выглядят скромнее каждый —
+   * накопление это показывает, а высота полосы нет.
+   *
+   * Рисуется САМЫМ ТИХИМ слоем, под всем остальным: это контекст, а не
+   * сигнал. Если глубокая книга не подтверждена сверкой, слоя нет вовсе —
+   * рисовать профиль из двадцати уровней значило бы показать обрыв и выдать
+   * его за отсутствие ликвидности. */
+  function _deepCum(p,mid){
+    if(!_deep.on||!_deep.prof||!(mid>0))return 0;
+    const PB=_deep.profN, rel=(p-mid)/mid;
+    const slot=Math.floor(Math.abs(rel)/_deep.profSpan*PB);
+    if(slot>=PB)return 0;
+    return _deep.prof[(rel>=0)?(PB+slot):(PB-1-slot)]||0;
+  }
+  function _deepCumMax(){
+    if(!_deep.on||!_deep.prof)return 0;
+    let m=0; for(const v of _deep.prof)if(v>m)m=v;
+    return m;
+  }
   let _dlRows=[], _dlHover=null, _dlBookBound=false, _dlSm=null;   // _dlSm — сглаженные объёмы корзин
   function _dlBindBook(cv){
     if(_dlBookBound||!cv)return; _dlBookBound=true;
@@ -7399,6 +7470,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     let avg=allV.length?allV[Math.floor(allV.length/2)]:1;   // медиана устойчивее среднего к выбросам (переопределяется на глубоких данных)
     const bps=p=>((p-mid)/mid*1e4);
     _dlRows=[];   // зоны наведения: строим при отрисовке, читаем в обработчиках мыши
+    // Максимум профиля берём один раз на кадр: считать его в каждой строке
+    // значило бы двадцать проходов по массиву там, где достаточно одного.
+    const _deepCumMaxV=_deepCumMax();
     // мои размеченные зоны — отмечаем прямо в книге, чтобы не сверять глазами с другой панелью
     let myZ=[]; try{ if(typeof zones!=='undefined'&&zones)myZ=zones.filter(z=>!z.closed&&!z.expired).map(z=>+z.px); }catch(e){}
     const zoneNear=p=>myZ.some(z=>Math.abs(z-p)<=(mid*0.00012));
@@ -7436,6 +7510,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if((y/rowH|0)%2){ ctx.fillStyle='rgba(255,255,255,.013)'; ctx.fillRect(0,y,W,rowH-2); }
       if(hov){ ctx.fillStyle='rgba(255,255,255,.07)'; ctx.fillRect(0,y,W,rowH-2); }
       const zn=zoneNear(p);
+      // 0) НАКОПЛЕННАЯ ГЛУБИНА — самый тихий слой, под всем остальным.
+      //    Ширина от центра наружу пропорциональна объёму МЕЖДУ ценой и этим
+      //    уровнем. Отдельного места не занимает и ничего не перекрывает:
+      //    это фон, а не элемент. Нет подтверждённой глубокой книги — нет слоя.
+      if(_deepCumMaxV>0){
+        const cum=_deepCum(p,mid);
+        if(cum>0){
+          const cw=Math.max(1,(cum/_deepCumMaxV)*half);
+          ctx.fillStyle='rgba('+(side<0?'226,75,74':'29,158,117')+',.055)';
+          ctx.fillRect(pxR,y,cw,rowH-2);
+          ctx.fillRect(pxL-cw,y,cw,rowH-2);
+        }
+      }
       // 1) ОБЪЁМ — два крыла от колонки цены наружу. Одинаковая длина в обе
       //    стороны: размер лимитки читается формой, а не чтением подписи.
       ctx.fillStyle='rgba('+c+','+(wall?0.92:big?0.46:0.20)+')';
@@ -7555,7 +7642,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         if(d&&d.t==='deep'){ _deep.on=!!d.on; _deep.why=d.reason||''; _deep.since=Date.now();
           if(typeof _proc==='function')_proc(d.on?('глубокая книга подключена: '+(d.levels||0)+' уровней')
             :('глубокая книга отключена'+(d.reason?' — '+d.reason:'')),d.on?'':'pr-warn'); return; }
-        if(d&&d.t==='deepbook'){ _deep.levels=d.levels||0; _deep.near=d.near||0; _deep.med=d.med||0; _deep.wall=d.wall||null; _deep.at=Date.now(); return; }
+        if(d&&d.t==='deepbook'){ _deep.levels=d.levels||0; _deep.near=d.near||0; _deep.med=d.med||0;
+          _deep.prof=d.prof||null; _deep.profSpan=d.profSpan||0.01; _deep.profN=d.profN||40; _deep.wall=d.wall||null; _deep.at=Date.now(); return; }
         if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); _dlTick++; _dlLastSnap=Date.now(); if(_dlHist.length>180)_dlHist.shift(); _gsHistPush(_dlSnap[0]);}
         // Трекер стен нужен ВСЕГДА: на нём держатся сценарии в стакане (отскок / пробой / разъедают).
         // При включённом автопилоте микро считает сам _apOnSnap; при выключенном — ведём его отдельно.
@@ -8478,13 +8566,120 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
                          //     это оценка себя, а не рынка
       '#posBlock'        // 13. исполнение: позиция и калькулятор риска
     ];
+    /* ═══ F6: НА ТЕЛЕФОНЕ ПОРЯДОК ДРУГОЙ ═══
+     * На десктопе хаб стоит пятым, сразу под ценой, и это верно: там он занимает
+     * колонку сбоку и ничего не отодвигает. На узком экране он разворачивается
+     * во всю ширину и съедает пол-экрана, после чего график, зоны и активная
+     * зона уезжают за третий экран прокрутки.
+     *
+     * Порядок не «тот же, но плотнее», а другой по смыслу. На телефоне сначала
+     * идёт то, что отвечает на вопрос «что делать прямо сейчас» — цена,
+     * активная зона, план целиком, — и только потом то, во что смотрят долго:
+     * стакан, графики, контекст. Стакан на телефоне и так читается плохо;
+     * держать его выше плана значит платить экраном прокрутки за то, чем на
+     * ходу почти не пользуются.
+     *
+     * Разные списки, а не один с оговорками: попытка описать оба порядка одной
+     * последовательностью каждый раз кончалась тем, что правка для телефона
+     * ломала десктоп. */
+    const ORDER_MOBILE=[
+      '#dayTrend', '#dayCtx',
+      '#priceTitle',
+      '.live-bar',        // цена — где я
+      '#liveCard',        // активная зона: на ходу это главное
+      '#zonesTitle', '#zonesFresh',
+      '#zoneLadder',      // весь план целиком — раньше графика
+      '#miniChartWrap',   // график: смотрят, когда есть время
+      '.sess-pchart',
+      '#prepPhase',
+      '#hub',             // стакан ниже: на узком экране он съедает пол-экрана
+      '#sessWalls',
+      '#sessionCtx', '#zoneRead', '#posBlock'
+    ];
+    const USE=(innerWidth<=720)?ORDER_MOBILE:ORDER;
     const kids=[...root.children];
-    const rank=el=>{for(let i=0;i<ORDER.length;i++){try{if(el.matches(ORDER[i]))return i;}catch(e){}} return ORDER.length;};
+    const rank=el=>{for(let i=0;i<USE.length;i++){try{if(el.matches(USE[i]))return i;}catch(e){}} return USE.length;};
     // сортировка устойчивая: незнакомые блоки не теряются, а оседают в конец в прежнем порядке
     kids.map((el,i)=>({el,r:rank(el),i}))
         .sort((a,b)=>a.r-b.r||a.i-b.i)
         .forEach(o=>root.appendChild(o.el));
   }
+  /* ═══ F5: ЛИПКАЯ ПОЛОСА С КЛЮЧЕВЫМ ═══
+   * Задача из плана: при прокрутке на телефоне теряются и цена, и активная
+   * зона — то есть ровно то, ради чего экран открыт.
+   *
+   * ПОЯВЛЯЕТСЯ ПО ВИДИМОСТИ, А НЕ ПО СМЕЩЕНИЮ ПРОКРУТКИ. Считать пиксели
+   * прокрутки значит завязаться на текущий порядок блоков, который мы только
+   * что сделали разным для телефона и десктопа. Наблюдатель видимости не знает
+   * ни порядка, ни высот: полоса появляется тогда и только тогда, когда живая
+   * цена ушла с экрана, при любой раскладке.
+   *
+   * СОДЕРЖИМОЕ — ТОЛЬКО ТО, ЧТО ОТВЕЧАЕТ НА «ЧТО СЕЙЧАС»: цена, ближайшая
+   * зона, расстояние до неё. Стоп и план прячутся под тап: на ходу их читают
+   * реже, а строка должна оставаться одной строкой. */
+  let _kbEl=null, _kbObs=null, _kbT=null;
+  function _kbEnsure(){
+    if(_kbEl)return _kbEl;
+    _kbEl=document.createElement('div'); _kbEl.id='keyBar';
+    _kbEl.innerHTML='<span class="kb-px">—</span><span class="kb-zone">—</span>'+
+                    '<span class="kb-d">—</span><span class="kb-more"></span>';
+    _kbEl.title='Тап — развернуть стоп и план';
+    _kbEl.addEventListener('click',()=>_kbEl.classList.toggle('exp'));
+    document.body.appendChild(_kbEl);
+    return _kbEl;
+  }
+  function _kbFill(){
+    if(!_kbEl||!_kbEl.classList.contains('on'))return;
+    let px=0;
+    try{ if(_dlSnap&&_dlSnap[0]>0)px=_dlSnap[0]; }catch(e){}
+    // Запасной источник цены — тот, что рисуется в сессии. Первая версия
+    // читала #sessPrice, поля с таким id в разметке нет вовсе, и ветка молча
+    // никогда не срабатывала бы. Поймано аудитором, а не глазами: несуществующий
+    // getElementById не падает, он возвращает null и делает вид, что всё в порядке.
+    if(!px){ const t=(document.getElementById('sessPxNow')||{}).textContent||'';
+             const v=parseFloat(t.replace(/[^\d.,-]/g,'').replace(',','.')); if(isFinite(v))px=v; }
+    const pxEl=_kbEl.querySelector('.kb-px'), zEl=_kbEl.querySelector('.kb-zone'),
+          dEl=_kbEl.querySelector('.kb-d'), mEl=_kbEl.querySelector('.kb-more');
+    pxEl.textContent=px?px.toFixed(_dlDec||2):'—';
+    let best=null;
+    try{
+      if(typeof zones!=='undefined'&&zones&&px>0){
+        for(const z of zones){
+          if(z.closed||z.expired)continue;
+          const d=Math.abs(+z.px-px); if(!isFinite(d))continue;
+          if(!best||d<best.d)best={z,d};
+        }
+      }
+    }catch(e){}
+    if(!best){ zEl.textContent='зон нет'; dEl.textContent='—'; dEl.style.color=''; mEl.textContent=''; return; }
+    const z=best.z, rel=px?((+z.px-px)/px*100):0;
+    zEl.textContent=(z.kind||'зона')+' '+(+z.px);
+    dEl.textContent=(rel>=0?'+':'')+rel.toFixed(2)+'%';
+    // Цвет по БЛИЗОСТИ, а не по направлению: направление и так видно знаком,
+    // а срочность — нет. Близкая зона это то, ради чего стоит поднять глаза.
+    dEl.style.color=Math.abs(rel)<0.05?'#ff7a18':Math.abs(rel)<0.2?'#e3b341':'var(--text-dim)';
+    mEl.textContent='стоп '+(z.stop||'—')+(z.proto?(' · '+z.proto):'')+(z.note?(' · '+String(z.note).slice(0,90)):'');
+  }
+  function _kbInit(){
+    const bar=document.querySelector('.live-bar');
+    if(!bar||!('IntersectionObserver' in window))return;
+    _kbEnsure();
+    if(_kbObs)_kbObs.disconnect();
+    _kbObs=new IntersectionObserver(es=>{
+      const vis=es[0]&&es[0].isIntersecting;
+      // На десктопе полоса не нужна: там цена и так в поле зрения, а
+      // фиксированный элемент сверху перекрыл бы шапку.
+      const on=!vis && innerWidth<=720 && (typeof phase==='undefined'||phase==='live');
+      _kbEl.classList.toggle('on',on);
+      if(!on)_kbEl.classList.remove('exp');
+      _kbFill();
+    },{threshold:0});
+    _kbObs.observe(bar);
+    if(_kbT)clearInterval(_kbT);
+    _kbT=setInterval(_kbFill,1000);
+  }
+  addEventListener('resize',()=>{ if(_kbEl&&innerWidth>720)_kbEl.classList.remove('on'); });
+
   function _hubGo(k){
     _hubCur=k;
     document.querySelectorAll('.hub-tab').forEach(b=>b.classList.toggle('on',b.getAttribute('data-hub')===k));
@@ -9665,7 +9860,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   try{ setPhase('live'); }catch(e){}
   // хаб живёт в Сессии — собираем его сразу, не дожидаясь запуска потока
   try{ _hubInit(); }catch(e){}
-  try{ _layoutSession(); }catch(e){}
+  try{ _layoutSession(); try{_kbInit();}catch(e){} }catch(e){}
   if(typeof autoEvalZones==='function')setTimeout(()=>autoEvalZones({force:true}),1500);
 
   // ── PWA: установка как приложение + офлайн-кэш ──
