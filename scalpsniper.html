@@ -1671,6 +1671,26 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     .lc-chk{min-height:32px;padding:6px 9px;display:inline-flex;align-items:center}
     .zr-reset{min-height:32px;padding:6px 10px;display:inline-flex;align-items:center}
     .clear-zones-btn{min-height:32px;padding:6px 12px}
+    /* ═══ ОСТАЛЬНЫЕ МЕЛКИЕ КНОПКИ (замерено на живой странице 2026-08-10) ═══
+     * Первый заход поднял только три штуки — по памяти, а не по замеру. Обход
+     * страницы показал ещё восемь классов ниже порога: иконки шапки 23px,
+     * стрелки сворачивания 22px, кнопки таймфрейма 20px. Пока они такие,
+     * детектор жалуется по делу и погасить его нельзя — значит поднимаем.
+     * Высота 32px, а не 44: терминал плотный, 32 — рабочий минимум, ниже
+     * начинаются промахи. */
+    #helpBtn,#themeBtn,#muteBtn{min-height:32px!important;min-width:36px!important;
+      display:inline-flex!important;align-items:center;justify-content:center}
+    #sessDDToggle,.fold-btn{min-height:32px!important;min-width:32px!important;
+      display:inline-flex!important;align-items:center;justify-content:center}
+    /* ряд таймфреймов остаётся плотным по ширине, но становится нажимаемым
+       по высоте; сам ряд прокручивается, поэтому ширина не распирает экран */
+    .mc-tfbtn{min-height:32px!important;padding-top:0!important;padding-bottom:0!important;
+      display:inline-flex!important;align-items:center;justify-content:center}
+    .dl-price{min-height:32px!important;display:flex!important;align-items:center}
+    /* Кнопки шапки графика — их я добавлял сам и сам же забыл про палец.
+     * Найдены не глазами, а обходом живой страницы: 56x22, 79x22, 23x20. */
+    #mcZonesBtn,#mcLyrBtn,#mcTallBtn{min-height:32px!important;min-width:32px!important;
+      display:inline-flex!important;align-items:center;justify-content:center}
   }
 </style>
 </head>
@@ -1838,12 +1858,29 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       <div><span class="label">Винрейт %</span><input id="c_wr" type="number" value="50" min="1" max="99"></div>
       <div><span class="label">Риск/сделка %</span><input id="c_risk" type="number" value="1" min="0.1" step="0.1"></div>
     </div>
+    <div class="row4">
+      <div><span class="label" title="Отношение тейка к стопу">R:R</span><input id="c_rr" type="number" value="1.5" min="0.2" step="0.1"></div>
+      <div><span class="label" title="Комиссия выхода в базисных пунктах. У MEXC тейкер обычно 2 bps = 0.02%. Проверь свою: весь расчёт по ней линеен.">Комиссия выхода, bps</span><input id="c_fee" type="number" value="2" min="0" step="0.1"></div>
+    </div>
     <div class="calc-out">
       <div class="stat"><div class="sl">Margin Risk %</div><div class="sv" id="o_margin">—</div></div>
       <div class="stat"><div class="sl">Дист. до стопа %</div><div class="sv" id="o_dist">—</div></div>
       <div class="stat"><div class="sl">Risk of Ruin*</div><div class="sv" id="o_ror">—</div></div>
+      <div class="stat"><div class="sl" title="Доля прибыльных сделок, при которой серия выходит в ноль после комиссии">Нужен винрейт</div><div class="sv" id="o_needwr">—</div></div>
     </div>
     <div class="calc-note">Margin risk = (|вход − стоп| / вход) × плечо × 100. &nbsp;*Risk of ruin — упрощённая оценка (модель Гэмблера, R:R 1:1.5) вероятности слить депозит на серии сделок. Ориентир, не гарантия.</div>
+    <!-- ═══ ЗАЧЕМ ЗДЕСЬ «НУЖЕН ВИНРЕЙТ» ═══
+         Замер 2026-08-10 показал, что комиссия и масштаб стопа связаны сильнее,
+         чем кажется на глаз. Тейкерский выход 2 bps при стопе 0.3% съедает 6.7%
+         стопа и поднимает планку с 40% до 42.7%. А при стопе в 20 тиков (0.01%)
+         та же комиссия делает торговлю невозможной ни при каком винрейте.
+
+         Формула сокращается до величины, не зависящей от размера позиции:
+             нужен WR = (1 + комиссия/стоп) / (R:R + 1)
+         потому что и комиссия, и стоп пропорциональны объёму, и объём сокращается.
+         Значит вопрос «потяну ли я такой стоп» решается ДО сессии и без калькуляций
+         в моменте — ровно то, ради чего эта фаза и существует. -->
+    <div class="calc-note" id="c_wrNote" style="margin-top:6px"></div>
   </div>
   </div>
   </div>
@@ -3194,6 +3231,47 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(entry>0&&stop>0&&entry!==stop&&lev>0){const dist=Math.abs(entry-stop)/entry*100,margin=dist*lev;
       dEl.textContent=dist.toFixed(3)+'%';mEl.textContent=margin.toFixed(2)+'%';mEl.className='sv '+(margin>20?'danger':margin>8?'warn':'green');}
     else{mEl.textContent='—';dEl.textContent='—';mEl.className='sv';}
+    /* ═══ НУЖЕН ВИНРЕЙТ: ПЛАНКА, НИЖЕ КОТОРОЙ СЕРИЯ УБЫТОЧНА ═══
+     * нужен WR = (1 + комиссия/стоп) / (R:R + 1)
+     * Размер позиции сюда не входит и входить не может: комиссия и стоп ей
+     * пропорциональны оба, и объём сокращается. Поэтому планка считается от
+     * одной только геометрии сделки — до сессии, а не в моменте.
+     *
+     * Отдельно ловим вырожденный случай: если комиссия больше выигрыша, планка
+     * уходит за 100% и сделка убыточна ПРИ ЛЮБОЙ правоте. Показать «нужен 140%»
+     * было бы честнее, чем ничего, но непонятнее, чем сказать прямо. */
+    const nEl=document.getElementById('o_needwr'), noteEl=document.getElementById('c_wrNote');
+    if(nEl){
+      const rr=parseFloat((document.getElementById('c_rr')||{}).value)||0;
+      const feeBps=parseFloat((document.getElementById('c_fee')||{}).value);
+      const fee=isFinite(feeBps)?feeBps:0;
+      const stopPct=(entry>0&&stop>0&&entry!==stop)?Math.abs(entry-stop)/entry*100:0;
+      if(stopPct>0&&rr>0){
+        const ratio=(fee*0.01)/stopPct;              // комиссия и стоп — оба в % цены
+        const need=(1+ratio)/(rr+1)*100;
+        const cleanNeed=100/(rr+1);                   // та же планка без комиссии
+        if(need>=100){
+          nEl.textContent='недостижим';nEl.className='sv danger';
+          if(noteEl)noteEl.innerHTML='<b>Комиссия больше выигрыша.</b> При стопе '+stopPct.toFixed(3)+
+            '% и комиссии '+fee+' bps сделка убыточна при любом винрейте. Нужен стоп шире '+
+            (fee*0.01*(1+1/rr)).toFixed(3)+'% либо комиссия ниже.';
+        }else{
+          nEl.textContent=need.toFixed(1)+'%';
+          nEl.className='sv '+(wr>0?(wr>=need?'green':'danger'):'');
+          if(noteEl){
+            const dz=(need-cleanNeed);
+            noteEl.innerHTML='Без комиссии хватило бы '+cleanNeed.toFixed(1)+'% — комиссия добавляет '+
+              dz.toFixed(1)+' п.п. '+
+              (wr>0&&wr<100
+                ? (wr>=need
+                    ? '<b style="color:var(--green)">Твои '+wr+'% выше планки на '+(wr-need).toFixed(1)+' п.п.</b>'
+                    : '<b style="color:var(--danger)">Твои '+wr+'% ниже планки на '+(need-wr).toFixed(1)+
+                      ' п.п. Тот же винрейт окупится при R:R от '+((1+ratio)/(wr/100)-1).toFixed(2)+'.</b>')
+                : '');
+          }
+        }
+      } else { nEl.textContent='—';nEl.className='sv'; if(noteEl)noteEl.textContent=''; }
+    }
     if(wr>0&&wr<100&&risk>0){const p=wr/100,rr=1.5,expR=p*rr-(1-p);let ror;
       if(expR<=0)ror=100;else{const A=expR/(p*rr*rr+(1-p)),units=100/risk;ror=Math.pow((1-A)/(1+A),units)*100;if(!isFinite(ror)||ror<0)ror=0;if(ror>100)ror=100;}
       rEl.textContent=ror<0.01?'<0.01%':ror.toFixed(2)+'%';rEl.className='sv '+(ror>50?'danger':ror>15?'warn':'green');}
@@ -6076,8 +6154,36 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       }
       // пространство вариантов в разметке: у боевой зоны сразу виден альтернативный сценарий —
       // что произойдёт, если рынок опровергнет основной (fade ↔ пробой одной и той же стены).
-      z.forEach(o=>{ if(o.kind==='fade')o.note+=' · если стену съедят → сценарий SQUEEZE (пробой)';
-        else if(o.kind==='break')o.note+=' · если стена устоит → сценарий VALENTINI (отбой)'; });
+      /* ═══ ЗАМЕР ПРОТИВ ПОСЫЛКИ (119 часов ETH, connector/Wall.js) ═══
+       * Отдельная пометка, потому что она противоречит тому, как fade выглядит
+       * интуитивно. Пассивный залив ВНУТРИ очереди стены даёт −3.1 тика, а в
+       * тонкой очереди −0.8; перестановочный тест p=0.002, эффект монотонен на
+       * горизонтах 0.5–5 с.
+       *
+       * Механика, а не мнение: чтобы наша лимитка в хвосте огромной очереди
+       * исполнилась, эту очередь должны съесть насквозь. Залив приходит ровно
+       * в момент, когда стену пробили — то есть исполнение САМО является
+       * новостью о том, что тезис отбоя больше не действует.
+       *
+       * Это НЕ отменяет fade и не говорит, куда пойдёт цена. Это говорит,
+       * что «встать лимиткой в стену и ждать отбоя» и «дождаться отбоя» —
+       * разные вещи, и первое замерено убыточным. Решение за трейдером,
+       * задача пометки — чтобы он принимал его, зная число.
+       *
+       * Условие смотрит на ИСХОДНУЮ заметку, до дописок. Первая версия шла
+       * вторым проходом и проверяла «есть ли слово стена» — а его к тому
+       * моменту дописывал сам же предыдущий проход в каждую fade-зону.
+       * Проверка, которая всегда истинна, только выглядит проверкой. */
+      z.forEach(o=>{
+        // \b здесь НЕ РАБОТАЕТ: в JS граница слова определена по ASCII, а «ы»
+        // для неё не буква — между «стены» и пробелом границы нет, и regexp
+        // молча не совпадал ни разу. Поймано проверкой на образцах, а не глазами.
+        const fromWall=/(ask|bid)-стены/.test(o.note||'');
+        if(o.kind==='fade'){
+          o.note+=' · если стену съедят → сценарий SQUEEZE (пробой)';
+          if(fromWall)o.note+=' · лимитка В стене: сам залив = стену съели (замер 119 ч: −3.1 тика против −0.8 в тонкой очереди)';
+        } else if(o.kind==='break')o.note+=' · если стена устоит → сценарий VALENTINI (отбой)';
+      });
       z.sort((a,c)=>c.px-a.px);
       const topZ=z.slice().sort((a,c)=>(c.stars-a.stars)||(Math.abs(a.px-price)-Math.abs(c.px-price)))[0];
       _lastQuickPrice=price;
@@ -9061,10 +9167,39 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // Проверить это можно только на реальном телефоне, поэтому телефон и становится
   // измерительным прибором: страница сама сообщает, что у неё вылезает за экран.
   // Отчёт идёт в Процессинг — новой панели не завожу, лишний экран тут не нужен.
+  /* ═══ ДВЕ ЛОЖНЫЕ ТРЕВОГИ, ИЗ-ЗА КОТОРЫХ ЗНАЧОК ГОРЕЛ ПОСТОЯННО ═══
+   * Трейдер пожаловался на уведомление о неправильной вёрстке. Проверка на
+   * живой странице показала ровно двух «виновников», и оба оказались чисты:
+   *
+   *   .hub-tab +43px  — вкладка внутри .hub-tabs, у которых overflow-x:auto.
+   *     Ребёнок ШИРЕ экрана намеренно, ради этого прокрутка и сделана. Старый
+   *     код проверял прокрутку только у САМОГО элемента и у прямого родителя,
+   *     а контейнер при этом не вылезает — поэтому вина падала на ребёнка.
+   *   .hint-tip +139px — скрытая подсказка. У неё opacity:0, но offsetParent
+   *     не null (прозрачность не убирает элемент из потока), и детектор мерил
+   *     невидимое.
+   *
+   * То есть значок жаловался на собственную слепоту. Детектор, который нельзя
+   * погасить починкой вёрстки, — это шум, и трейдер справедливо им раздражён. */
+  function _visible(el){
+    const s=getComputedStyle(el);
+    if(s.visibility==='hidden'||s.opacity==='0')return false;
+    // подсказки/оверлеи, не принимающие ввод, пользователь не видит как элемент
+    if(s.pointerEvents==='none'&&+s.opacity===0)return false;
+    return true;
+  }
+  function _inScroller(el){
+    for(let p=el.parentElement;p&&p!==document.body;p=p.parentElement){
+      const ox=getComputedStyle(p).overflowX;
+      if(/auto|scroll/.test(ox)&&p.scrollWidth-p.clientWidth>1)return true;
+    }
+    return false;
+  }
   function _ovScan(){
     const W=document.documentElement.clientWidth, hits={};
     document.querySelectorAll('.wrap *').forEach(el=>{
       if(!el.offsetParent)return;                       // скрытое не меряем
+      if(!_visible(el))return;                          // прозрачное — тоже скрытое
       const r=el.getBoundingClientRect();
       if(r.width<=0)return;
       const over=Math.round(r.right-W);
@@ -9072,6 +9207,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       // элемент со своей горизонтальной прокруткой — это решение, а не дефект
       const ox=getComputedStyle(el).overflowX;
       if(/auto|scroll/.test(ox)&&el.scrollWidth-el.clientWidth>1)return;
+      if(_inScroller(el))return;                        // прокрутка ЛЮБОГО предка
       // если родитель вылезает тоже — виноват он, ребёнок лишь следствие
       const p=el.parentElement;
       if(p&&p.classList&&!p.classList.contains('wrap')&&p.getBoundingClientRect().right-W>1)return;
@@ -9090,8 +9226,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const bad={};
     document.querySelectorAll('button,.btn,[onclick],select,input[type=checkbox]').forEach(el=>{
       if(!el.offsetParent)return;
+      if(!_visible(el))return;
       const r=el.getBoundingClientRect();
       if(r.width<=0||r.height<=0)return;
+      // Порог применяем к ВЫСОТЕ и ШИРИНЕ по-разному. Строка-кнопка во всю
+      // ширину экрана высотой 24px нажимается пальцем безошибочно — промахнуться
+      // некуда. Проблема только у мелких по ОБОИМ измерениям. Старый Math.min
+      // этого не различал и записывал в дефекты каждую широкую строку.
+      if(r.width>=44&&r.height>=24)return;
       const m=Math.min(r.width,r.height);
       if(m>=32)return;
       const cn=(typeof el.className==='string')?el.className.trim():'';
