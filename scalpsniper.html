@@ -656,6 +656,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .hint-wrap{position:relative;display:inline-flex;align-items:center;vertical-align:middle;margin-left:6px}
   .hint-ico{width:14px;height:14px;border-radius:50%;border:1px solid var(--line);display:inline-flex;align-items:center;justify-content:center;font-size:8px;color:var(--text-faint);cursor:default;transition:border-color .12s,color .12s;flex-shrink:0;font-style:normal;font-family:'JetBrains Mono',monospace;line-height:1;user-select:none}
   .hint-wrap:hover .hint-ico,.hint-wrap.open .hint-ico{border-color:var(--accent-dim);color:var(--accent)}
+  /* Строка глубокой книги: отдельным блоком под сводной картой, приглушённее
+     её — это дополнение, а не замена, и вид должен об этом говорить. */
+  .sw-deep{margin-top:4px;padding-top:4px;border-top:1px dashed var(--line-soft);
+    font-size:10.5px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;line-height:1.5}
   .hint-tip{position:absolute;left:0;bottom:calc(100% + 8px);background:var(--panel-2);border:1px solid var(--glass-border);border-radius:6px;padding:8px 11px;font-size:10px;color:var(--text-dim);line-height:1.55;min-width:180px;max-width:min(240px,calc(100vw - 24px));pointer-events:none;opacity:0;transition:opacity .15s;z-index:200;font-family:'JetBrains Mono',monospace;font-weight:400;box-shadow:0 4px 16px rgba(0,0,0,.5);white-space:normal}
   /* в правой панели всплывашка раскрывается влево, чтобы не обрезаться у края */
   .t-side .hint-tip{left:auto;right:0}
@@ -1671,6 +1675,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     .lc-chk{min-height:32px;padding:6px 9px;display:inline-flex;align-items:center}
     .zr-reset{min-height:32px;padding:6px 10px;display:inline-flex;align-items:center}
     .clear-zones-btn{min-height:32px;padding:6px 12px}
+    .sw-deep{font-size:10px}
     /* ═══ ОСТАЛЬНЫЕ МЕЛКИЕ КНОПКИ (замерено на живой странице 2026-08-10) ═══
      * Первый заход поднял только три штуки — по памяти, а не по замеру. Обход
      * страницы показал ещё восемь классов ниже порога: иконки шапки 23px,
@@ -4911,7 +4916,35 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           const parts=[];
           if(wa)parts.push('<span class="sw-up">⛰↑ '+f(wa[0])+' · '+(wa[1]*100).toFixed(0)+'%'+age(f(wa[0]))+' ('+(((wa[0]-px)/px)*100).toFixed(2)+'%)</span>');
           if(wb)parts.push('<span class="sw-dn">⛰↓ '+f(wb[0])+' · '+(wb[1]*100).toFixed(0)+'%'+age(f(wb[0]))+' ('+(((px-wb[0])/px)*100).toFixed(2)+'%)</span>');
-          el.innerHTML=(parts.length?('ликвидность: '+parts.join(' · ')):'ликвидность: концентраций рядом нет')+' <span class="sw-src">сводно'+(books.length>1?' ×2':'')+'</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Сводная карта ликвидности из нескольких книг (перп+спот) · стена = узел ≥1.8× среднего, % — доля стороны книги · стрелка и % — где и как далеко от цены · возраст: ‹1м — свежая/переставляется, долгожитель — реальный интерес · наблюдение, не сигнал</span></span>';
+          /* ═══ СТЕНКА ИЗ ГЛУБОКОЙ КНИГИ ═══
+           * Карта выше строится по топ-20 из снапшота. Локальная книга по
+           * инкрементам держит на порядок больше (замерено на живой странице:
+           * медиана 424 уровня против 20), и крупный уровень за пределами
+           * топ-20 в эту карту не попадал вообще.
+           *
+           * Показываем ОТДЕЛЬНОЙ строкой и с явной пометкой источника, а не
+           * подмешиваем в общую: это разные глубины обзора, и смешивать их
+           * значит выдавать одно за другое. Отношение считается к МЕДИАННОМУ
+           * уровню — среднее одна крупная стенка тянет вверх и делает себя
+           * «обычной».
+           *
+           * ВАЖНАЯ ОГОВОРКА, найденная замером: отношение зависит от того,
+           * насколько книга заполнена. На 259 уровнях оно было 1.9×, на 424 —
+           * 108×, потому что дальние мелкие уровни опускают медиану. Поэтому
+           * рядом печатается число уровней: без него величина не читается. */
+          let deepLine='';
+          if(typeof _deep!=='undefined'&&_deep.on&&_deep.wall&&Date.now()-_deep.at<15000){
+            const w=_deep.wall, dir=w.dist>0?'↑':'↓';
+            deepLine='<div class="sw-deep">своя книга ('+_deep.levels+' ур.): '+
+              'крупнейший уровень '+w.px+' '+dir+' '+Math.abs(w.dist).toFixed(2)+'% · '+
+              w.ratio+'× медианы · '+(w.bid?'бид':'аск')+
+              '<span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">'+
+              'Книга собрана локально по инкрементам и сверена со снапшотами (8 совпадений подряд до включения). '+
+              'Видит уровни за пределами топ-20, которых нет в карте выше. Отношение к медианному уровню зависит от '+
+              'заполненности книги — поэтому число уровней указано рядом. Замер на 119 часах: пассивный залив ВНУТРИ '+
+              'стенки — самый токсичный вход (p=0.002). Наблюдение, не сигнал.</span></span></div>';
+          }
+          el.innerHTML=(parts.length?('ликвидность: '+parts.join(' · ')):'ликвидность: концентраций рядом нет')+deepLine+' <span class="sw-src">сводно'+(books.length>1?' ×2':'')+'</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Сводная карта ликвидности из нескольких книг (перп+спот) · стена = узел ≥1.8× среднего, % — доля стороны книги · стрелка и % — где и как далеко от цены · возраст: ‹1м — свежая/переставляется, долгожитель — реальный интерес · наблюдение, не сигнал</span></span>';
           el.title='Сводная карта ликвидности: несколько книг (перп+спот) нормируются в доли своей стороны и усредняются. Стена = уровень с долей >1.8× среднего. Проценты — доля стороны книги.';
         }
       }
@@ -6907,7 +6940,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
      * и так приходят. Разошлось — молча возвращаемся к снапшотам. Замена без
      * доказательства здесь стоила бы главного экрана. */
     var iBids=new Map(), iAsks=new Map(), iVer=0, iSynced=false;
-    var iAgree=0, iMiss=0, iOn=false, iLast=0;
+    var iAgree=0, iMiss=0, iOn=false, iLast=0, iLastCheck=0;
     const I_NEED=8;               // столько совпадений подряд до доверия
     function iApply(d){
       var A=d.asks||[], B=d.bids||[], i;
@@ -6932,6 +6965,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         if(Math.abs(a[k].p-(+snapA[k][0]))>1e-9)ok=false;
         if(Math.abs(b[k].p-(+snapB[k][0]))>1e-9)ok=false;
       }
+      iLastCheck=Date.now();     // отметка нужна сторожу протухания, см. ниже
       if(ok){ iAgree++; iMiss=0; if(!iOn&&iAgree>=I_NEED){ iOn=true; self.postMessage({t:'deep',on:true,levels:iBids.size+iAsks.size}); } }
       else { iMiss++; iAgree=0;
         // Одно расхождение — это гонка сообщений, а не поломка. Три подряд —
@@ -7090,6 +7124,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
        *
        * Раз в секунду: глубина — величина сессионного масштаба, слать её
        * десять раз в секунду значило бы грузить UI ради неменяющегося числа. */
+      /* ═══ СТОРОЖ ПРОТУХШЕЙ СВЕРКИ ═══
+       * Найдено замером на живой странице: книга держалась включённой два
+       * часа, и это выглядело как надёжность. Но iOn держится ТОЛЬКО тем,
+       * что сверка проходит; если канал снапшотов замолчит, сверка не провалится
+       * — она просто перестанет вызываться, а флаг останется поднятым.
+       * Книга продолжит собираться из дельт, и никто не заметит, что её больше
+       * не с чем сравнивать. Молчание проверки — не то же самое, что её успех. */
+      if(iOn && iLastCheck && now-iLastCheck>10000){
+        iOn=false; iAgree=0;
+        self.postMessage({t:'deep',on:false,reason:'снапшоты замолчали, сверять не с чем'});
+      }
       if(iOn && now-(self._deepSent||0)>=1000 && mid>0){
         self._deepSent=now;
         var all=[], mx=null;
