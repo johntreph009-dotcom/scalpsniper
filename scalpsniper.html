@@ -4935,13 +4935,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           let deepLine='';
           if(typeof _deep!=='undefined'&&_deep.on&&_deep.wall&&Date.now()-_deep.at<15000){
             const w=_deep.wall, dir=w.dist>0?'↑':'↓';
-            deepLine='<div class="sw-deep">своя книга ('+_deep.levels+' ур.): '+
+            deepLine='<div class="sw-deep">своя книга ('+_deep.levels+' ур., в окне ±1% — '+(_deep.near||0)+'): '+
               'крупнейший уровень '+w.px+' '+dir+' '+Math.abs(w.dist).toFixed(2)+'% · '+
-              w.ratio+'× медианы · '+(w.bid?'бид':'аск')+
+              w.ratio+'× медианы окна · '+(w.bid?'бид':'аск')+' '+
               '<span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">'+
               'Книга собрана локально по инкрементам и сверена со снапшотами (8 совпадений подряд до включения). '+
-              'Видит уровни за пределами топ-20, которых нет в карте выше. Отношение к медианному уровню зависит от '+
-              'заполненности книги — поэтому число уровней указано рядом. Замер на 119 часах: пассивный залив ВНУТРИ '+
+              'Видит уровни за пределами топ-20, которых нет в карте выше. Отношение считается к медиане уровней В ТОМ ЖЕ окне ±1%, '+
+              'а не всей книги: медиана всей книги падает по мере накопления дальних мелких уровней, и отношение к ней мерило бы '+
+              'возраст подписки, а не размер стенки. Замер на 119 часах: пассивный залив ВНУТРИ '+
               'стенки — самый токсичный вход (p=0.002). Наблюдение, не сигнал.</span></span></div>';
           }
           el.innerHTML=(parts.length?('ликвидность: '+parts.join(' · ')):'ликвидность: концентраций рядом нет')+deepLine+' <span class="sw-src">сводно'+(books.length>1?' ×2':'')+'</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Сводная карта ликвидности из нескольких книг (перп+спот) · стена = узел ≥1.8× среднего, % — доля стороны книги · стрелка и % — где и как далеко от цены · возраст: ‹1м — свежая/переставляется, долгожитель — реальный интерес · наблюдение, не сигнал</span></span>';
@@ -7140,15 +7141,32 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         var all=[], mx=null;
         iBids.forEach(function(s,p){ if(s>0)all.push({p:p,s:s,b:1}); });
         iAsks.forEach(function(s,p){ if(s>0)all.push({p:p,s:s,b:0}); });
-        if(all.length>=12){
-          var sz=all.map(function(x){return x.s;}).sort(function(x,y){return x-y;});
+        /* ═══ МЕДИАНА СЧИТАЕТСЯ В ТОМ ЖЕ ОКНЕ, ЧТО И ПОИСК СТЕНКИ ═══
+         * Первая версия брала медиану по ВСЕЙ книге, а стенку искала в пределах
+         * 1% от цены. Замер на живой странице поймал последствие: при 259
+         * уровнях отношение вышло 1.9×, при 313 — 2.7×, при 424 — 108×. Рынок
+         * был тот же; менялась только заполненность книги.
+         *
+         * Механика: чем дольше живёт соединение, тем больше накапливается
+         * дальних мелких уровней, тем ниже медиана всей книги и тем выше любое
+         * отношение к ней. То есть число мерило возраст подписки, а не размер
+         * стенки — и трейдер видел бы «стенка выросла в пятьдесят раз» там, где
+         * не изменилось ничего.
+         *
+         * Правило то же, что и в остальных замерах проекта: величина не имеет
+         * права зависеть от того, чего смотрящий не видит. Считаем медиану по
+         * тем же уровням, среди которых ищем максимум. */
+        var near=[];
+        for(var i2=0;i2<all.length;i2++){
+          var d2=Math.abs(all[i2].p-mid)/mid;
+          if(d2>0.01)continue;                       // дальше 1% — уже не «рядом с ценой»
+          near.push(all[i2]);
+          if(!mx||all[i2].s>mx.s)mx=all[i2];
+        }
+        if(near.length>=12){
+          var sz=near.map(function(x){return x.s;}).sort(function(x,y){return x-y;});
           var med=sz[sz.length>>1]||1;
-          for(var i2=0;i2<all.length;i2++){
-            var d2=Math.abs(all[i2].p-mid)/mid;
-            if(d2>0.01)continue;                     // дальше 1% — уже не «рядом с ценой»
-            if(!mx||all[i2].s>mx.s)mx=all[i2];
-          }
-          self.postMessage({t:'deepbook', levels:all.length, med:med,
+          self.postMessage({t:'deepbook', levels:all.length, near:near.length, med:med,
             wall: mx? {px:mx.p, ratio:+(mx.s/med).toFixed(1), bid:!!mx.b,
                        dist:+(((mx.p-mid)/mid)*100).toFixed(3)} : null});
         }
@@ -7158,7 +7176,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   /* Состояние глубокой книги. Живёт отдельно от снапшота намеренно: пока
    * `on` false, ни одна ветка отрисовки о ней не знает и терминал работает
    * как до правки. */
-  let _deep={on:false,levels:0,med:0,wall:null,at:0,since:0,why:''};
+  let _deep={on:false,levels:0,near:0,med:0,wall:null,at:0,since:0,why:''};
   let _dlRows=[], _dlHover=null, _dlBookBound=false, _dlSm=null;   // _dlSm — сглаженные объёмы корзин
   function _dlBindBook(cv){
     if(_dlBookBound||!cv)return; _dlBookBound=true;
@@ -7537,7 +7555,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         if(d&&d.t==='deep'){ _deep.on=!!d.on; _deep.why=d.reason||''; _deep.since=Date.now();
           if(typeof _proc==='function')_proc(d.on?('глубокая книга подключена: '+(d.levels||0)+' уровней')
             :('глубокая книга отключена'+(d.reason?' — '+d.reason:'')),d.on?'':'pr-warn'); return; }
-        if(d&&d.t==='deepbook'){ _deep.levels=d.levels||0; _deep.med=d.med||0; _deep.wall=d.wall||null; _deep.at=Date.now(); return; }
+        if(d&&d.t==='deepbook'){ _deep.levels=d.levels||0; _deep.near=d.near||0; _deep.med=d.med||0; _deep.wall=d.wall||null; _deep.at=Date.now(); return; }
         if(d&&d.t==='snap'){ _dlSnap=new Float32Array(d.buf); _dlModel=d.m||null; if(d.src)_dlSrc=d.src; _dlMsgCount++; if(_dlSnap[0]>0){_dlHist.push(_dlSnap[0]); _dlTick++; _dlLastSnap=Date.now(); if(_dlHist.length>180)_dlHist.shift(); _gsHistPush(_dlSnap[0]);}
         // Трекер стен нужен ВСЕГДА: на нём держатся сценарии в стакане (отскок / пробой / разъедают).
         // При включённом автопилоте микро считает сам _apOnSnap; при выключенном — ведём его отдельно.
