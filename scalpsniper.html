@@ -6057,22 +6057,45 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       // и берём с него ТОЛЬКО контекст: где стоит объём и где структурные края.
       // Звёзды и протоколы намеренно не трогаем — скоринг сейчас под замером,
       // менять его молча во время прогона значит испортить выборку.
-      const htfMap={'1m':'15m','3m':'30m','5m':'1h','15m':'4h','30m':'4h','1h':'1d','4h':'1d','1d':null};
+      /* ═══ U6: ДВА СТАРШИХ ГОРИЗОНТА, А НЕ ОДИН ═══
+       * Было: один старший ТФ. Уровень, который держит и час, и сутки, ничем
+       * не отличался от уровня, который держит только час, — а это разные
+       * вещи, и трейдер их различает глазами, переключая графики руками.
+       *
+       * ДОБАВЛЕН 2h В КАРТУ. Он появился в кнопках сегодня, и без записи здесь
+       * выбор 2h дал бы `htfMap['2h'] === undefined`, то есть разметку вообще
+       * без структуры старшего ТФ — молча, без единой ошибки в консоли. Ровно
+       * тот же класс дыры, что был с баром OKX. Поэтому ниже стоит проверка
+       * полноты карты: она кричит в Процессинг, если появился ТФ без старшего.
+       *
+       * ЗВЁЗДЫ НЕ ТРОГАЕМ. Базовая линия показала, что для fade они и так
+       * указывают в неверную сторону; подмешивать туда ещё один множитель до
+       * накопления статистики значит смешать два эффекта и не суметь их потом
+       * разделить. Совпадение с горизонтом — ПОМЕТКА, а не оценка. */
+      const htfMap ={'1m':'15m','3m':'30m','5m':'1h','15m':'4h','30m':'4h','1h':'1d','2h':'1d','4h':'1d','1d':null};
+      const htf2Map={'1m':'4h', '3m':'4h', '5m':'4h','15m':'1d','30m':'1d','1h':null,'2h':null,'4h':null,'1d':null};
+      if(typeof _proc==='function'&&!(tf in htfMap))
+        _proc('разметка: у ТФ '+tf+' не задан старший горизонт — структура не построится','pr-warn');
       const htf=htfMap[tf]||null;
+      const htf2=htf2Map[tf]||null;
       let hPoc=null,hH=null,hL=null,hDir=null;
-      if(htf){
+      let h2H=null,h2L=null,h2Poc=null;
+      /* Один и тот же расчёт для обоих горизонтов: копия кода разошлась бы
+       * через месяц, и уровни двух ТФ считались бы по-разному. */
+      const structOf=async(itf)=>{
         try{
-          const hk=await _klRaw(sym,htf,120);
-          if(hk&&hk.length){
-            const hb=_niceBucket(price)*Math.max(1,tfMult*3);   // корзина крупнее: на старшем ТФ объём размазан шире
-            const hm={}; hk.forEach(k=>{const tp=(+k[2]+ +k[3]+ +k[4])/3; const key=Math.round(tp/hb)*hb; hm[key]=(hm[key]||0)+ +k[5];});
-            let bv=-1; for(const k in hm){ if(hm[k]>bv){bv=hm[k];hPoc=+k;} }
-            hH=Math.max(...hk.map(k=>+k[2])); hL=Math.min(...hk.map(k=>+k[3]));
-            const hc=hk.map(k=>+k[4]).slice(-20), hma=hc.reduce((a,c)=>a+c,0)/(hc.length||1);
-            hDir = price>hma*1.001?'up' : price<hma*0.999?'down' : 'flat';
-          }
-        }catch(e){}
-      }
+          const hk=await _klRaw(sym,itf,120);
+          if(!hk||!hk.length)return null;
+          const hb=_niceBucket(price)*Math.max(1,tfMult*3);   // корзина крупнее: на старшем ТФ объём размазан шире
+          const hm={}; hk.forEach(k=>{const tp=(+k[2]+ +k[3]+ +k[4])/3; const key=Math.round(tp/hb)*hb; hm[key]=(hm[key]||0)+ +k[5];});
+          let bv=-1,poc=null; for(const k in hm){ if(hm[k]>bv){bv=hm[k];poc=+k;} }
+          const H=Math.max(...hk.map(k=>+k[2])), L=Math.min(...hk.map(k=>+k[3]));
+          const hc=hk.map(k=>+k[4]).slice(-20), hma=hc.reduce((a,c)=>a+c,0)/(hc.length||1);
+          return {poc,H,L,dir:price>hma*1.001?'up':price<hma*0.999?'down':'flat'};
+        }catch(e){ return null; }
+      };
+      if(htf){ const s1=await structOf(htf); if(s1){hPoc=s1.poc;hH=s1.H;hL=s1.L;hDir=s1.dir;} }
+      if(htf2){ const s2=await structOf(htf2); if(s2){h2Poc=s2.poc;h2H=s2.H;h2L=s2.L;} }
       try{funding=await _fundingAny(sym);}catch(e){}
       try{oi=await _oiAny(sym);}catch(e){}
       const agg=arr=>{const m={}; arr.forEach(a=>{const p=+a[0],q=+a[1],key=Math.round(p/b)*b; m[key]=(m[key]||0)+p*q;}); return m;};
@@ -6131,6 +6154,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         if(hPoc&&Math.abs(hPoc-price)/price>0.003&&Math.abs(hPoc-price)/price<=within&&farFromAll(hPoc))
           z.push({px:_rpx(hPoc),kind:'watch',note:'POC '+htf+' — где стоит объём старшего ТФ',stop:null,proto:null,stars:2,createdAt:Date.now(),origin:'auto',htf:'poc'});
       }
+      /* Структура ВТОРОГО горизонта. Добавляется только там, где рядом ещё
+       * ничего нет: смысл второго ТФ — показать уровень, которого не видно
+       * на первом, а не продублировать его же под другим именем. */
+      if(htf2){
+        if(h2H&&h2H>price*1.003&&h2H<=price*(1+within)&&farFromAll(h2H))
+          z.push({px:_rpx(h2H),kind:'watch',note:'хай '+htf2+' — структура дальнего горизонта',stop:null,proto:null,stars:2,createdAt:Date.now(),origin:'auto',htf:'high2'});
+        if(h2L&&h2L<price*0.997&&h2L>=price*(1-within)&&farFromAll(h2L))
+          z.push({px:_rpx(h2L),kind:'watch',note:'лоу '+htf2+' — структура дальнего горизонта',stop:null,proto:null,stars:2,createdAt:Date.now(),origin:'auto',htf:'low2'});
+        if(h2Poc&&Math.abs(h2Poc-price)/price>0.003&&Math.abs(h2Poc-price)/price<=within&&farFromAll(h2Poc))
+          z.push({px:_rpx(h2Poc),kind:'watch',note:'POC '+htf2+' — объём дальнего горизонта',stop:null,proto:null,stars:2,createdAt:Date.now(),origin:'auto',htf:'poc2'});
+      }
       // СОВПАДЕНИЕ СО СТАРШИМ ГОРИЗОНТОМ — помечаем как наблюдение, не как оценку.
       // Звёзды не двигаем: базовая линия показала, что для fade они и так указывают
       // в неверную сторону, и подмешивать туда ещё один множитель до накопления
@@ -6143,12 +6177,26 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         const tol=Math.max(b*0.6,price*0.0003);
         // И помечаем ТОЛЬКО ближайшую зону к уровню: совпадение — это «вот этот
         // уровень», а не «где-то здесь». Иначе метка размывается по кластеру.
-        [['POC '+htf,hPoc],['хаем '+htf,hH],['лоу '+htf,hL]].forEach(([lbl,lv])=>{
+        /* ДВА ГОРИЗОНТА СРАЗУ. Уровень, совпавший и с ближним старшим ТФ,
+         * и с дальним, помечается отдельно — это редкий случай, и трейдер
+         * до сих пор находил его, руками переключая графики.
+         *
+         * Метка остаётся НАБЛЮДЕНИЕМ. Насколько двойное совпадение лучше
+         * одинарного — не измерено; поле `hc2` пишется в зону именно затем,
+         * чтобы это стало измеримым позже на накопленных сессиях. Ставить
+         * оценку раньше замера в этом проекте уже выходило боком. */
+        const marks=[['POC '+htf,hPoc],['хаем '+htf,hH],['лоу '+htf,hL]];
+        if(htf2)marks.push(['POC '+htf2,h2Poc],['хаем '+htf2,h2H],['лоу '+htf2,h2L]);
+        marks.forEach(([lbl,lv])=>{
           if(!(lv>0))return;
           let best=null,bd=Infinity;
-          z.forEach(o=>{ if(o.htf||o.htfHit)return;
+          z.forEach(o=>{ if(o.htf)return;
             const d=Math.abs(o.px-lv); if(d<=tol&&d<bd){bd=d;best=o;} });
-          if(best){ best.htfHit=lbl; best.hc=true; best.note+=' · совпадает с '+lbl; }
+          if(!best)return;
+          if(!best.htfHit){ best.htfHit=lbl; best.hc=true; best.note+=' · совпадает с '+lbl; }
+          else if(best.htfHit!==lbl && !best.hc2){
+            best.hc2=true; best.note+=' · И с '+lbl+' — два горизонта';
+          }
         });
       }
       // пространство вариантов в разметке: у боевой зоны сразу виден альтернативный сценарий —
