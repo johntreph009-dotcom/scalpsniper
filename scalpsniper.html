@@ -8796,61 +8796,44 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     ['dayTrend','dayCtx','zonesTitle','zonesFresh','zoneRead'].forEach(id=>{
       const el=document.getElementById(id); if(el)root.appendChild(el);
     });
+    /* ═══ ОДИН ПОРЯДОК БЛОКОВ НА ВСЕ ЭКРАНЫ ═══
+     * ДО 2026-08-12 ПОРЯДКОВ БЫЛО ДВА: на телефоне активная зона шла третьей,
+     * на мониторе — девятой, стакан на мониторе вторым, на телефоне седьмым.
+     * Замысел был разумный (на узком экране стакан съедает пол-экрана), но
+     * цена оказалась выше пользы: терминал, который на двух устройствах
+     * выглядит по-разному, приходится ЗАУЧИВАТЬ дважды. В сессии рука должна
+     * идти к блоку не глядя, а она помнит одно расположение, не два.
+     *
+     * Единый порядок построен по ПРИОРИТЕТУ РЕШЕНИЯ, а не по размеру экрана:
+     * сначала «куда идёт день», потом «где цена», потом «что делать сейчас»,
+     * потом план целиком, и только затем то, во что смотрят между решениями —
+     * график, стакан, стены. Контекст и разбор себя — в конце: они читаются
+     * до сессии и после неё, а не в момент.
+     *
+     * Стакан ниже активной зоны и на мониторе тоже. Это сознательная уступка
+     * узкому экрану: на широком от неё теряется немного (прокрутить полэкрана),
+     * на узком выигрывается главное — то, ради чего открывают терминал в
+     * моменте, видно без прокрутки. */
     const ORDER=[
-      '#dayTrend',       // 0. куда идёт день — первое, что нужно знать
-      '#dayCtx',         // 0. поток, объём, фандинг
-      '#priceTitle',     // 2. инструмент. ИМЕННО ID, а не .section-title:
-                         //    у заголовка зон тот же класс, и общий селектор
-                         //    перекрывал частный — ранг берётся по первому
-                         //    совпадению, и заголовок зон уезжал сюда же.
-      '.live-bar',       // 3. цена — где я
-      '#prepPhase',      // 4. план (свёрнут, разворачивается кнопкой)
-      '#hub',            // 5. стакан и автопилот — то, во что смотришь постоянно
-      '.sess-pchart',    // 6. пульс цены — сразу под хабом, это оперативные данные
-      '#sessWalls',      // 7. стены у цены
-      '#zonesTitle',     // 8. заголовок зон и кнопки обновления — НАД графиком:
-      '#zonesFresh',     //    свежесть разметки нужна раньше, чем сама разметка
-      '#miniChartWrap',  // 9. график с зонами
-      '#liveCard',       // 9. активная зона: план читается после контекста графика
-      '#zoneLadder',     // 10. весь план целиком
-      '#sessionCtx',     // 11. байас и контекст дня — КОНТЕКСТ, а не оперативка:
-                         //     приоритет стороны, лимиты, режим волатильности.
-                         //     Читается после того, как увидел цену, график и зоны.
-      '#zoneRead',       // 12. точность чтения и дисциплина — рядом с байасом,
-                         //     это оценка себя, а не рынка
-      '#posBlock'        // 13. исполнение: позиция и калькулятор риска
+      '#dayTrend',       // куда идёт день
+      '#dayCtx',         // поток, объём, фандинг
+      '#priceTitle',     // инструмент. ИМЕННО ID: у заголовка зон тот же класс,
+                         // и общий селектор перекрывал частный
+      '.live-bar',       // цена — где я
+      '#liveCard',       // ЧТО ДЕЛАТЬ СЕЙЧАС: активная зона с планом и стопом
+      '#zonesTitle',     // свежесть разметки нужна раньше самой разметки
+      '#zonesFresh',
+      '#zoneLadder',     // весь план целиком
+      '#miniChartWrap',  // график с зонами — смотрят, когда есть время
+      '.sess-pchart',    // пульс цены
+      '#hub',            // стакан и автопилот
+      '#sessWalls',      // стены у цены
+      '#prepPhase',      // подготовка (свёрнута, разворачивается кнопкой)
+      '#sessionCtx',     // байас и лимиты — контекст, а не оперативка
+      '#zoneRead',       // точность чтения и дисциплина — оценка себя
+      '#posBlock'        // исполнение: позиция и калькулятор риска
     ];
-    /* ═══ F6: НА ТЕЛЕФОНЕ ПОРЯДОК ДРУГОЙ ═══
-     * На десктопе хаб стоит пятым, сразу под ценой, и это верно: там он занимает
-     * колонку сбоку и ничего не отодвигает. На узком экране он разворачивается
-     * во всю ширину и съедает пол-экрана, после чего график, зоны и активная
-     * зона уезжают за третий экран прокрутки.
-     *
-     * Порядок не «тот же, но плотнее», а другой по смыслу. На телефоне сначала
-     * идёт то, что отвечает на вопрос «что делать прямо сейчас» — цена,
-     * активная зона, план целиком, — и только потом то, во что смотрят долго:
-     * стакан, графики, контекст. Стакан на телефоне и так читается плохо;
-     * держать его выше плана значит платить экраном прокрутки за то, чем на
-     * ходу почти не пользуются.
-     *
-     * Разные списки, а не один с оговорками: попытка описать оба порядка одной
-     * последовательностью каждый раз кончалась тем, что правка для телефона
-     * ломала десктоп. */
-    const ORDER_MOBILE=[
-      '#dayTrend', '#dayCtx',
-      '#priceTitle',
-      '.live-bar',        // цена — где я
-      '#liveCard',        // активная зона: на ходу это главное
-      '#zonesTitle', '#zonesFresh',
-      '#zoneLadder',      // весь план целиком — раньше графика
-      '#miniChartWrap',   // график: смотрят, когда есть время
-      '.sess-pchart',
-      '#prepPhase',
-      '#hub',             // стакан ниже: на узком экране он съедает пол-экрана
-      '#sessWalls',
-      '#sessionCtx', '#zoneRead', '#posBlock'
-    ];
-    const USE=(innerWidth<=720)?ORDER_MOBILE:ORDER;
+    const USE=ORDER;   // порядок один на все экраны, см. комментарий выше
     const kids=[...root.children];
     const rank=el=>{for(let i=0;i<USE.length;i++){try{if(el.matches(USE[i]))return i;}catch(e){}} return USE.length;};
     // сортировка устойчивая: незнакомые блоки не теряются, а оседают в конец в прежнем порядке
@@ -9834,6 +9817,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }
     return false;
   }
+  /* Путь до узла, а не два класса. По «.zl-row» чинить нельзя — таких строк
+   * в файле десяток; по «#zoneLadder > .zl-row:nth-child(3)» можно. */
+  function _path(el){
+    const out=[];
+    for(let e=el;e&&e!==document.body&&out.length<4;e=e.parentElement){
+      let p=e.tagName.toLowerCase();
+      if(e.id){ out.unshift('#'+e.id); break; }
+      const cn=(typeof e.className==='string')?e.className.trim():'';
+      if(cn)p+='.'+cn.split(/\s+/).slice(0,2).join('.');
+      if(e.parentElement){
+        const sib=[...e.parentElement.children].filter(x=>x.tagName===e.tagName);
+        if(sib.length>1)p+=':nth('+(sib.indexOf(e)+1)+')';
+      }
+      out.unshift(p);
+    }
+    return out.join(' > ');
+  }
   function _ovScan(){
     const W=document.documentElement.clientWidth, hits={};
     document.querySelectorAll('.wrap *').forEach(el=>{
@@ -9852,9 +9852,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(p&&p.classList&&!p.classList.contains('wrap')&&p.getBoundingClientRect().right-W>1)return;
       const cn=(typeof el.className==='string')?el.className.trim():'';
       const key=cn?'.'+cn.split(/\s+/).slice(0,2).join('.'):el.tagName.toLowerCase();
-      hits[key]=Math.max(hits[key]||0,over);
+      if(!hits[key]||hits[key][0]<over) hits[key]=[over,_path(el),Math.round(r.width),
+        (el.textContent||'').trim().slice(0,40)];
     });
-    return Object.entries(hits).sort((a,b)=>b[1]-a[1]);
+    return Object.entries(hits).sort((a,b)=>b[1][0]-a[1][0]).map(([k,v])=>[k,v[0],v[1],v[2],v[3]]);
   }
   /* ═══ ТАП-ТАРГЕТЫ ═══
    * Вторая по частоте мобильная беда после вылета за экран — кнопка, в которую
@@ -9891,8 +9892,22 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       b.style.cssText='position:fixed;left:8px;bottom:8px;z-index:99;max-width:70vw;'
         +'font:10px/1.35 JetBrains Mono,monospace;color:#e3b341;background:rgba(30,22,6,.94);'
         +'border:1px solid rgba(227,179,65,.5);border-radius:7px;padding:6px 9px;cursor:pointer';
-      b.title='Проверка вёрстки на этом экране. Нажми, чтобы скрыть.';
-      b.onclick=()=>b.remove();
+      b.title='Проверка вёрстки на этом экране. Нажми — полный отчёт скопируется в буфер.';
+      /* Тап КОПИРУЕТ, а не прячет. Спрятанная жалоба бесполезна: чинить её
+       * всё равно придётся тому, кто значка не видел. Скопированный отчёт
+       * можно отдать целиком — с путями до узлов и размерами. */
+      b.onclick=()=>{
+        const txt=_ovLastReport||b.textContent;
+        const done=()=>{ const o=b.textContent; b.textContent='✓ отчёт скопирован — вставь в чат';
+          setTimeout(()=>{ b.textContent=o; },2500); };
+        if(navigator.clipboard&&navigator.clipboard.writeText){
+          navigator.clipboard.writeText(txt).then(done).catch(()=>{ alert(txt); });
+        } else {
+          /* Safari до 13.4 и любой не-защищённый контекст: буфера нет.
+           * Показываем текст — выделить и скопировать руками всё равно можно. */
+          alert(txt);
+        }
+      };
       document.body.appendChild(b); }
     b.textContent=txt;
   }
@@ -9907,8 +9922,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(!парт.length)_proc('вёрстка: чисто ('+W+'px) — обрезки нет, тап-таргеты в норме');
       else _proc('вёрстка: '+парт.join(' | '),'pr-warn');
     }
+    /* ПОЛНЫЙ отчёт — не для экрана, а чтобы его можно было отдать. Значок
+     * показывает четыре худших пункта: больше на телефон не влезет, а список
+     * из двадцати строк на 390 пикселях сам станет проблемой вёрстки. */
+    const full=['ScalpSniper · вёрстка '+W+'x'+innerHeight+'px · '+new Date().toISOString().slice(0,16),
+      'экран: '+screen.width+'x'+screen.height+' dpr '+(devicePixelRatio||1)+' · '+navigator.userAgent.slice(0,90),''];
+    if(h.length){ full.push('ЗА ЭКРАН ('+h.length+'):');
+      h.forEach(x=>full.push('  +'+x[1]+'px  ширина '+x[3]+'px  '+x[2]+(x[4]?'   «'+x[4]+'»':''))); full.push(''); }
+    if(t.length){ full.push('МЕЛКИЕ КНОПКИ ('+t.length+'):');
+      t.forEach(x=>full.push('  '+x[1]+'px  '+x[0])); }
+    if(!h.length&&!t.length) full.push('чисто: обрезки нет, тап-таргеты в норме');
+    _ovLastReport=full.join('\n');
+    try{localStorage.setItem('msa_ovreport_v1',_ovLastReport);}catch(e){}
     _ovBadge(парт.length?('⚠ вёрстка '+W+'px · '+парт.join(' | ')):'');
   }
+  let _ovLastReport='';
   let _ovDeb=null;
   addEventListener('resize',()=>{ if(_ovDeb)clearTimeout(_ovDeb); _ovDeb=setTimeout(_ovReport,800); });
   // Один прогон на старте ловит только то, что успело отрисоваться. Зоны,
