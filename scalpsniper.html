@@ -328,6 +328,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .sync-copy{flex-shrink:0}
   .sync-status{font-size:11px;font-family:'JetBrains Mono',monospace;min-height:13px;letter-spacing:.2px}
   /* ── отработка зон (вердикт чтения + дисциплина) ── */
+  .zra{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0;background:var(--panel)}
+  .zra-h{font:600 11px Rajdhani,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);margin:0 0 6px}
+  .zra-row{display:grid;grid-template-columns:1fr 54px 96px 1fr;gap:8px;align-items:center;font:11px JetBrains Mono,monospace;padding:3px 0}
+  .zra-lbl{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .zra-n{color:var(--text-faint);text-align:right}
+  .zra-ci{color:var(--text-faint);font-size:10px}
+  .zra-bar{position:relative;height:8px;border-radius:4px;background:rgba(255,255,255,.05);overflow:hidden}
+  .zra-bar i{position:absolute;top:0;bottom:0;background:var(--accent);opacity:.55}
+  .zra-bar u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--text-faint)}
+  .zra-note{font:10px JetBrains Mono,monospace;color:var(--text-faint);margin-top:8px;line-height:1.5}
+  .zra-key{border-top:1px solid var(--line);margin-top:8px;padding-top:8px}
+  .zra-key b{color:var(--accent)}
+  @media(max-width:720px){.zra-row{grid-template-columns:1fr 44px 84px}.zra-bar{display:none}}
   .zone-read{display:flex;flex-direction:column;gap:6px;margin:0 0 8px}
   .zr-top{display:flex;gap:8px}
   .zr-break{display:flex;flex-wrap:wrap;gap:5px}
@@ -1855,6 +1868,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     </div>
     <div class="section-title">Журнал отработки зон <span class="tag">все размеченные · новые сверху</span></div>
     <div id="zrjBar"></div>
+    <div id="zrAnalysis"></div>
     <div class="zr-journal" id="zrJournal"></div>
     <div class="section-title">История сделок <span class="tag">новые сверху</span><span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Грейд — про процесс, не результат: A — вход и ведение строго по плану зоны · B — небольшое отклонение (раньше/позже, двинул стоп по правилу) · C — нарушение (вход без зоны, снял стоп, превысил риск) · LOSS может быть A, WIN может быть C · Импорт CSV — сверка журнала с биржей раз в неделю, дубли отсеются</span></span>
       <button class="paste-px" style="margin-left:auto" onclick="document.getElementById('mxCsvFile').click()" title="Импорт закрытых сделок из CSV-выгрузки биржи (MEXC, Binance и др.)">⭱ Импорт сделок (CSV)</button>
@@ -3788,6 +3802,95 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const info=document.getElementById('rplInfo');
     if(info){ const d=new Date(curT); info.textContent=_rplSym+' · '+(_rplIdx+1)+'/'+_rplK.length+' · '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})+' · зон '+_rplZones.length+' · сделок '+_rplTrades.length; }
   }
+  /* ══ РАЗБОР ОТРАБОТКИ ══
+   * ЧТО ЗДЕСЬ НЕ ДЕЛАЕТСЯ. Не показываются голые проценты. «3 из 4 = 75%» и
+   * «300 из 400 = 75%» — разные утверждения, и вторая цифра без первой лжёт
+   * ровно тогда, когда на неё больше всего хочется опереться: в начале, когда
+   * записей мало и любая корзина выглядит убедительно.
+   *
+   * Поэтому у каждой строки стоит интервал Уилсона, а корзины меньше MIN_N не
+   * получают вердикта вовсе. Это не осторожность ради осторожности: цена ошибки
+   * здесь — торговать по протоколу, который «показал 80%» на пяти зонах.
+   *
+   * ГЛАВНАЯ СТРОКА — не точность чтения, а РАЗНИЦА между «по плану» и
+   * «отклонился». Она отвечает на вопрос, ради которого написан весь продукт:
+   * платит ли дисциплина. Если не платит — надо знать это про себя. */
+  const ZRA_MIN_N = 10;
+  function _wil(w, n) {
+    if (!n) return null;
+    const z = 1.96, p = w / n, d = 1 + z * z / n;
+    const c = (p + z * z / (2 * n)) / d;
+    const h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d;
+    return { p, lo: Math.max(0, c - h), hi: Math.min(1, c + h) };
+  }
+  function _zraRow(lbl, w, n, ref) {
+    const ci = _wil(w, n);
+    if (!ci) return '';
+    const pc = v => (v * 100).toFixed(0) + '%';
+    const thin = n < ZRA_MIN_N;
+    const val = thin ? '<span style="color:var(--text-faint)">мало</span>' : '<b>' + pc(ci.p) + '</b>';
+    const ciTxt = thin ? n + ' зон — вердикта нет' : '[' + pc(ci.lo) + '…' + pc(ci.hi) + ']';
+    const bar = thin ? '' :
+      '<span class="zra-bar"><i style="left:' + (ci.lo * 100) + '%;width:' + ((ci.hi - ci.lo) * 100) + '%"></i>' +
+      (ref != null ? '<u style="left:' + (ref * 100) + '%"></u>' : '') + '</span>';
+    return '<div class="zra-row"><span class="zra-lbl">' + escapeHtml(lbl) + '</span>' +
+      '<span class="zra-n">' + val + '</span><span class="zra-ci">' + ciTxt + '</span>' + bar + '</div>';
+  }
+  function renderZoneAnalysis() {
+    const el = document.getElementById('zrAnalysis'); if (!el) return;
+    /* Считаем только по зонам, до которых цена ДОШЛА: «не дошла» ничего не
+     * говорит о качестве чтения, это про выбор уровня, а не про его отработку. */
+    const rec = zoneReviews.filter(r => r.verdict === 'worked' || r.verdict === 'failed');
+    if (rec.length < 4) {
+      el.innerHTML = '<div class="zra"><div class="zra-h">разбор отработки</div>' +
+        '<div class="zra-note">Оценённых зон: ' + rec.length + '. Разбор появится, когда наберётся хотя бы несколько — ' +
+        'считать доли на двух записях бессмысленно, они покажут 0% или 100% при любом рынке.</div></div>';
+      return;
+    }
+    const all = rec.length, allW = rec.filter(r => r.verdict === 'worked').length;
+    const base = allW / all;
+    const grp = (name, keyf) => {
+      const m = new Map();
+      for (const r of rec) { const k = keyf(r); if (k == null) continue;
+        if (!m.has(k)) m.set(k, { w: 0, n: 0 }); const b = m.get(k); b.n++; if (r.verdict === 'worked') b.w++; }
+      if (!m.size) return '';
+      const rows = [...m.entries()].sort((a, b) => b[1].n - a[1].n)
+        .map(([k, b]) => _zraRow(k, b.w, b.n, base)).join('');
+      return rows ? '<div class="zra-h" style="margin-top:10px">' + name + '</div>' + rows : '';
+    };
+
+    let html = '<div class="zra"><div class="zra-h">разбор отработки · ' + all + ' зон, до которых цена дошла</div>';
+    html += _zraRow('ВСЕ ЗОНЫ', allW, all, null);
+    html += grp('по протоколу', r => r.protocol ? (PROTO_LABELS[r.protocol] || r.protocol) : null);
+    html += grp('по типу зоны', r => r.zKind ? ((KIND[r.zKind] || {}).lbl || r.zKind) : null);
+    html += grp('по уверенности', r => r.stars ? '★'.repeat(Math.max(1, Math.min(3, r.stars))) : null);
+    html += grp('по таймфрейму', r => r.tf || null);
+
+    /* ── платит ли дисциплина ── */
+    const pl = rec.filter(r => r.adhered === 'plan'), dv = rec.filter(r => r.adhered === 'deviated');
+    html += '<div class="zra-key">';
+    if (pl.length >= ZRA_MIN_N && dv.length >= ZRA_MIN_N) {
+      const a = _wil(pl.filter(r => r.verdict === 'worked').length, pl.length);
+      const b = _wil(dv.filter(r => r.verdict === 'worked').length, dv.length);
+      const sep = a.lo > b.hi ? 'ПО ПЛАНУ ЛУЧШЕ — интервалы не пересекаются'
+                : b.lo > a.hi ? 'ОТКЛОНЕНИЯ ЛУЧШЕ — это важный факт про твоё чтение, а не повод нарушать'
+                : 'разница НЕ отделена от шума';
+      html += '<div class="zra-h">платит ли дисциплина</div>' +
+        _zraRow('по плану', pl.filter(r => r.verdict === 'worked').length, pl.length, base) +
+        _zraRow('отклонился', dv.filter(r => r.verdict === 'worked').length, dv.length, base) +
+        '<div class="zra-note"><b>' + sep + '</b></div>';
+    } else {
+      html += '<div class="zra-note">Дисциплина: по плану ' + pl.length + ', отклонений ' + dv.length +
+        '. Для сравнения нужно хотя бы по ' + ZRA_MIN_N + ' в каждой группе — иначе сравниваются не подходы, а случайность.</div>';
+    }
+    html += '</div>';
+
+    html += '<div class="zra-note">Серая метка на полосе — общая доля по всем зонам (' +
+      (base * 100).toFixed(0) + '%). Корзина отличается от неё, только если её интервал метку не накрывает. ' +
+      'Интервалы широкие не по осторожности, а потому что записей мало: на 20 зонах истинная доля гуляет на два десятка пунктов.</div>';
+    html += '</div>';
+    el.innerHTML = html;
+  }
   // ---- журнал отработки зон (из zoneReviews) ----
   let _zrjFilter='all';
   function setZrjFilter(f){_zrjFilter=f;renderZoneJournal();}
@@ -3800,6 +3903,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       bar.innerHTML='<div class="zrj-sum">точность <b>'+(s.acc==null?'—':s.acc+'%')+'</b> · дисциплина <b>'+(s.disc==null?'—':s.disc+'%')+'</b> · '+s.total+' зон</div>'+
         '<div class="zrj-filters">'+mk('all','все')+mk('worked','✓')+mk('failed','✗')+mk('notreached','·')+'</div>';
     }
+    renderZoneAnalysis();
     let rows=zoneReviews.slice();
     if(_zrjFilter!=='all')rows=rows.filter(r=>r.verdict===_zrjFilter);
     if(!rows.length){el.innerHTML='<div class="j-empty">'+(zoneReviews.length?'Нет зон под этим фильтром.':'Пока нет оценённых зон. Отмечай в карточке зоны ✓/✗/· (или авто-оценка по свечам сделает это сама) — записи появятся здесь.')+'</div>';return;}
