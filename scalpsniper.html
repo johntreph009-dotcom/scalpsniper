@@ -327,6 +327,22 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .sync-code-wrap input{flex:1;font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:1px;color:var(--accent);background:var(--accent-soft);border-color:var(--accent-dim)}
   .sync-copy{flex-shrink:0}
   .sync-status{font-size:11px;font-family:'JetBrains Mono',monospace;min-height:13px;letter-spacing:.2px}
+  /* ── мост с коннектором ── */
+  .cn-block{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0;background:var(--panel)}
+  .cn-head{display:flex;align-items:center;gap:7px;font:700 11px Rajdhani,sans-serif;letter-spacing:.09em;color:var(--text-dim)}
+  .cn-dot{width:8px;height:8px;border-radius:50%;background:var(--text-faint);flex-shrink:0}
+  .cn-dot.on{background:var(--green);box-shadow:0 0 6px rgba(63,185,80,.6)}
+  .cn-dot.armed{background:var(--accent);box-shadow:0 0 8px rgba(255,122,24,.7)}
+  .cn-state{margin-left:auto;font:10px JetBrains Mono,monospace;color:var(--text-faint)}
+  .cn-info{font:10px/1.5 JetBrains Mono,monospace;color:var(--text-dim);margin:6px 0}
+  .cn-info code{background:rgba(255,255,255,.06);padding:1px 4px;border-radius:3px}
+  .cn-acts{display:flex;gap:6px;margin-top:6px}
+  .cn-btn{flex:1;padding:9px 8px;border:1px solid var(--line);border-radius:6px;background:transparent;
+    color:var(--text-dim);font:600 11px Rajdhani,sans-serif;letter-spacing:.06em;cursor:pointer}
+  .cn-btn:disabled{opacity:.4;cursor:default}
+  .cn-btn:not(:disabled):hover{border-color:var(--accent-dim);color:var(--text)}
+  .cn-panic:not(:disabled){border-color:rgba(240,69,74,.5);color:var(--danger)}
+  .cn-note{font:9.5px/1.5 JetBrains Mono,monospace;color:var(--text-faint);margin-top:7px}
   /* ── отработка зон (вердикт чтения + дисциплина) ── */
   .zra{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0;background:var(--panel)}
   .zra-h{font:600 11px Rajdhani,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);margin:0 0 6px}
@@ -1737,6 +1753,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="sess-pchart">
       <div class="dl-price" onclick="_sessPcToggle()" style="cursor:pointer" title="Свернуть/развернуть график цены"><span class="dl-price-now" id="sessPxNow">—</span><span class="dl-price-chg" id="sessPxChg"></span><span class="dl-price-lbl">цена · live <span id="sessPcChev">▾</span></span></div>
       <div class="dl-pchart-wrap" id="sessPcWrap"><canvas id="sessPriceChart"></canvas></div>
+    </div>
+    <div id="cnBlock" class="cn-block">
+      <div class="cn-head"><span class="cn-dot" id="cnDot"></span><b>КОННЕКТОР</b>
+        <span class="cn-state" id="cnState">не подключён</span></div>
+      <div class="cn-info" id="cnInfo">Движок не запущен. Запусти в консоли: <code>node Trade.js ETH_USDT 0.01</code></div>
+      <div class="cn-acts">
+        <button class="cn-btn" id="cnSend" onclick="cnSendZones()" disabled>▲ отправить план</button>
+        <button class="cn-btn cn-panic" id="cnPanic" onclick="cnPanic()" disabled>✕ снять всё</button>
+      </div>
+      <div class="cn-note">Боевой режим включается только флагом <code>--armed</code> в консоли. Отсюда его включить нельзя — намеренно: браузер открыт всегда, и случайный клик не должен стоить денег.</div>
     </div>
     <div class="sess-walls" id="sessWalls" title="Сводная карта ликвидности: ближайшие концентрации в книге (агрегация нескольких площадок в долях) и дистанции до них"></div>
     <div class="whale-panel" id="whaleSess"></div>
@@ -3891,6 +3917,97 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     html += '</div>';
     el.innerHTML = html;
   }
+  /* ══ МОСТ С КОННЕКТОРОМ ══
+   * Терминал знает план, коннектор умеет его исполнять. До этого перенос был
+   * ручным — выгрузить файл, положить в папку, — и всякая ручная передача рано
+   * или поздно передаёт устаревший план.
+   *
+   * ЧТО ОТСЮДА МОЖНО И ЧЕГО НЕЛЬЗЯ. Можно отправить план и можно снять всё.
+   * Включить боевой режим НЕЛЬЗЯ, и это не недоделка: браузер открыт всегда,
+   * вкладок много, случайный клик стоит дёшево. Флаг --armed требует прийти к
+   * клавиатуре — столько усилия и должно стоить решение торговать деньгами.
+   * Мост умеет делать ситуацию только безопаснее.
+   *
+   * Соединение только с localhost. Коннектор слушает 127.0.0.1 и из сети
+   * недоступен. */
+  let _cnWs=null, _cnTimer=null, _cnStatus=null;
+  function cnSet(state, cls, info){
+    const d=document.getElementById('cnDot'), st=document.getElementById('cnState'),
+          inf=document.getElementById('cnInfo'), a=document.getElementById('cnSend'),
+          p=document.getElementById('cnPanic');
+    if(!d)return;
+    d.className='cn-dot'+(cls?' '+cls:'');
+    if(st)st.textContent=state;
+    if(inf&&info!=null)inf.innerHTML=info;
+    const live=!!(_cnWs&&_cnWs.readyState===1);
+    if(a)a.disabled=!live;
+    if(p)p.disabled=!live;
+  }
+  function cnConnect(){
+    if(_cnWs&&(_cnWs.readyState===0||_cnWs.readyState===1))return;
+    let ws;
+    try{ ws=new WebSocket('ws://127.0.0.1:8080'); }catch(e){ return; }
+    _cnWs=ws;
+    ws.onopen=()=>cnSet('подключён','on','Движок на связи. План можно отправлять.');
+    ws.onclose=()=>{ _cnWs=null; cnSet('не подключён','',
+      'Движок не запущен. Запусти в консоли: <code>node Trade.js ETH_USDT 0.01</code>'); };
+    ws.onerror=()=>{};
+    ws.onmessage=e=>{
+      let m; try{ m=JSON.parse(e.data); }catch(err){ return; }
+      if(m.type==='status'){
+        _cnStatus=m;
+        const armed=m.armed;
+        cnSet(armed?'БОЕВОЙ РЕЖИМ':'сухой ход', armed?'armed':'on',
+          'символ <b>'+escapeHtml(m.symbol||'')+'</b> · зон в движке <b>'+m.zones+'</b>'+
+          (m.done?' (исполнено '+m.done+')':'')+
+          '<br>поток биржи: '+(m.feed?'идёт':'<span class="neg">НЕТ ДАННЫХ</span>')+
+          ' · день: $'+(m.realized||0).toFixed(2)+' из −$'+m.dailyLimit+
+          (m.halted?'<br><span class="neg">ОСТАНОВЛЕНО</span>':''));
+      }
+      if(m.type==='zonesAck'){
+        const inf=document.getElementById('cnInfo');
+        if(inf)inf.innerHTML='План отправлен: принято <b>'+m.accepted+'</b>'+
+          (m.rejected&&m.rejected.length?', отклонено '+m.rejected.length+' — '+escapeHtml(m.rejected.join('; ')):'');
+        _haptic('ok');
+      }
+    };
+  }
+  /* Зоны переводим в формат движка ЗДЕСЬ, а не там: терминал знает, что значит
+   * его собственная разметка, коннектор — нет. Зона без стопа не отправляется:
+   * пусть причина будет видна в том месте, где её можно исправить. */
+  function cnSendZones(){
+    if(!(_cnWs&&_cnWs.readyState===1))return;
+    const out=[], skipped=[];
+    for(const z of zones){
+      const px=+z.px, stop=+z.stop, vol=+z.qty||+z.vol||0;
+      const side=(z.kind==='fade')?(z.dir==='short'?'short':'long')
+                :(z.dir==='short'?'short':'long');
+      if(!(px>0)){ skipped.push('зона без цены'); continue; }
+      if(!(stop>0)){ skipped.push(px+': нет стопа'); continue; }
+      if(!(vol>0)){ skipped.push(px+': нет объёма'); continue; }
+      out.push({px,stop,vol,side,kind:z.kind||'fade',note:z.note||''});
+    }
+    if(!out.length){
+      const inf=document.getElementById('cnInfo');
+      if(inf)inf.innerHTML='<span class="neg">Отправлять нечего.</span> '+escapeHtml(skipped.join('; '));
+      return;
+    }
+    _cnWs.send(JSON.stringify({type:'zones',zones:out}));
+    if(skipped.length){
+      const inf=document.getElementById('cnInfo');
+      if(inf)inf.innerHTML='Отправлено '+out.length+'. Пропущено: '+escapeHtml(skipped.join('; '));
+    }
+  }
+  function cnPanic(){
+    if(!(_cnWs&&_cnWs.readyState===1))return;
+    if(!confirm('Снять ВСЕ ордера и остановить движок до ручного снятия?'))return;
+    _cnWs.send(JSON.stringify({type:'panic'}));
+    _haptic('warn');
+  }
+  /* Переподключаемся сами: движок перезапускают чаще, чем вкладку. */
+  _cnTimer=setInterval(cnConnect,4000);
+  setTimeout(cnConnect,1200);
+
   // ---- журнал отработки зон (из zoneReviews) ----
   let _zrjFilter='all';
   function setZrjFilter(f){_zrjFilter=f;renderZoneJournal();}
@@ -8828,6 +8945,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       '.sess-pchart',    // пульс цены
       '#hub',            // стакан и автопилот
       '#sessWalls',      // стены у цены
+      '#cnBlock',        // мост с коннектором: план → движок, аварийная отмена
       '#prepPhase',      // подготовка (свёрнута, разворачивается кнопкой)
       '#sessionCtx',     // байас и лимиты — контекст, а не оперативка
       '#zoneRead',       // точность чтения и дисциплина — оценка себя
