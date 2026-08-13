@@ -3917,20 +3917,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     html += '</div>';
     el.innerHTML = html;
   }
-  /* ══ МОСТ С КОННЕКТОРОМ ══
-   * Терминал знает план, коннектор умеет его исполнять. До этого перенос был
-   * ручным — выгрузить файл, положить в папку, — и всякая ручная передача рано
-   * или поздно передаёт устаревший план.
+  /* ══ СВЯЗЬ С ДВИЖКОМ ══
+   * ПЕРЕПИСАНО ПОСЛЕ ДВУХ НЕУДАЧНЫХ ПОПЫТОК. Сначала был WebSocket на отдельном
+   * порту — и он не работал ни с https-страницы (браузер запрещает незащищённый
+   * сокет), ни со страницы на соседнем порту (другое происхождение). Каждый раз
+   * я чинил симптом.
    *
-   * ЧТО ОТСЮДА МОЖНО И ЧЕГО НЕЛЬЗЯ. Можно отправить план и можно снять всё.
-   * Включить боевой режим НЕЛЬЗЯ, и это не недоделка: браузер открыт всегда,
-   * вкладок много, случайный клик стоит дёшево. Флаг --armed требует прийти к
-   * клавиатуре — столько усилия и должно стоить решение торговать деньгами.
-   * Мост умеет делать ситуацию только безопаснее.
+   * Причина была в том, что механизмов было два: HTTP для страницы, сокет для
+   * обмена, у каждого свои правила и свои поводы отказать. Теперь механизм один:
+   * движок сам отдаёт эту страницу и сам отвечает на запросы по ОТНОСИТЕЛЬНОМУ
+   * пути. Одно происхождение — запрещать браузеру нечего.
    *
-   * Соединение только с localhost. Коннектор слушает 127.0.0.1 и из сети
-   * недоступен. */
-  let _cnWs=null, _cnTimer=null, _cnStatus=null;
+   * Отсюда же следует главное: терминал работает ТОЛЬКО с http://localhost:8081.
+   * Открытый с github.io он про движок ничего не знает и честно об этом говорит,
+   * вместо того чтобы молча показывать «не подключён». */
+  let _cnLive=false, _cnBusy=false;
   function cnSet(state, cls, info){
     const d=document.getElementById('cnDot'), st=document.getElementById('cnState'),
           inf=document.getElementById('cnInfo'), a=document.getElementById('cnSend'),
@@ -3939,74 +3940,71 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     d.className='cn-dot'+(cls?' '+cls:'');
     if(st)st.textContent=state;
     if(inf&&info!=null)inf.innerHTML=info;
-    const live=!!(_cnWs&&_cnWs.readyState===1);
-    if(a)a.disabled=!live;
-    if(p)p.disabled=!live;
+    if(a)a.disabled=!_cnLive;
+    if(p)p.disabled=!_cnLive;
   }
-  function cnConnect(){
-    if(_cnWs&&(_cnWs.readyState===0||_cnWs.readyState===1))return;
-    let ws;
-    try{ ws=new WebSocket('ws://127.0.0.1:8080'); }catch(e){ return; }
-    _cnWs=ws;
-    ws.onopen=()=>cnSet('подключён','on','Движок на связи. План можно отправлять.');
-    ws.onclose=()=>{ _cnWs=null; cnSet('не подключён','',
-      'Движок не запущен. Запусти в консоли: <code>node Trade.js ETH_USDT 0.01</code>'); };
-    ws.onerror=()=>{};
-    ws.onmessage=e=>{
-      let m; try{ m=JSON.parse(e.data); }catch(err){ return; }
-      if(m.type==='status'){
-        _cnStatus=m;
-        const armed=m.armed;
-        cnSet(armed?'БОЕВОЙ РЕЖИМ':'сухой ход', armed?'armed':'on',
-          'символ <b>'+escapeHtml(m.symbol||'')+'</b> · зон в движке <b>'+m.zones+'</b>'+
-          (m.done?' (исполнено '+m.done+')':'')+
-          '<br>поток биржи: '+(m.feed?'идёт':'<span class="neg">НЕТ ДАННЫХ</span>')+
-          ' · день: $'+(m.realized||0).toFixed(2)+' из −$'+m.dailyLimit+
-          (m.halted?'<br><span class="neg">ОСТАНОВЛЕНО</span>':''));
+  const _cnLocal=()=>location.port==='8081'||location.hostname==='localhost'||location.hostname==='127.0.0.1';
+  async function cnPoll(){
+    if(_cnBusy)return; _cnBusy=true;
+    try{
+      if(!_cnLocal()){
+        _cnLive=false;
+        cnSet('нужен локальный адрес','',
+          'Эта страница открыта с сайта, а движок живёт на твоём компьютере.'+
+          '<br>Запусти движок и открой терминал по адресу <b>http://localhost:8081</b> —'+
+          ' страницу отдаёт сам движок, и связь работает без настроек.');
+        return;
       }
-      if(m.type==='zonesAck'){
-        const inf=document.getElementById('cnInfo');
-        if(inf)inf.innerHTML='План отправлен: принято <b>'+m.accepted+'</b>'+
-          (m.rejected&&m.rejected.length?', отклонено '+m.rejected.length+' — '+escapeHtml(m.rejected.join('; ')):'');
-        _haptic('ok');
-      }
-    };
+      const r=await fetch('/api/status',{cache:'no-store'});
+      if(!r.ok)throw new Error('код '+r.status);
+      const m=await r.json();
+      _cnLive=true;
+      cnSet(m.armed?'БОЕВОЙ РЕЖИМ':'сухой ход', m.armed?'armed':'on',
+        'символ <b>'+escapeHtml(m.symbol||'')+'</b> · зон в движке <b>'+m.zones+'</b>'+
+        (m.done?' (исполнено '+m.done+')':'')+
+        '<br>поток биржи: '+(m.feed?'идёт':'<span class="neg">НЕТ ДАННЫХ</span>')+
+        (m.feedErrors?' · обрывов '+m.feedErrors:'')+
+        ' · день: $'+(+m.realized||0).toFixed(2)+' из −$'+m.dailyLimit+
+        (m.halted?'<br><span class="neg">ОСТАНОВЛЕНО</span>':''));
+    }catch(e){
+      _cnLive=false;
+      cnSet('движок не запущен','',
+        'Запусти в консоли: <code>node Trade.js ETH_USDT 0.01</code>'+
+        '<br>Или разом всё: файл <b>ПУСК.bat</b> в папке проекта.');
+    }finally{ _cnBusy=false; }
   }
-  /* Зоны переводим в формат движка ЗДЕСЬ, а не там: терминал знает, что значит
-   * его собственная разметка, коннектор — нет. Зона без стопа не отправляется:
-   * пусть причина будет видна в том месте, где её можно исправить. */
-  function cnSendZones(){
-    if(!(_cnWs&&_cnWs.readyState===1))return;
+  /* Зоны переводим в формат движка ЗДЕСЬ: терминал знает, что значит его
+   * собственная разметка, движок — нет. Зона без стопа не отправляется, и
+   * причина видна там, где её можно исправить. */
+  async function cnSendZones(){
     const out=[], skipped=[];
     for(const z of zones){
       const px=+z.px, stop=+z.stop, vol=+z.qty||+z.vol||0;
-      const side=(z.kind==='fade')?(z.dir==='short'?'short':'long')
-                :(z.dir==='short'?'short':'long');
+      const side=(z.dir==='short')?'short':'long';
       if(!(px>0)){ skipped.push('зона без цены'); continue; }
       if(!(stop>0)){ skipped.push(px+': нет стопа'); continue; }
       if(!(vol>0)){ skipped.push(px+': нет объёма'); continue; }
-      out.push({px,stop,vol,side,kind:z.kind||'fade',note:z.note||''});
+      out.push({px,stop,vol,side,kind:z.kind||'fade',proto:z.proto||null,note:z.note||''});
     }
-    if(!out.length){
-      const inf=document.getElementById('cnInfo');
-      if(inf)inf.innerHTML='<span class="neg">Отправлять нечего.</span> '+escapeHtml(skipped.join('; '));
-      return;
-    }
-    _cnWs.send(JSON.stringify({type:'zones',zones:out}));
-    if(skipped.length){
-      const inf=document.getElementById('cnInfo');
-      if(inf)inf.innerHTML='Отправлено '+out.length+'. Пропущено: '+escapeHtml(skipped.join('; '));
-    }
+    const inf=document.getElementById('cnInfo');
+    if(!out.length){ if(inf)inf.innerHTML='<span class="neg">Отправлять нечего.</span> '+escapeHtml(skipped.join('; ')); return; }
+    try{
+      const r=await fetch('/api/zones',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({zones:out})});
+      const j=await r.json();
+      if(inf)inf.innerHTML='План отправлен: принято <b>'+j.accepted+'</b>'+
+        (j.rejected&&j.rejected.length?', отклонено '+j.rejected.length+' — '+escapeHtml(j.rejected.join('; ')):'')+
+        (skipped.length?'<br>не отправлено из терминала: '+escapeHtml(skipped.join('; ')):'');
+      _haptic('ok');
+    }catch(e){ if(inf)inf.innerHTML='<span class="neg">Движок не ответил.</span>'; }
   }
-  function cnPanic(){
-    if(!(_cnWs&&_cnWs.readyState===1))return;
+  async function cnPanic(){
     if(!confirm('Снять ВСЕ ордера и остановить движок до ручного снятия?'))return;
-    _cnWs.send(JSON.stringify({type:'panic'}));
-    _haptic('warn');
+    try{ await fetch('/api/panic',{method:'POST'}); _haptic('warn'); cnPoll(); }
+    catch(e){ alert('Движок не ответил. Сними ордера в приложении MEXC.'); }
   }
-  /* Переподключаемся сами: движок перезапускают чаще, чем вкладку. */
-  _cnTimer=setInterval(cnConnect,4000);
-  setTimeout(cnConnect,1200);
+  setInterval(cnPoll,2000);
+  setTimeout(cnPoll,600);
 
   // ---- журнал отработки зон (из zoneReviews) ----
   let _zrjFilter='all';
@@ -8931,21 +8929,37 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
      * узкому экрану: на широком от неё теряется немного (прокрутить полэкрана),
      * на узком выигрывается главное — то, ради чего открывают терминал в
      * моменте, видно без прокрутки. */
+    /* ═══ ПОРЯДОК БЛОКОВ — ОДИН НА ВСЕ ЭКРАНЫ ═══
+     * ЗАДАН ТРЕЙДЕРОМ 2026-08-13. Наверху автопилот и график, зоны внизу.
+     *
+     * Я до этого поставил свой порядок — «по приоритету решения», с активной
+     * зоной третьей и стаканом ниже. Рассуждение было связное, но оно не моё
+     * дело: терминал — рабочее место трейдера, и порядок на нём определяется
+     * тем, куда он смотрит, а не тем, что кажется логичным мне.
+     *
+     * Логика этого порядка: сначала то, что смотрят НЕПРЕРЫВНО (автопилот,
+     * стакан, график, пульс), потом то, к чему обращаются по событию (зоны,
+     * активная зона, план). Разметка нужна в момент подхода цены, а автопилот
+     * и график — всё время.
+     *
+     * Порядок ОДИН на телефон и монитор: терминал, выглядящий по-разному на
+     * двух устройствах, приходится заучивать дважды, а рука в сессии должна
+     * идти к блоку не глядя. */
     const ORDER=[
       '#dayTrend',       // куда идёт день
       '#dayCtx',         // поток, объём, фандинг
       '#priceTitle',     // инструмент. ИМЕННО ID: у заголовка зон тот же класс,
                          // и общий селектор перекрывал частный
       '.live-bar',       // цена — где я
-      '#liveCard',       // ЧТО ДЕЛАТЬ СЕЙЧАС: активная зона с планом и стопом
-      '#zonesTitle',     // свежесть разметки нужна раньше самой разметки
-      '#zonesFresh',
-      '#zoneLadder',     // весь план целиком
-      '#miniChartWrap',  // график с зонами — смотрят, когда есть время
+      '#hub',            // АВТОПИЛОТ и стакан — смотрят непрерывно
+      '#miniChartWrap',  // ГРАФИК с зонами — тоже непрерывно
       '.sess-pchart',    // пульс цены
-      '#hub',            // стакан и автопилот
       '#sessWalls',      // стены у цены
-      '#cnBlock',        // мост с коннектором: план → движок, аварийная отмена
+      '#cnBlock',        // коннектор: план → движок, аварийная отмена
+      '#zonesTitle',     // свежесть разметки — над самой разметкой
+      '#zonesFresh',
+      '#liveCard',       // активная зона: план, стоп, объём
+      '#zoneLadder',     // ЗОНЫ целиком — внизу, к ним обращаются по событию
       '#prepPhase',      // подготовка (свёрнута, разворачивается кнопкой)
       '#sessionCtx',     // байас и лимиты — контекст, а не оперативка
       '#zoneRead',       // точность чтения и дисциплина — оценка себя
