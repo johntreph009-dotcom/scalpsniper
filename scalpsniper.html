@@ -8894,8 +8894,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{localStorage.setItem('msa_ap_lev_v1',String(n));}catch(e){}
     if(typeof _proc==='function')_proc('плечо: <b>×'+n+'</b> · номинал $'+_apNotional()+' · запас до ликвидации ~'+(100/n).toFixed(2)+'%');
   }
-  function _usd(bps){ const v=(+bps||0)/1e4*_apNotional(); const a=Math.abs(v);
-    return (v>=0?'+':'−')+'$'+(a>=1000?(a/1000).toFixed(1)+'k':a>=10?a.toFixed(0):a.toFixed(2)); }
+  /* ═══ ЕДИНИЦА ВЫВОДА — USDT ═══
+   * Внутри всё считается в БАЗИСНЫХ ПУНКТАХ, и это не пережиток: bps не зависят
+   * ни от цены инструмента, ни от плеча, ни от размера ордера. На них держатся
+   * гейт входа, обучение ядра и журнал — переведи внутренности в деньги, и одна
+   * и та же формация начнёт «работать» по-разному на ETH за 1900 и на DOGE за
+   * 0.2. Поэтому переводится ТОЛЬКО вывод, по текущему номиналу.
+   *   _usd  — с единицей, для отдельных чисел;
+   *   _usdn — без единицы, для списков, где подпись выносится один раз, иначе
+   *           «последние: +0.07 USDT · −1.85 USDT · …» не читается. */
+  function _usdn(bps){ const v=(+bps||0)/1e4*_apNotional(), a=Math.abs(v);
+    return (v>=0?'+':'−')+(a>=1000?(a/1000).toFixed(1)+'k':a>=10?a.toFixed(0):a.toFixed(2)); }
+  function _usd(bps){ return _usdn(bps)+' USDT'; }
   // Настройки — обычные поля ввода в статическом блоке, БЕЗ prompt() и вне панели автопилота.
   // Причины: панель рисуется только при включённом движке (до запуска настроить было нельзя),
   // а диалоги браузер блокирует, если пользователь однажды отметил «не показывать больше».
@@ -9657,6 +9667,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         }).filter(Boolean).join(' · ');
         const kk=_apTuneK(seg);
         const evBlocked=Object.values(drop).filter(x=>String(x).startsWith('EV:')).length;
+        _ap.whyLong=why;
         if(typeof _proc==='function')_proc('<span class="gs-note">сделок нет · '+seg+
           ' · ядро ×'+kk+' · '+why+'</span>');
         /* Отдельное громкое предупреждение про тупик. Когда цель у протокола
@@ -9671,14 +9682,28 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
             'ни при каком рынке, пока множитель не вырастет.','pr-dn');
         }
       }
+      /* ═══ ПРИЧИНА ПРОСТОЯ — ТУДА, КУДА СМОТРЯТ ═══
+       * Подробный разбор уходит в «Процессинг» раз в минуту, а трейдер смотрит
+       * на панель автопилота, где написано «сканирую рынок» — то есть ничего.
+       * Спросил «почему не открывает» именно поэтому: ответ был в другой
+       * вкладке. Держим короткую причину на _ap.why и показываем её в панели.
+       * Стоимость — одна строка на снимок; польза — вопрос «почему стоим»
+       * закрывается взглядом, а не расследованием. */
+      if(!fired.length){
+        const lead=Object.keys(PROTOCOLS).filter(k=>PROTOCOLS[k].auto)
+          .sort((a,b)=>(S[b]||0)-(S[a]||0))[0];
+        _ap.why=lead?(lead+': '+(drop[lead]||((S[lead]||0)<AP_MINFIT?'фит '+(S[lead]||0)+'/'+AP_MINFIT:'контекст')))
+                    :'нет кандидатов';
+      }
       const win=_coreResolve(fired);
       // ПОДТВЕРЖДЕНИЕ: 60% старых сделок умирали по cancel за ~23с, оплачивая комиссию впустую.
       // Входим только если та же стратегия и сторона держатся AP_CONFIRM, а не по первому дрожанию.
-      if(!win){ _ap.pend=null; }
+      if(!win){ _ap.pend=null; if(fired.length)_ap.why='спор стратегий без перевеса'; }
       else {
         const pk=win.k+':'+win.plan.side;
-        if(!_ap.pend||_ap.pend.k!==pk){ _ap.pend={k:pk,t0:now}; }
-        else if(now-_ap.pend.t0>=AP_CONFIRM){ _ap.pend=null; _apOpen(win.k,win.plan,m,win.fit,win.conf,win.against); }
+        if(!_ap.pend||_ap.pend.k!==pk){ _ap.pend={k:pk,t0:now}; _ap.why='подтверждение '+pk+' 0.0/'+(AP_CONFIRM/1000)+'с'; }
+        else if(now-_ap.pend.t0>=AP_CONFIRM){ _ap.pend=null; _ap.why=''; _apOpen(win.k,win.plan,m,win.fit,win.conf,win.against); }
+        else _ap.why='подтверждение '+pk+' '+((now-_ap.pend.t0)/1000).toFixed(1)+'/'+(AP_CONFIRM/1000)+'с';
       }
       _apRender(m);
     }catch(e){console.warn('autopilot:',e&&e.message);}
@@ -9710,7 +9735,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         virtual:true,                   // движок пока не торгует реальными ордерами
         zPx:rec.entry||null, zKind:'stand',
         zNote:(kind==='grid'?'сетка':'автопилот')+' · '+(rec.proto||'')+(rec.reason?' · '+rec.reason:'')
-              +(rec.pairs?' · пар '+rec.pairs:'')+' · '+rec.bps+' bps',
+              +(rec.pairs?' · пар '+rec.pairs:'')+' · '+_usd(rec.bps)+' ('+rec.bps+' bps)',
         zStop:null, outcome:rec.bps>0?'win':'loss', side:rec.side==='—'?null:rec.side,
         entryPx:rec.entry||null, notional:notional, pnl:pnl,
         bps:rec.bps, seg:rec.seg||null, hold:rec.hold||null,
@@ -9735,7 +9760,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const s=sg.GRID=sg.GRID||{n:0,w:0,sum:0};
     s.n++; if(st.net>0)s.w++; s.sum=+(s.sum+st.net).toFixed(1);
     try{localStorage.setItem(AP_LOGKEY,JSON.stringify(_ap.log));localStorage.setItem(AP_SEGKEY,JSON.stringify(_ap.seg));}catch(e){}
-    _ap.today.n++; if(st.net>0)_ap.today.w++; _ap.today.sum=+(_ap.today.sum+st.net).toFixed(1);
+    _ap.today.n++; if(st.net>0)_ap.today.w++; _ap.today.sum=+(_ap.today.sum+st.net).toFixed(1); _ap.today.sq=+((_ap.today.sq||0)+st.net*st.net).toFixed(2);   // сумма квадратов — для интервала, см. _apRender
   }
   // Слой 3 — РАЗРЕШЕНИЕ В ПРОСТРАНСТВЕ ВАРИАНТОВ. Сработать могут несколько стратегий сразу.
   // Совпали по стороне — конфлюенс (усиливают друг друга), разошлись — спор (вычитают).
@@ -9764,7 +9789,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // spreadIn фиксируем в момент входа: задним числом его уже не узнать,
     // а без него нельзя отличить эдж от заработка на собственном допущении.
     _ap.pos={proto,side:plan.side,entry:m.px,spreadIn:(m.spreadBps!=null?m.spreadBps:null),stop:m.px*(1-dir*plan.stopBps/1e4),tp:m.px*(1+dir*plan.tpBps/1e4),t0:Date.now(),seg:_apSegKey(m.f),ref:plan.ref||null,fit,conf:conf||[],against:against||[]};
-    if(typeof _proc==='function')_proc('вход: <b>'+proto+'</b> '+(plan.side==='long'?'LONG':'SHORT')+' @ '+m.px.toFixed(_dlDec)+' · стоп '+plan.stopBps+' / тейк '+plan.tpBps+' bps · фит '+fit+'%'
+    if(typeof _proc==='function')_proc('вход: <b>'+proto+'</b> '+(plan.side==='long'?'LONG':'SHORT')+' @ '+m.px.toFixed(_dlDec)+' · стоп '+_usd(-plan.stopBps)+' / тейк '+_usd(plan.tpBps)+' <span class="gs-note">('+plan.stopBps+'/'+plan.tpBps+' bps)</span> · фит '+fit+'%'
       +((conf&&conf.length)?' · конфлюенс: '+conf.join(', '):'')+((against&&against.length)?' · спорили: '+against.join(', '):''));
   }
   function _apManage(m){
@@ -9792,7 +9817,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(prog>=0.25){
         const bps=((m.px-p.entry)/p.entry*1e4)*dir;
         p.realBps=(p.realBps||0)+bps*0.35; p.qty=0.65; p.part=true; p.stop=p.entry;   // BU: дальше хуже нуля не станет
-        if(typeof _proc==='function')_proc('разгрузка 30%: <b>'+p.proto+'</b> @ '+m.px.toFixed(_dlDec)+' · +'+bps.toFixed(1)+' bps зафиксировано · стоп в безубыток','pr-up');
+        if(typeof _proc==='function')_proc('разгрузка 30%: <b>'+p.proto+'</b> @ '+m.px.toFixed(_dlDec)+' · '+_usd(bps)+' зафиксировано · стоп в безубыток','pr-up');
       }
     }
     if(reason)_apClose(m.px,reason);
@@ -9828,13 +9853,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const st=sg[p.proto]=sg[p.proto]||{n:0,w:0,sum:0};
     st.n++; if(bps>0)st.w++; st.sum=+(st.sum+bps).toFixed(1);
     try{localStorage.setItem(AP_LOGKEY,JSON.stringify(_ap.log));localStorage.setItem(AP_SEGKEY,JSON.stringify(_ap.seg));}catch(e){}
-    _ap.today.n++; if(bps>0)_ap.today.w++; _ap.today.sum=+(_ap.today.sum+bps).toFixed(1);
+    _ap.today.n++; if(bps>0)_ap.today.w++; _ap.today.sum=+(_ap.today.sum+bps).toFixed(1); _ap.today.sq=+((_ap.today.sq||0)+bps*bps).toFixed(2);   // сумма квадратов — для интервала, см. _apRender
     _ap.pos=null; _ap.cdUntil=Date.now()+AP_COOLDOWN;
     if(typeof _apLearn==='function')setTimeout(_apLearn,50);   // после каждой сделки ядро пересматривает настройку сегмента
     // …а разбор до сих пор ждал кнопки: ядро уже подстроилось, а на экране висели
     // прошлые цифры. Обновляем показ, если панель открыта — считать в закрытую вкладку смысла нет.
     setTimeout(()=>{ try{ if(document.getElementById('apAudit')?.offsetParent&&typeof _schedRun==='function')_schedRun('audit',true); }catch(e){} },300);
-    if(typeof _proc==='function')_proc('выход: '+p.proto+' ('+({tp:'тейк',stop:'стоп',time:'время',cancel:'отмена стратегии',manual:'вручную'}[reason]||reason)+') <b>'+(bps>=0?'+':'')+bps+' bps</b> за '+rec.hold+'с',bps>=0?'pr-up':'pr-dn');
+    if(typeof _proc==='function')_proc('выход: '+p.proto+' ('+({tp:'тейк',stop:'стоп',time:'время',cancel:'отмена стратегии',manual:'вручную'}[reason]||reason)+') <b>'+_usd(bps)+'</b> <span class="gs-note">('+(bps>=0?'+':'')+bps+' bps)</span> за '+rec.hold+'с',bps>=0?'pr-up':'pr-dn');
   }
   function _apToggle(){
     const b=document.getElementById('apBtn'), p=document.getElementById('apPanel');
@@ -9845,7 +9870,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       _ap.gridOn=false; _ap.modeSince=0;
       if(typeof _proc==='function')_proc('автопилот остановлен · сегодня '+_ap.today.n+' сд · '+(_ap.today.sum>=0?'+':'')+_ap.today.sum+' bps');
       if(p)p.style.display='none'; if(b){b.textContent='▶ автопилот';b.classList.remove('on');} return; }
-    _ap.today={n:0,w:0,sum:0}; _ap.walls={}; _ap.dHist=[]; _ap.tHist=[]; _ap.gridOn=false; _ap.modeSince=0;
+    _ap.today={n:0,w:0,sum:0,sq:0}; _ap.walls={}; _ap.dHist=[]; _ap.tHist=[]; _ap.gridOn=false; _ap.modeSince=0;
     if(b){b.textContent='⏹ стоп автопилота';b.classList.add('on');}
     if(p){p.style.display='block';p.innerHTML='<span class="gs-note">сканирую поток…</span>';}
     if(typeof _proc==='function')_proc('автопилот запущен — сканирую сегмент рынка');
@@ -9913,7 +9938,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const cls=evReal>0?'gs-up':'gs-dn';
       realHtml='<br><b>РЕАЛЬНОЕ ИСПОЛНЕНИЕ</b> <span class="gs-note">по замеренному спреду, '+n+' сд</span>'
         +'<br>средняя стоимость круга: <b>'+avgCost.toFixed(2)+' bps</b>'
-        +' · матож. идеал <b>'+evIdeal.toFixed(2)+'</b> → реальность <b class="'+cls+'">'+evReal.toFixed(2)+'</b> bps/сд'
+        +' · матож. идеал <b>'+_usd(evIdeal)+'</b> → реальность <b class="'+cls+'">'+_usd(evReal)+'</b> на сделку'
         +' · WR '+wrReal.toFixed(1)+'%'
         +'<br><span class="gs-note">Вход считается тейкером (полспреда), выход по тейку — мейкером (0), '
         +'по стопу/времени/отмене — тейкером. Это НИЖНЯЯ оценка: очередь, частичные заливки '
@@ -9960,7 +9985,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const lead=Object.keys(PROTOCOLS).reduce((a,b)=>(S[a]||0)>=(S[b]||0)?a:b);
     const cls=v=>v>=0?'gs-up':'gs-dn', sg=v=>(v>=0?'+':'')+v.toFixed(1);
     const cd=Math.max(0,Math.ceil((_ap.cdUntil-Date.now())/1e3));
-    let posHtml='<div class="ap-scan"><span class="ap-pulse"></span>сканирую рынок'+(cd?' · пауза '+cd+'с':'')+'</div>';
+    let posHtml='<div class="ap-scan"><span class="ap-pulse"></span>сканирую рынок'+(cd?' · пауза '+cd+'с':'')+
+      (_ap.why?' · <span class="gs-note">'+escapeHtml(String(_ap.why))+'</span>':'')+'</div>';
     if(_ap.gridOn&&_gs){
       const fl=_gs.inv.reduce((s,x)=>s+((m.px-x.entry)/x.entry*1e4)*(x.side==='long'?1:-1),0);
       const net=_gs.realized+fl-5*_gs.pairs-5*_gs.inv.length;
@@ -9982,19 +10008,51 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         +'<span class="ap-bar"><i style="width:'+prog.toFixed(0)+'%"></i></span>'
         +'</div>';
     }
-    const last=_ap.log.slice(-5).reverse().map(r=>'<span class="'+cls(r.bps)+'">'+sg(r.bps)+'</span>').join(' · ');
+    const last=_ap.log.slice(-5).reverse().map(r=>'<span class="'+cls(r.bps)+'">'+_usdn(r.bps)+'</span>').join(' · ');
     const wr=_ap.today.n?Math.round(_ap.today.w/_ap.today.n*100):null;
     // матожидание рядом с WR: высокий WR при отрицательном среднем — ловушка, её видно только так
     const exp=_ap.today.n?(_ap.today.sum/_ap.today.n):null;
     const beTxt=_ap.pos?(' · безубыток этой сделки '+Math.round(_beWR({tpBps:(_ap.pos.tp-_ap.pos.entry)/_ap.pos.entry*1e4*(_ap.pos.side==='long'?1:-1),stopBps:Math.abs((_ap.pos.entry-_ap.pos.stop)/_ap.pos.entry*1e4)})*100)+'% WR'):'';
-    const expHtml=exp==null?'':(' · матожидание <b class="'+cls(exp)+'">'+_usd(exp)+'/сделку</b>'+(wr!=null&&exp<0&&wr>=50?' <span class="gs-note">(WR высокий, но минус — ловушка)</span>':''));
+    /* ═══ МАТОЖИДАНИЕ С ИНТЕРВАЛОМ, А НЕ ТОЧКОЙ ═══
+    * БЫЛО: среднее по сегодняшним сделкам и ярлык «ловушка» при любом n.
+    * При четырёх сделках это шум, поданный как вывод, — и именно такой вывод
+    * толкает крутить настройки работающей системы. Весь остальной проект так
+    * не делает: у зон порог 10 наблюдений, у ядра 25 эпизодов, везде Уилсон.
+    * Здесь была единственная витрина, где точечная оценка выдавалась за факт.
+    *
+    * Считаем интервал Стьюдента по сумме квадратов. Множитель берём по n —
+    * при малых выборках нормальное 1.96 занижает ширину в разы (при n=4 нужно
+    * 3.18). Ярлык «ловушка» вешаем ТОЛЬКО когда верхняя граница ниже нуля,
+    * то есть когда минус подтверждён, а не показалось. */
+    let expHtml='';
+    if(exp!=null){
+      const n=_ap.today.n, sq=_ap.today.sq||0;
+      const T95={2:12.71,3:4.30,4:3.18,5:2.78,6:2.57,7:2.45,8:2.36,9:2.31,10:2.26,
+                 12:2.20,15:2.14,20:2.09,30:2.05};
+      let half=null;
+      if(n>=2){
+        const varr=Math.max(0,(sq-n*exp*exp)/(n-1));
+        const se=Math.sqrt(varr/n);
+        const keys=Object.keys(T95).map(Number).sort((x,y)=>x-y);
+        const t=T95[n]||T95[keys.filter(k=>k<=n).pop()]||1.96;
+        half=t*se;
+      }
+      const proven = half!=null && (exp+half)<0;      // минус подтверждён
+      expHtml=' · матожидание <b class="'+cls(exp)+'">'+_usd(exp)+'/сделку</b>'
+        +(half!=null?' <span class="gs-note">±'+_usd(half).replace(/^[+−]/,'')+'</span>':'')
+        +(proven&&wr!=null&&wr>=50
+            ? ' <span class="gs-note">(WR высокий, но минус подтверждён — ловушка)</span>'
+            : (n<10 ? ' <span class="gs-note">(n='+n+' — выборки мало, цифра ни о чём)</span>' : ''));
+    }
     const mode=_ap.gridOn?'СЕТКА (рейндж)':'НАПРАВЛЕННЫЙ (тренд/поток)';
     p.innerHTML='<b>АВТОПИЛОТ</b> · режим <b>'+mode+'</b> · сегмент <b>'+_apSegKey(m.f)+'</b> · лидер '+lead+' '+(S[lead]||0)+'%'
       +'<br><span class="gs-note">ордер:</span> <b class="ap-fee">$'+AP_MARGIN+' × '+AP_LEV+'×</b> = номинал <b>$'+_apNotional()+'</b>'
-      +' · издержки <b class="ap-fee">'+AP_FEE+' bps</b> · пауза <b class="ap-fee">'+Math.round(AP_COOLDOWN/1000)+'с</b>'
+      +' · издержки <b class="ap-fee">'+AP_FEE+' bps</b>'
+      +(AP_FEE>0?'<span class="gs-note"> ('+_usd(AP_FEE).replace('+','')+' на круг)</span>':'<span class="gs-note"> (ноль)</span>')
+      +' · пауза <b class="ap-fee">'+Math.round(AP_COOLDOWN/1000)+'с</b>'
       +' <span class="gs-note">(меняется в блоке «Параметры ордера» выше)</span>'
       +'<br>'+posHtml
-      +'<br>сегодня: <b>'+_ap.today.n+'</b> сд · WR '+(wr==null?'—':wr+'%')+expHtml+' · <b class="'+cls(_ap.today.sum)+'">'+_usd(_ap.today.sum)+'</b>'+beTxt+(last?' · последние: '+last:'')
+      +'<br>сегодня: <b>'+_ap.today.n+'</b> сд · WR '+(wr==null?'—':wr+'%')+expHtml+' · <b class="'+cls(_ap.today.sum)+'">'+_usd(_ap.today.sum)+'</b>'+beTxt+(last?' · последние, USDT: '+last:'')
       +'<br><span class="gs-note">виртуально · комиссия '+AP_FEE+' bps в PnL · модель · тренажёр — реальные ордера не открывает</span>';
   }
 
