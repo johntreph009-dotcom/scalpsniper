@@ -8903,7 +8903,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
    *   _usd  — с единицей, для отдельных чисел;
    *   _usdn — без единицы, для списков, где подпись выносится один раз, иначе
    *           «последние: +0.07 USDT · −1.85 USDT · …» не читается. */
-  function _usdn(bps){ const v=(+bps||0)/1e4*_apNotional(), a=Math.abs(v);
+  function _usdn(bps){
+    /* Номинал в знаменателе перевода. Если он почему-либо ноль (маржа или
+     * плечо сброшены), ВСЕ результаты молча станут «+0.00» — а это худший вид
+     * поломки: экран выглядит исправным и говорит, что ничего не заработано.
+     * Поэтому при нулевом номинале честно возвращаемся к базисным пунктам. */
+    const N=_apNotional();
+    if(!(N>0)) return (+bps>=0?'+':'−')+Math.abs(+bps||0).toFixed(1)+' bps';
+    const v=(+bps||0)/1e4*N, a=Math.abs(v);
     return (v>=0?'+':'−')+(a>=1000?(a/1000).toFixed(1)+'k':a>=10?a.toFixed(0):a.toFixed(2)); }
   function _usd(bps){ return _usdn(bps)+' USDT'; }
   // Настройки — обычные поля ввода в статическом блоке, БЕЗ prompt() и вне панели автопилота.
@@ -9528,7 +9535,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     return true;
   }
   const AP_LOGKEY='msa_autopilot_v1', AP_SEGKEY='msa_segstats_v1';
-  let _ap={on:false,pos:null,cdUntil:0,walls:{},dHist:[],tHist:[],log:[],seg:{},today:{n:0,w:0,sum:0}};
+  let _ap={on:false,pos:null,cdUntil:0,walls:{},dHist:[],tHist:[],log:[],seg:{},today:{n:0,w:0,sum:0,sq:0}};
   try{_ap.log=JSON.parse(localStorage.getItem(AP_LOGKEY)||'[]');}catch(e){}
   // разовый перенос уже накопленного окна в архив: до этой версии всё жило только в localStorage с обрезкой до 300
   setTimeout(()=>{ try{ if(!_apIdb||localStorage.getItem('msa_ap_arch_seeded'))return;
