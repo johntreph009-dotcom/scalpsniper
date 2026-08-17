@@ -690,13 +690,30 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
    * и это уже JS. Обходимся без него: прижимаем к верху и ограничиваем высоту
    * 40vh. Верхние 40% экрана клавиатура не закрывает никогда, ни в одной
    * ориентации, ни при какой её высоте. */
+  /* ═══ ПОЧЕМУ ЗДЕСЬ НЕТ -webkit-overflow-scrolling И TRANSFORM ═══
+   * Прошлая правка добавила `-webkit-overflow-scrolling:touch` на элемент с
+   * `position:fixed`. Это известная поломка iOS: свойство поднимает отдельный
+   * слой композитинга, и фиксированный элемент при прокрутке содержимого
+   * прыгает и пропадает. Трейдер описал это как «при скроллинге окно
+   * скипается» — точное попадание. Свойство устарело: momentum-прокрутка на
+   * iOS 13+ работает без него.
+   * Заодно снят `transform:translateX(-50%)`: центрирование делается парой
+   * left/right, а трансформ на фиксированном элементе с прокручиваемым
+   * содержимым — второй участник той же связки багов. Меньше слоёв — меньше
+   * поводов у Safari ошибиться.
+   * overscroll-behavior:contain — чтобы прокрутка списка не «перетекала» на
+   * страницу под ним: дойдя до конца списка, палец начинал листать фон, и
+   * окно выглядело улетевшим. */
   .ticker-dd,.sess-tkwrap .ticker-dd,.demo-tkwrap .ticker-dd{
-    position:fixed;left:50%;right:auto;
+    position:fixed;
+    left:3vw;right:3vw;
     top:calc(env(safe-area-inset-top,0px) + 10px);
-    transform:translateX(-50%);
-    width:min(94vw,360px);max-width:94vw;min-width:0;
+    transform:none;
+    width:auto;max-width:none;min-width:0;
     max-height:40vh;
-    -webkit-overflow-scrolling:touch;
+    overflow-y:auto;overflow-x:hidden;
+    overscroll-behavior:contain;
+    touch-action:pan-y;
     box-shadow:0 18px 50px rgba(0,0,0,.7),0 0 0 100vmax rgba(0,0,0,.55);z-index:300}
   .tdd-sort{padding:8px 11px;font-size:9.5px}
   /* Пункт списка — палец: 13px по вертикали даёт ~40px высоты. Промахнуться
@@ -1717,6 +1734,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
    * там. В блоке 500px они уже есть — здесь для ширин между 500 и 960. */
   .zone-px{min-height:34px;display:inline-flex;align-items:center;padding:6px 8px;margin:-6px -8px}
   .zone-close{min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center}
+  /* Серый блик iOS поверх янтарного акцента — гасим, свой :active уже есть. */
+  *{-webkit-tap-highlight-color:transparent}
+  /* manipulation убирает двойной тап для зума на кнопках, а с ним и задержку
+   * 300 мс перед срабатыванием. В скальпинге это разница между попал и опоздал.
+   * Полотну графика НЕ ставим: ему нужен пинч, а manipulation его сохраняет,
+   * но двойной тап там теперь наш сброс вида — не мешаем ему явным правилом. */
+  button,.btn,.chip,.zone-close,.zone-px,.ticker-dd-item,.tdd-sort,.pf-close,.pf-min{touch-action:manipulation}
 }
 </style>
 </head>
@@ -3172,7 +3196,30 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     try{localStorage.setItem('msa_dep',JSON.stringify({d:document.getElementById('deposit').value,r:r}))}catch(e){}
     renderZones();recalc();renderReadinessScore();updateStreakBadge();
   }
-  function escapeHtml(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+  function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+  /* Одиночная кавычка добавлена по аудиту. Сегодня все 24 вызова выводят
+   * результат в атрибуты с ДВОЙНЫМИ кавычками или в текст, поэтому дыры не
+   * было. Но стоит завести один атрибут в одиночных кавычках — и пробой
+   * появится, а помнить об этом через год никто не будет. String() — на
+   * случай, когда прилетает не строка.
+   *
+   * ═══ ИМЯ СИМВОЛА ПРОВЕРЯЕТСЯ, А НЕ ЭКРАНИРУЕТСЯ ═══
+   * Список монет приходит С БИРЖИ и подставляется в _tdInner внутрь
+   * onpointerdown="..('${s}')" — это контекст исполнения JS, а не текст, и
+   * экранирование HTML там не спасает: нужна другая кодировка.
+   * Тикер имеет известную форму, поэтому правильный ответ — проверка формы, а
+   * не попытка обезвредить произвольную строку. Что не похоже на тикер —
+   * выбрасываем, а не чиним.
+   * Почему это перестало быть косметикой: страница отдаётся с того же адреса,
+   * что торговый API (localhost:8081). XSS здесь = вызов /api/zones = подмена
+   * плана боевому движку. */
+  /* Нижняя граница ОДИН знак, не два. Проверка на живых именах MEXC поймала
+   * мою же ошибку: «W» (Wormhole) — настоящий листинг, и фильтр {2,20} молча
+   * выбросил бы его из пикера. Это ровно тот класс самодельной поломки, от
+   * которого трейдер уже страдал: список открывается, монеты в нём нет.
+   * На безопасность длина не влияет — [A-Z0-9] кавычек не содержит по
+   * построению, а именно кавычка нужна, чтобы выйти из строки JS. */
+  function _symOk(x){ return typeof x==='string' && /^[A-Z0-9]{1,20}$/.test(x); }
   // парс числа с русской запятой-разделителем («0,5» → 0.5); чистим пробелы-тысячи
   function _pf(v){ if(v==null)return NaN; return parseFloat(String(v).trim().replace(/\s/g,'').replace(',','.')); }
   // ── Санитайзер текстового ввода (вставка разбора из чата). Вырезает HTML/скрипты/опасные схемы и управляющие
@@ -3339,9 +3386,43 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         }
       } else { nEl.textContent='—';nEl.className='sv'; if(noteEl)noteEl.textContent=''; }
     }
-    if(wr>0&&wr<100&&risk>0){const p=wr/100,rr=1.5,expR=p*rr-(1-p);let ror;
-      if(expR<=0)ror=100;else{const A=expR/(p*rr*rr+(1-p)),units=100/risk;ror=Math.pow((1-A)/(1+A),units)*100;if(!isFinite(ror)||ror<0)ror=0;if(ror>100)ror=100;}
-      rEl.textContent=ror<0.01?'<0.01%':ror.toFixed(2)+'%';rEl.className='sv '+(ror>50?'danger':ror>15?'warn':'green');}
+    /* ═══ РИСК РАЗОРЕНИЯ: ТЕ ЖЕ ДОПУЩЕНИЯ, ЧТО У ПЛАНКИ ВИНРЕЙТА ═══
+       * Было два расхождения, оба — с цифрой, стоящей рядом на том же экране.
+       *
+       * 1. rr был прошит как 1.5, хотя планка берёт R:R из поля c_rr. Меняешь
+       *    R:R — планка едет, разорение стоит. Одно поле, два разных ответа.
+       * 2. Комиссия входила в планку и не входила в разорение. При винрейте
+       *    ровно на планке терминал говорил «серия убыточна» и «разорение
+       *    0.04%» одновременно.
+       *
+       * Комиссия переводится в R так же, как в планке: ratio = комиссия/стоп,
+       * оба в % цены. Выигрыш нетто = rr − ratio, проигрыш нетто = 1 + ratio.
+       * Нормируем на проигрыш: b = (rr − ratio)/(1 + ratio). Единиц R на счёте
+       * становится меньше во столько же раз — каждый убыток теперь стоит
+       * (1 + ratio) прежних единиц.
+       *
+       * Проверяемое следствие: expR ≤ 0 ⟺ p ≤ (1 + ratio)/(1 + rr), а это ровно
+       * та планка need, что показана выше. Разорение переключается на 100%
+       * ТОЧНО там, где планка объявляет серию убыточной — по построению, а не
+       * по совпадению. При комиссии 0 формула сходится к прежней. */
+      if(wr>0&&wr<100&&risk>0){
+        const p=wr/100;
+        const _rrIn=parseFloat((document.getElementById('c_rr')||{}).value);
+        const rrR=isFinite(_rrIn)&&_rrIn>0?_rrIn:1.5;
+        const _feeIn=parseFloat((document.getElementById('c_fee')||{}).value);
+        const feeR=isFinite(_feeIn)?_feeIn:0;
+        const stopPctR=(entry>0&&stop>0&&entry!==stop)?Math.abs(entry-stop)/entry*100:0;
+        const ratioR=stopPctR>0?(feeR*0.01)/stopPctR:0;
+        const b=(rrR-ratioR)/(1+ratioR);
+        const unitsR=(100/risk)/(1+ratioR);
+        const expR=p*b-(1-p);
+        let ror;
+        if(!(b>0)||expR<=0)ror=100;
+        else{const A=expR/(p*b*b+(1-p));
+          ror=Math.pow((1-A)/(1+A),unitsR)*100;
+          if(!isFinite(ror)||ror<0)ror=0;if(ror>100)ror=100;}
+        rEl.textContent=ror<0.01?'<0.01%':ror.toFixed(2)+'%';
+        rEl.className='sv '+(ror>50?'danger':ror>15?'warn':'green');}
     else{rEl.textContent='—';rEl.className='sv';}
   }
   ['c_entry','c_stop','lev','c_wr','c_risk'].forEach(id=>document.getElementById(id).addEventListener('input',recalc));
@@ -3507,7 +3588,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(!positions||!positions.length){ el.classList.add('hide'); if(document.title.includes('USDT ·'))document.title='ScalpSniper — Precision Trading Terminal'; return; }
     el.classList.remove('hide');
     const s=_pfState();
-    if(s.left!=null&&s.top!=null){ el.style.left=s.left+'px'; el.style.top=s.top+'px'; el.style.right='auto'; el.style.bottom='auto'; }
+    if(s.left!=null&&s.top!=null){
+        /* Позиция сохраняется общая для всех устройств. Сдвинутая на рабочем
+         * столе панель (left ~1500) на экране 390px оказывалась за краем — и
+         * вернуть её было нельзя: таскание висело только на mousedown.
+         * Ограничение по краям было ТОЛЬКО внутри move(), то есть работало при
+         * перетаскивании и не работало при загрузке. Повторяем его здесь. */
+        const vw=window.innerWidth, vh=window.innerHeight;
+        const w=el.offsetWidth||220, hh=el.offsetHeight||120;
+        const L=Math.max(4,Math.min(vw-w-4,s.left));
+        const T=Math.max(4,Math.min(vh-44,s.top));
+        el.style.left=L+'px'; el.style.top=T+'px'; el.style.right='auto'; el.style.bottom='auto';
+      }
     if(s.min)el.classList.add('min');
     let total=0, haveAny=false;
     const rows=positions.map(p=>{
@@ -3547,6 +3639,24 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       head.addEventListener('mousedown',e=>{ if(e.target.closest('.pf-min'))return; e.preventDefault(); start(e.clientX,e.clientY); });
       window.addEventListener('mousemove',e=>move(e.clientX,e.clientY));
       window.addEventListener('mouseup',end);
+     
+      /* СНЯТ МОЙ ДУБЛЬ. Перетаскивание пальцем здесь уже было — ниже, тремя
+       * строками: touchstart{passive:true} + touchmove + touchend. Я добавил
+       * второй комплект, поверив проверке, которая сравнивала КОЛИЧЕСТВО
+       * mousedown и touchstart по всему файлу. Такая проверка не знает, у
+       * какого элемента чего не хватает, и дала ложное срабатывание — а после
+       * правки «прошла», потому что обработчиков стало больше.
+       * Вред был не только в дубле: мой touchstart звал preventDefault() на
+       * шапке панели, а это подавляет синтетический клик — то есть ломало
+       * кнопку закрытия панели на телефоне. */
+      /* Поворот экрана и появление клавиатуры меняют размеры: панель, стоявшая
+       * у правого края, оказывается за ним. Возвращаем её обратно. */
+      window.addEventListener('resize',()=>{ const r=el.getBoundingClientRect();
+        if(!r.width)return;
+        const L=Math.max(4,Math.min(window.innerWidth-r.width-4,r.left));
+        const T=Math.max(4,Math.min(window.innerHeight-44,r.top));
+        if(L!==r.left||T!==r.top){ el.style.left=L+'px'; el.style.top=T+'px';
+          const st=_pfState(); st.left=Math.round(L); st.top=Math.round(T); _pfSave(st); } });
       head.addEventListener('touchstart',e=>{ if(e.target.closest('.pf-min'))return; const t=e.touches[0]; start(t.clientX,t.clientY); },{passive:true});
       window.addEventListener('touchmove',e=>{ if(!drag)return; const t=e.touches[0]; move(t.clientX,t.clientY); },{passive:false});
       window.addEventListener('touchend',end);
@@ -4954,7 +5064,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           Object.keys(_mxWallAge).forEach(k=>{ if(!seen[k])delete _mxWallAge[k]; });
         } }catch(e){} };
       ws.onclose=()=>{ if(_mxWsPing){clearInterval(_mxWsPing);_mxWsPing=null;}
-        if(phase==='live'&&_mxWsTry<5){_mxWsTry++; setTimeout(()=>{if(phase==='live')_mxWsStart();},2000*_mxWsTry);} };
+        if(phase==='live'){_mxWsTry++;
+        /* Было _mxWsTry<5: после пяти обрывов стакан сдавался НАВСЕГДА и
+         * молча. За сессию в несколько часов пять обрывов — норма, а не
+         * авария. Предел снят, вместо него потолок паузы 30 с. */
+        setTimeout(()=>{if(phase==='live')_mxWsStart();},Math.min(30000,2000*_mxWsTry));} };
       ws.onerror=()=>{ try{ws.close();}catch(e){} };
     }catch(e){}
   }
@@ -4988,7 +5102,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // так лента и «аквариум» набиваются максимально плотно из того, что реально доступно. Всё приводится к нотионалу USDT.
   function _whWorkerCode(){ return "var ws=[],sym='',base='',ctv=0,thr=0,buf=[];"+
     "function close(){for(var i=0;i<ws.length;i++){try{ws[i].onclose=null;ws[i].close();}catch(e){}}ws=[];}"+
-    "function add(u,oo,om){try{var s=new WebSocket(u);if(oo)s.onopen=function(){try{oo(s);}catch(e){}};s.onmessage=function(e){try{om(e.data);}catch(e){}};s.onerror=function(){};ws.push(s);}catch(e){}}"+
+    "function add(u,oo,om){try{var s=new WebSocket(u);s.__try=0;s.onopen=function(){s.__try=0;if(oo){try{oo(s);}catch(e){}}};s.onmessage=function(e){try{om(e.data);}catch(e){}};s.onerror=function(){};s.onclose=function(){var i=ws.indexOf(s);if(i>=0)ws.splice(i,1);if(!sym)return;var n=(s.__try||0)+1,d=Math.min(30000,1000*Math.pow(2,n-1));setTimeout(function(){if(!sym)return;var q=add(u,oo,om);if(q)q.__try=n;},d);};ws.push(s);return s;}catch(e){return null}}"+
     "function P(mkt,side,n,px,ex){if(isFinite(n)&&n>0&&n>=thr)buf.push({mkt:mkt,side:side,n:n,px:px,ex:ex});}"+
     "function open(){close();"+
     "add('wss://stream.binance.com:9443/ws/'+sym.toLowerCase()+'@aggTrade',null,function(d){var o=JSON.parse(d),p=+o.p,q=+o.q;P('spot',o.m?'sell':'buy',p*q,p,'BIN');});"+
@@ -6076,6 +6190,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           const frac=g?Math.max(0,Math.min(1,p.x/Math.max(1,g.W-g.LBL))):0.5;
           _mcZoom(e.deltaY>0?1.25:0.8,frac); },{passive:false});
         cv.addEventListener('dblclick',e=>{e.preventDefault();_mcResetView();});
+    /* Двойной клик — мышь. На сенсоре зум делается пинчем, а вернуться было
+     * нечем: dblclick после двойного тапа iOS отдаёт не всегда, и его глотает
+     * собственный зум страницы. Ловим двойной тап сами. */
+    let _mcTap=0;
+    cv.addEventListener('touchend',e=>{ if(e.touches.length)return;
+      const t=Date.now(); if(t-_mcTap<320){ e.preventDefault(); _mcResetView(); _mcTap=0; } else _mcTap=t; },{passive:false});
         // тач: пинч — зум; один палец — кроссхэйр (полный вид) или пан (в зуме)
         let _tPinch=null,_tPan=null;
         cv.addEventListener('touchstart',e=>{const r=cv.getBoundingClientRect();
@@ -7023,8 +7143,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     let head='';
     if(hasMeta){ const chip=(k,l)=>`<button type="button" class="tdd-sort${_tkSort===k?' on':''}" onpointerdown="event.preventDefault();event.stopPropagation();_setTkSort('${k}')">${l}</button>`;
       head=`<div class="ticker-dd-head"><span>топ дня</span><span class="tdd-sorts">${chip('rng','волат')}${chip('vol','объём')}${chip('chg','Δ%')}</span></div>`; }
-    if(!syms.length)return head+'<div class="ticker-dd-empty">нет совпадений</div>';
-    const list=hasMeta?_tdSort(syms):syms;
+    const clean=(syms||[]).filter(_symOk);
+    if(clean.length!==(syms||[]).length&&typeof console!=='undefined')
+      console.warn('пикер: отброшено имён неверной формы — '+((syms||[]).length-clean.length));
+    if(!clean.length)return head+'<div class="ticker-dd-empty">нет совпадений</div>';
+    const list=hasMeta?_tdSort(clean):clean;
     return head+list.map(s=>`<div class="ticker-dd-item" data-sym="${s}" onpointerdown="event.preventDefault();${pick}('${s}')"><span class="tdd-sym">${s}/USDT</span>${_tdMetaHtml(_tkMeta[s])}</div>`).join('');
   }
   function _renderTickerDD(syms){ const dd=document.getElementById('tickerDD'); if(!dd)return; dd.innerHTML=_tdInner(syms.length?syms:[],'_setTicker'); _markActiveChip(); }
@@ -7169,18 +7292,56 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   let _dlMsgCount=0,_dlSrc='—',_dlDec=2,_dlStartedAt=0,_dlLastSnap=0,_dlWatch=null;
   // ВТОРОЙ РУБЕЖ: сторож главного потока. Если умер сам воркер (а не сокет внутри него),
   // внутренний сторож не поможет — перезапускаем воркер целиком. Ночное зависание лечится здесь.
+  /* ═══ СТОРОЖ ПОТОКА ═══
+   * Было: молчание 90 с, проверка раз в 30 → до двух минут слепоты. И сторож
+   * был ЕДИНСТВЕННЫМ путём восстановления, потому что сокеты воркера не
+   * переподключались вовсе — оборвался поток, и воркер молчал навсегда.
+   * Теперь переподключение живёт в самом воркере (~2 с), а сторож остался
+   * страховкой на случай, когда сокет жив, а данных нет. Порог поэтому можно
+   * опустить: 20 с молчания при скальпинге — уже вечность.
+   *
+   * ЗАЧЕМ ВИДИМАЯ ПЛАШКА: автопилот вызывается ИЗ обработчика снимка. Встала
+   * лента — он не «решил не входить», он вообще не запускается. Снаружи это
+   * выглядит ровно как «нет сигнала», и отличить было нечем. */
+  const DL_STALE_MS=20000;
+  function _dlStaleMs(){ return _dlLastSnap?Date.now()-_dlLastSnap:0; }
+  function _dlFeedBanner(stale){
+    let bn=document.getElementById('feedStaleBanner');
+    if(stale){
+      if(!bn){ const lc=document.getElementById('liveCard');
+        if(lc&&lc.parentNode){ bn=document.createElement('div'); bn.id='feedStaleBanner';
+          bn.className='cf-banner'; lc.parentNode.insertBefore(bn,lc); } }
+      if(bn){ bn.style.display='block';
+        bn.textContent='⚠ Поток данных молчит '+Math.round(stale/1000)+' с'+
+          ((typeof _ap!=='undefined'&&_ap.on)?' — АВТОПИЛОТ СЛЕП, входов не будет':'')+
+          '. Переподключаюсь.'; }
+    } else if(bn) bn.style.display='none';
+  }
+  function _dlRestartFeed(why){
+    if(typeof _proc==='function')_proc(why,'pr-dn');
+    _dlLastSnap=Date.now();
+    try{ if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} }catch(e){}
+    try{ _demoStart(); }catch(e){}
+  }
   function _dlWatchdog(){
     if(_dlWatch)clearInterval(_dlWatch);
     _dlWatch=setInterval(()=>{
-      if(!_dlRunning||document.hidden)return;
-      if(_dlLastSnap&&Date.now()-_dlLastSnap>90000){
-        if(typeof _proc==='function')_proc('поток молчал 90с — перезапускаю движок данных','pr-dn');
-        _dlLastSnap=Date.now();
-        try{ if(_dlWorker){_dlWorker.terminate();_dlWorker=null;} }catch(e){}
-        try{ _demoStart(); }catch(e){}
-      }
-    },30000);
+      if(!_dlRunning)return;
+      const st=_dlStaleMs();
+      if(!document.hidden)_dlFeedBanner(st>8000?st:0);
+      if(document.hidden)return;
+      if(_dlLastSnap&&st>DL_STALE_MS)
+        _dlRestartFeed('поток молчал '+Math.round(st/1000)+'с — перезапускаю движок данных');
+    },7000);
   }
+  /* Возврат в приложение — самый частый мёртвый поток на телефоне: iOS рвёт
+   * сокеты свёрнутой страницы. Ждать тик сторожа тут незачем. */
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden||typeof _dlRunning==='undefined'||!_dlRunning)return;
+    const st=_dlStaleMs();
+    if(_dlLastSnap&&st>8000){ _dlFeedBanner(st);
+      _dlRestartFeed('вернулись в приложение, поток стоял '+Math.round(st/1000)+'с — перезапуск'); }
+  });
   let _dlHist=[],_dlPCtx=null,_dlPH=0,_dlPW=0,_dlTick=0;   // _dlTick — монотонный счётчик тиков: якорь событий сетки на оси X (сам _dlHist обрезается)
   // ═══ РЯД ДЛЯ ЗАМЕРА РЕЖИМА: ШАГ ПО ВРЕМЕНИ, А НЕ ПО СООБЩЕНИЯМ ═══
   // _dlHist растёт на КАЖДЫЙ снимок воркера, поэтому его 180 отсчётов — это
