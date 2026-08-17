@@ -7991,7 +7991,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       ctx.font='bold 9px JetBrains Mono,monospace';
       ctx.fillStyle='rgba(255,122,24,.9)'; ctx.fillText('СЕТКА',6,12);
       ctx.fillStyle=net2>=0?'#2EE08A':'#FF5A5F';
-      ctx.fillText('пар '+_gs.pairs+' · '+(net2>=0?'+':'')+net2.toFixed(1)+' bps'+(_gs.hfa?' · HFA '+_gs.hfa:''),48,12);
+      ctx.fillText('пар '+_gs.pairs+' · '+_usd(net2)+(_gs.hfa?' · HFA '+_gs.hfa:''),48,12);
       ctx.restore();
     }
     const cur=hh[n-1], first=hh[0], pct=first?((cur-first)/first*100):0;
@@ -8412,7 +8412,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }
     if(changed){ _dlSaveJournal(); _dlRenderOutcomes();
       if(flash && now-_dlFbT>6000){ const f=document.getElementById('dlFeedback'); if(f){ const v=_dlVerdict(flash);
-        f.textContent=(v==='win'?'✓':v==='loss'?'✗':'≈')+' исход @30с: '+(flash.o30>=0?'+':'')+flash.o30+' bps ('+(flash.side==='long'?'лонг':'шорт')+' @ '+flash.px+')';
+        f.textContent=(v==='win'?'✓':v==='loss'?'✗':'≈')+' исход @30с: '+_usd(flash.o30)+' ('+(flash.side==='long'?'лонг':'шорт')+' @ '+flash.px+')';
         f.className='dl-feedback show '+(v==='win'?'up':v==='loss'?'warn':''); } }
     }
   }
@@ -8446,7 +8446,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       return lbl+' '+w+'%'+(lo!=null?' (не хуже '+lo+'%)':'')+' ('+d.length+')';
     };
     const parts=[seg('с моделью',withM),seg('против',agM),seg('в SHUTDOWN',sd)].filter(Boolean);
-    el.innerHTML='ЧТЕНИЕ @30с: <b>'+done.length+'</b> замеров · <b>'+wins+'</b> win · ср <b>'+(a30>=0?'+':'')+a30+'</b> bps'+(a15!=null?' <span class="rs-note">(@15с: '+(a15>=0?'+':'')+a15+')</span>':'')
+    el.innerHTML='ЧТЕНИЕ @30с: <b>'+done.length+'</b> замеров · <b>'+wins+'</b> win · ср <b>'+_usd(a30)+'</b>'+(a15!=null?' <span class="rs-note">(@15с: '+_usd(a15)+')</span>':'')
       +(parts.length?'<br>'+parts.join(' · '):'')
       +'<br><span class="rs-note">исход = движение mid против спреда входа · виртуально, гипотеза, не результат сделки</span>';
   }
@@ -8605,7 +8605,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     }else{
       const st=_gsStop('ручная');
       if(st){
-        if(typeof _proc==='function')_proc('сетка остановлена вручную · итог '+(st.net>=0?'+':'')+st.net+' bps · пар '+st.pairs,st.net>=0?'pr-up':'pr-dn');
+        if(typeof _proc==='function')_proc('сетка остановлена вручную · итог '+_usd(st.net)+' · пар '+st.pairs,st.net>=0?'pr-up':'pr-dn');
         if(st.fills>0&&_dlSnap&&typeof _apMicro==='function'){const m=_apMicro(); if(m)_apLogGrid(st,m);}
       }
     }
@@ -8744,7 +8744,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(stopWhy){
       const st=_gsStop(stopWhy);
       if(st&&typeof _proc==='function')
-        _proc('сетка остановлена: '+stopWhy+' · итог '+(st.net>=0?'+':'')+st.net+' bps · пар '+st.pairs,
+        _proc('сетка остановлена: '+stopWhy+' · итог '+_usd(st.net)+' · пар '+st.pairs,
               st.net>=0?'pr-up':'pr-dn');
       if(st&&_dlSnap&&typeof _apMicro==='function'){ const m=_apMicro(); if(m&&typeof _apLogGrid==='function')_apLogGrid(st,m); }
       _gsManual=false; _gsBtnSync();
@@ -8795,7 +8795,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         if(worst.lvl)worst.lvl.open=true;
         _gs.inv=_gs.inv.filter(x=>x!==worst);
         _ev('tail',px,wl);
-        if(typeof _proc==='function')_proc('хвост подтянут: убыточная нога от '+worst.entry.toFixed(_dlDec)+' закрыта за счёт прибыли ('+wl.toFixed(0)+' bps), кредит остался '+_gs.credit.toFixed(0),'pr-up');
+        if(typeof _proc==='function')_proc('хвост подтянут: убыточная нога от '+worst.entry.toFixed(_dlDec)+' закрыта за счёт прибыли ('+_usd(wl)+'), кредит остался '+_usd(_gs.credit),'pr-up');
       }
     }
     const earned=Math.max(0,_gs.realized);
@@ -9415,7 +9415,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(b){
       h+='<br>лучшее по истории: <b>'+(b.режим==='mo'?'МОМЕНТУМ':'усреднение')+'</b>, шаг <b>'+b.шаг+' bps</b>'
         +' → <b class="'+cls(b.итог)+'">'+_usd(b.итог)+'</b> <span class="gs-note">('+b.пары+' пар, '+b.хвосты+' хвостов, висит '+b.висит+')</span>'
-        +'<br>риск: инвентарь держал против себя до <b class="gs-dn">'+_usd(b.худшийМинус||0)+'</b> ('+Math.abs(b.худшийМинус||0)+' bps)'
+        +'<br>риск: инвентарь держал против себя до <b class="gs-dn">'+_usd(-Math.abs(b.худшийМинус||0))+'</b>'
         +' <span class="gs-note">— при плече '+AP_LEV+'× ликвидация на '+(1e4/AP_LEV).toFixed(0)+' bps, запас '+((1e4/AP_LEV+(b.худшийМинус||0))/100).toFixed(2)+'%</span>'
         +((Math.abs(b.худшийМинус||0)>=1e4/AP_LEV*0.6)?' <b class="gs-dn">⚠ близко к ликвидации при текущем плече</b>':'');
       h+='<br><span class="gs-note">перебор (сортировка по доходу на единицу просадки):</span>';
