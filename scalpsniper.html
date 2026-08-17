@@ -676,8 +676,41 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .hint-wrap:hover .hint-tip,.hint-wrap.open .hint-tip{opacity:1}
   @media(max-width:500px){.hint-tip{left:auto;right:0;max-width:min(220px,calc(100vw - 24px))}.hint-tip::after{left:auto;right:10px}
   /* мобильный пикер тикера: центрированная плавающая карточка + затемнение фона (CSS-only), не обрезается */
-  .ticker-dd,.sess-tkwrap .ticker-dd,.demo-tkwrap .ticker-dd{position:fixed;left:50%;top:50%;right:auto;transform:translate(-50%,-50%);width:min(92vw,340px);max-width:92vw;min-width:0;max-height:72vh;box-shadow:0 18px 50px rgba(0,0,0,.7),0 0 0 100vmax rgba(0,0,0,.5);z-index:300}
-  .tdd-sort{padding:7px 10px;font-size:9px}.ticker-dd-item{padding:10px 11px}}
+  /* ═══ ПИКЕР ПРИЖАТ К ВЕРХУ, А НЕ ПО ЦЕНТРУ ═══
+   * ОТЧЁТ С iPhone 13 Pro (390x844, iOS 18.7): обрезки за экран НЕТ, а пикер
+   * всё равно недоступен. Причина не в вылете, а в клавиатуре.
+   *
+   * Пикер открывается по ФОКУСУ поля — значит клавиатура в этот момент уже
+   * вылезла и занимает нижние ~336 из 844 точек. Карточка была центрирована по
+   * top:50% с высотой до 72vh: её середина приходилась ровно на кромку
+   * клавиатуры, а низ уходил под неё. Список видно, нажать нельзя.
+   *
+   * Почему не помогают dvh и safe-area: они учитывают панели браузера, но НЕ
+   * клавиатуру. Единственная величина, знающая про клавиатуру, — visualViewport,
+   * и это уже JS. Обходимся без него: прижимаем к верху и ограничиваем высоту
+   * 40vh. Верхние 40% экрана клавиатура не закрывает никогда, ни в одной
+   * ориентации, ни при какой её высоте. */
+  .ticker-dd,.sess-tkwrap .ticker-dd,.demo-tkwrap .ticker-dd{
+    position:fixed;left:50%;right:auto;
+    top:calc(env(safe-area-inset-top,0px) + 10px);
+    transform:translateX(-50%);
+    width:min(94vw,360px);max-width:94vw;min-width:0;
+    max-height:40vh;
+    -webkit-overflow-scrolling:touch;
+    box-shadow:0 18px 50px rgba(0,0,0,.7),0 0 0 100vmax rgba(0,0,0,.55);z-index:300}
+  .tdd-sort{padding:8px 11px;font-size:9.5px}
+  /* Пункт списка — палец: 13px по вертикали даёт ~40px высоты. Промахнуться
+   * по строке во всю ширину невозможно, а вот по низкой — легко. */
+  .ticker-dd-item{padding:13px 12px}
+  .ticker-dd-head{padding:9px 10px 10px}
+
+  /* ═══ МЕЛКИЕ КНОПКИ ИЗ ОТЧЁТА С ТЕЛЕФОНА ═══
+   * Замерено на устройстве: .zone-px 21px, .zone-close 25px. Порог 32px взят
+   * как рабочий минимум для плотного терминала (подушечка пальца ~40px).
+   * Обе кнопки — в лестнице зон, то есть нажимаются в сессии, когда цена уже
+   * подошла и время дорого. Промах здесь стоит не удобства, а сделки. */
+  .zone-px{min-height:34px;display:inline-flex;align-items:center;padding:6px 8px;margin:-6px -8px}
+  .zone-close{min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center}}
   /* умная сторона тултипа — ставится JS при открытии по позиции иконки */
   .hint-wrap.tip-l .hint-tip{left:0;right:auto}
   .hint-wrap.tip-l .hint-tip::after{left:10px;right:auto}
@@ -1651,6 +1684,40 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     #mcZonesBtn,#mcLyrBtn,#mcTallBtn{min-height:32px!important;min-width:32px!important;
       display:inline-flex!important;align-items:center;justify-content:center}
   }
+
+/* ═══════════════ СЕНСОРНЫЙ ЭКРАН ═══════════════
+ * Запрос (hover:none)+(pointer:coarse), а не ширина экрана: зум при фокусе —
+ * свойство ПАЛЬЦА, а не узкого экрана. Планшет шириной 800px зумит так же,
+ * как телефон, а узкое окно на рабочем столе — нет. По ширине это правило
+ * било бы мимо в обе стороны.
+ *
+ * ПРАВИЛО iOS: поле с font-size < 16px при фокусе увеличивает ВСЮ страницу.
+ * Обратно она сама не возвращается. Именно это ломало выбор монеты: пикер
+ * открывается по фокусу поля, то есть ровно в момент зума — список уезжал
+ * вместе со страницей и не давался под палец.
+ *
+ * Почему не maximum-scale=1 в мета-теге (обычный совет из интернета): он
+ * убивает щипковый зум на всей странице. Трейдер тогда не сможет приблизить
+ * график и цифры зон. Лечить вёрстку ценой отключения зума — плохой обмен. */
+@media (hover:none) and (pointer:coarse){
+  input,select,textarea,
+  .shot textarea:not(.obs-ta),.zone-add input,.zone-add select,
+  .ap-cfg input,.paste-box textarea,.limits-inline input,
+  .t-side .zone-add input,.t-side .zone-add select{
+    font-size:16px !important;
+    min-width:0}                      /* поле в grid/flex имеет свою внутреннюю
+                                       * ширину ~20 знаков и распирает ячейку —
+                                       * min-width:0 снимает это, иначе крупный
+                                       * шрифт вытолкнет колонку за экран */
+  /* два поля с жёсткой коробкой: 58 и 64px рассчитаны под 11-12px шрифт.
+   * Моноширинный знак 16px ≈ 9.6px, плюс отступы — под "0.35" нужно ~78px. */
+  .limits-inline input{width:78px}
+  .ap-cfg input{width:82px}
+  /* На планшете лестница зон та же, что на телефоне: цели под палец нужны и
+   * там. В блоке 500px они уже есть — здесь для ширин между 500 и 960. */
+  .zone-px{min-height:34px;display:inline-flex;align-items:center;padding:6px 8px;margin:-6px -8px}
+  .zone-close{min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center}
+}
 </style>
 </head>
 <body>
