@@ -4164,12 +4164,51 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
    * причина видна там, где её можно исправить. */
   async function cnSendZones(){
     const out=[], skipped=[];
+    /* ═══ ОБЪЁМ СЧИТАЕТСЯ ОТ РИСКА НА ЗОНУ ═══
+     * Поля объёма у зоны не было НИГДЕ: ни z.vol, ни z.qty не присваивались, и
+     * поэтому мост не отправлял в движок ни одной зоны — все отсекались на
+     * проверке «нет объёма» ещё до запроса. Выбор трейдера: считать размер из
+     * риска, формулой из спецификации, а не вводить руками.
+     *   vol = (депозит × риск%) / |цена − стоп|
+     * Смысл: каждая зона рискует ОДНИМИ И ТЕМИ ЖЕ деньгами независимо от того,
+     * насколько далеко стоп. Дальний стоп → меньше объёма, и наоборот. Это то
+     * же, что делает confirmOpenPos для ручной позиции, так что два пути дают
+     * одинаковый размер — расхождения между «ручной» и «движковой» сделкой не
+     * будет.
+     * Лимиты движка (номинал на ордер, дневной убыток) остаются последней
+     * линией: посчитанный здесь объём они всё равно проверяют. */
+    const _dep=_pf((document.getElementById('deposit')||{}).value);
+    const _rsk=_pf((document.getElementById('depRisk')||{}).value);
+    const _riskMoney=(_dep>0&&_rsk>0)?_dep*_rsk/100:0;
     for(const z of zones){
-      const px=+z.px, stop=+z.stop, vol=+z.qty||+z.vol||0;
-      const side=(z.dir==='short')?'short':'long';
+      const px=+z.px, stop=+z.stop;
+      let vol=+z.qty||+z.vol||0;
+      /* ═══ СТОРОНА ВЫВОДИТСЯ ИЗ ГЕОМЕТРИИ СТОПА ═══
+       * БЫЛО: side=(z.dir==='short')?'short':'long'. Поле z.dir не
+       * присваивается НИГДЕ в файле — проверены все присваивания. То есть
+       * сторона всегда получалась 'long', и каждая размеченная короткая зона
+       * уехала бы в движок как длинная. Спасала только проверка на той
+       * стороне: takeZones отклоняет лонг со стопом выше входа. То есть шорты
+       * не торговались неверно — они просто не доезжали, с непонятным
+       * сообщением «стоп лонга выше входа».
+       *
+       * Новых полей не нужно. Сторона однозначно следует из того, где стоит
+       * стоп: ниже входа — лонг, выше — шорт. Это ТО ЖЕ правило, которым
+       * движок проверяет присланное, применённое на шаг раньше. Догадки здесь
+       * нет: стоп по другую сторону от входа — не короткая позиция, а ошибка
+       * разметки, и её ловит проверка ниже. */
+      const side=(px>0&&stop>0)?(stop<px?'long':'short'):null;
+      if(!side){ skipped.push((px||'?')+': сторона не определена — нет цены или стопа'); continue; }
       if(!(px>0)){ skipped.push('зона без цены'); continue; }
       if(!(stop>0)){ skipped.push(px+': нет стопа'); continue; }
-      if(!(vol>0)){ skipped.push(px+': нет объёма'); continue; }
+      if(!(vol>0)&&_riskMoney>0){
+        const d=Math.abs(px-stop);
+        if(d>0)vol=+((_riskMoney/d).toFixed(4));
+      }
+      if(!(vol>0)){
+        skipped.push(px+(_riskMoney>0?': объём не посчитался (стоп равен цене?)'
+                                     :': заполни депозит и риск% — из них считается объём'));
+        continue; }
       out.push({px,stop,vol,side,kind:z.kind||'fade',proto:z.proto||null,note:z.note||''});
     }
     const inf=document.getElementById('cnInfo');
@@ -4179,6 +4218,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         body:JSON.stringify({zones:out})});
       const j=await r.json();
       if(inf)inf.innerHTML='План отправлен: принято <b>'+j.accepted+'</b>'+
+        (_riskMoney>0?' · объём от риска $'+_riskMoney.toFixed(2)+' на зону':'')+
         (j.rejected&&j.rejected.length?', отклонено '+j.rejected.length+' — '+escapeHtml(j.rejected.join('; ')):'')+
         (skipped.length?'<br>не отправлено из терминала: '+escapeHtml(skipped.join('; ')):'');
       _haptic('ok');
