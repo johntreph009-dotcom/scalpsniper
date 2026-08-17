@@ -4217,6 +4217,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       const r=await fetch('/api/zones',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({zones:out})});
       const j=await r.json();
+      /* Движок может ОТКАЗАТЬ, сохранив прежний план: отправка, в которой все
+       * зоны оказались браком, больше не обнуляет рабочий список (иначе
+       * опечатка разоружала движок посреди сессии). В этом случае писать
+       * «План отправлен» — врать: ничего не отправилось. Разделяем. */
+      if(j&&j.accepted===0&&j.kept!=null){
+        if(inf)inf.innerHTML='<span class="neg">План НЕ изменён.</span> Годных зон в отправке нет'+
+          (j.rejected&&j.rejected.length?' — '+escapeHtml(j.rejected.join('; ')):'')+
+          '. В движке остаются прежние <b>'+j.kept+'</b>.';
+        _haptic('warn');   // 'err' в _HAP нет — брал бы запасной tap; 'warn' определён
+        return;
+      }
       if(inf)inf.innerHTML='План отправлен: принято <b>'+j.accepted+'</b>'+
         (_riskMoney>0?' · объём от риска $'+_riskMoney.toFixed(2)+' на зону':'')+
         (j.rejected&&j.rejected.length?', отклонено '+j.rejected.length+' — '+escapeHtml(j.rejected.join('; ')):'')+
@@ -9412,7 +9423,35 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // Правила намеренно простые и медленные: шаг 10%, коридор 0.6–1.6, не чаще чем раз в 10 новых наблюдений.
   const AP_TUNEMIN=12;
   let _apTune={}; try{_apTune=JSON.parse(localStorage.getItem('msa_aptune_v1')||'{}')||{};}catch(e){_apTune={};}
-  function _apTuneK(seg){ const t=_apTune[seg]; return (t&&isFinite(t.k))?t.k:1; }
+  /* ═══ НИЖНЯЯ ГРАНИЦА МНОЖИТЕЛЯ ВЫВЕДЕНА, А НЕ ВЫБРАНА ═══
+   * Гейт входа _beWR≤AP_MAXBE при AP_MAXBE=0.5 равносилен неравенству
+   *     цель × k ≥ стоп + 2×AP_FEE      (то есть +10 б.п. при AP_FEE=5)
+   * У двух протоколов цель ОГРАНИЧЕНА СВЕРХУ: SHOTGUN min(24, …) при стопе 7,
+   * ELLIOTT_CLUSTER min(26, …) при стопе 8. Отсюда минимальный множитель, при
+   * котором гейт вообще выполним:
+   *     SHOTGUN  (7+10)/24 = 0.71
+   *     ELLIOTT  (8+10)/26 = 0.69
+   * Ниже 0.71 ни один из них не пройдёт НИ ПРИ КАКОМ РЫНКЕ. Прежняя граница
+   * была 0.6 — прямо в мёртвой зоне. Берём 0.85: при нём у SHOTGUN остаётся
+   * рабочее окно цели [20; 24], а не щель нулевой ширины.
+   *
+   * ПОЧЕМУ ЭТО БЫЛО НЕВЫХОДНО. Оптимизатор сжимает цель, чтобы поднять долю
+   * тейков; гейт требует превышения над стопом на ФИКСИРОВАННУЮ комиссию. Они
+   * тянут в разные стороны. А правка множителя происходит только после 10
+   * НОВЫХ наблюдений — которых нет, потому что сделок нет. Состояние
+   * поглощающее: попав ниже 0.71, движок не выходил оттуда никогда сам.
+   * Поэтому граница применяется ПРИ ЧТЕНИИ, а не только при записи: уже
+   * сохранённые в localStorage значения 0.6 расклиниваются сразу, без чистки
+   * данных руками.
+   *
+   * Ограничение области поиска — не вкусовщина: оптимизатору незачем ходить
+   * туда, где целевая функция не определена (нет сделок → нет наблюдений →
+   * нечему учиться). Его собственный замер это подтверждает: сжатие цели
+   * подняло WR, но средний проигрыш вырос с −3.18 до −6.85. */
+  const AP_KMIN=0.85, AP_KMAX=1.6;
+  function _apTuneK(seg){ const t=_apTune[seg];
+    const k=(t&&isFinite(t.k))?t.k:1;
+    return Math.max(AP_KMIN,Math.min(AP_KMAX,k)); }
   let _apLearnBusy=false;
   async function _apLearn(){
     if(_apLearnBusy)return; _apLearnBusy=true;
@@ -9452,7 +9491,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           why='проба: цель '+(dir>0?'растянуть':'подтянуть')+' (матожидание '+ev+', тейк '+Math.round(tp*100)+'%, стоп '+Math.round(sh('stop')*100)+'%)';
           if(k!==old){ t.prevK=old; t.evBefore=ev; t.dir=dir; }
         }
-        k=Math.max(0.6,Math.min(1.6,+k.toFixed(2)));
+        k=Math.max(AP_KMIN,Math.min(AP_KMAX,+k.toFixed(2)));   // граница выведена из выполнимости гейта — см. _apTuneK
         t.n=n;
         if(k!==old){ t.k=k; t.why=why; t.at=Date.now(); changed=true;
           if(typeof _proc==='function')_proc('ядро подстроилось · <b>'+seg+'</b>: цель ×'+k.toFixed(2)+' <span class="gs-note">('+why+')</span>'); }
@@ -9581,11 +9620,29 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         .sort((a,b)=>(S[b[0]]||0)-(S[a[0]]||0));
       // собираем ВСЕ сработавшие триггеры и решаем в пространстве вариантов, а не «первый сверху»
       const fired=[];
+      /* ═══ ПРИЧИНА ОТКАЗА ЗАПОМИНАЕТСЯ, А НЕ УГАДЫВАЕТСЯ ═══
+       * БЫЛО: план, отвергнутый гейтом матожидания, отбрасывался молча, а
+       * диагностика простоя печатала для него «нет триггера». То есть триггер
+       * СРАБОТАЛ, вход зарезала арифметика — а на экране причина другая.
+       * Искать поломку по такому сообщению значит искать не там; я сам почти
+       * ушёл в ленту, когда дело было в гейте. Теперь причина берётся из
+       * фактического прохода, а не пересчитывается заново по догадке. */
+      const drop={};
       for(const [k,v] of cand){ let plan=null; try{plan=v.auto.trig(m);}catch(e){}
-        if(!plan)continue;
+        if(!plan){ drop[k]='нет триггера'; continue; }
         const kk=_apTuneK(seg);                                    // масштаб цели, выученный для этого сегмента
         if(kk!==1)plan={...plan,tpBps:+(plan.tpBps*kk).toFixed(1),tuned:kk};
-        if(_evOk(plan))fired.push({k,plan,fit:S[k]||0}); }          // гейт матожидания проверяет УЖЕ подстроенный план
+        if(_evOk(plan))fired.push({k,plan,fit:S[k]||0});           // гейт матожидания проверяет УЖЕ подстроенный план
+        else {
+          /* Гейт _beWR≤AP_MAXBE при AP_MAXBE=0.5 равносилен
+           *   цель ≥ стоп + 2×комиссия  (то есть +10 б.п. при AP_FEE=5).
+           * Пишем именно эти числа: по ним сразу видно, не хватает ли рынка
+           * или ядро сжало цель до невыполнимого. */
+          const need=(+plan.stopBps||0)+2*AP_FEE;
+          drop[k]='EV: цель '+(+plan.tpBps||0)+' < нужной '+need.toFixed(1)+
+                  ' б.п.'+(kk!==1?' (ядро ×'+kk+')':'');
+        }
+      }
       // Диагностика простоя: если ни один протокол не проходит — говорим ЧТО именно режет,
       // иначе движок молча стоит и это выглядит как поломка.
       if(!fired.length&&now-(_ap.idleAt||0)>60e3){
@@ -9596,9 +9653,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           let c=false; try{c=v.auto.ctx(m.f);}catch(e){}
           if(!c)return k+' контекст';
           if(!_segAllows(k,seg))return k+' сегмент закрыт';
-          return k+' нет триггера';
+          return k+' '+(drop[k]||'нет триггера');
         }).filter(Boolean).join(' · ');
-        if(typeof _proc==='function')_proc('<span class="gs-note">сделок нет · '+seg+' · '+why+'</span>');
+        const kk=_apTuneK(seg);
+        const evBlocked=Object.values(drop).filter(x=>String(x).startsWith('EV:')).length;
+        if(typeof _proc==='function')_proc('<span class="gs-note">сделок нет · '+seg+
+          ' · ядро ×'+kk+' · '+why+'</span>');
+        /* Отдельное громкое предупреждение про тупик. Когда цель у протокола
+         * ограничена сверху (SHOTGUN 24, ELLIOTT 26), а ядро сжало множитель,
+         * гейт перестаёт выполняться ПРИ ЛЮБОМ рынке. Это не «нет сигнала»,
+         * это арифметический замок, и ждать его открытия бессмысленно. */
+        if(evBlocked&&evBlocked===Object.keys(drop).length&&kk<0.85&&
+           now-(_ap.deadAt||0)>10*60e3){
+          _ap.deadAt=now;
+          if(typeof _proc==='function')_proc('⛔ <b>вход невозможен по арифметике</b>: ядро сжало цель до ×'+
+            kk+', а гейт требует цель ≥ стоп + '+(2*AP_FEE)+' б.п. Ни один протокол не пройдёт '+
+            'ни при каком рынке, пока множитель не вырастет.','pr-dn');
+        }
       }
       const win=_coreResolve(fired);
       // ПОДТВЕРЖДЕНИЕ: 60% старых сделок умирали по cancel за ~23с, оплачивая комиссию впустую.
