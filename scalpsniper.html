@@ -3965,7 +3965,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         '<br>поток биржи: '+(m.feed?'идёт':'<span class="neg">НЕТ ДАННЫХ</span>')+
         (m.feedErrors?' · обрывов '+m.feedErrors:'')+
         ' · день: $'+(+m.realized||0).toFixed(2)+' из −$'+m.dailyLimit+
-        (m.halted?'<br><span class="neg">ОСТАНОВЛЕНО</span>':''));
+        (m.halted?'<br><span class="neg">ОСТАНОВЛЕНО</span>':'')+
+        /* Состояние ЗАПИСИ — на видном месте. Пропущенный час рынка не
+         * восстановить ничем, а терялись данные дважды именно потому, что
+         * молчащий рекордер был не виден там, куда смотрят. */
+        (m.rec ? (m.rec.live>0
+            ? '<br>запись: <b>'+m.rec.live+'</b> символов идёт'+
+              (m.rec.stale&&m.rec.stale.length?' · <span class="neg">молчат: '+escapeHtml(m.rec.stale.join(' '))+'</span>':'')
+            : '<br><span class="neg">ЗАПИСЬ НЕ ИДЁТ — данные не собираются</span>'+
+              '<br>запусти <b>ПУСК.bat</b> либо ЗАПИСЬ.bat в папке connector')
+          : ''));
     }catch(e){
       _cnLive=false;
       cnSet('движок не запущен','',
