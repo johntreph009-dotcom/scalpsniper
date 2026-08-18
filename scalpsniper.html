@@ -4140,13 +4140,34 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       if(!r.ok)throw new Error('код '+r.status);
       const m=await r.json();
       _cnLive=true;
-      cnSet(m.armed?'БОЕВОЙ РЕЖИМ':'сухой ход', m.armed?'armed':'on',
+      cnSet(m.naked?'ПОЗИЦИЯ БЕЗ СТОПА':(m.armed?'БОЕВОЙ РЕЖИМ':'сухой ход'),
+        m.naked?'armed':(m.armed?'armed':'on'),
+        /* ═══ ПОЗИЦИЯ БЕЗ ЗАЩИТЫ — ПЕРВОЙ СТРОКОЙ И КРУПНО ═══
+         * Движок обнаруживает это сверкой с биржей и сам останавливает
+         * торговлю. Но остановка не закрывает позицию — закрыть может только
+         * трейдер, и узнать он должен здесь, а не из свёрнутой консоли.
+         * Ровно на этом дважды терялась запись: сообщение было, смотрели не
+         * туда. Поэтому тревога идёт ПЕРЕД всем остальным. */
+        (m.naked ? '<span class="neg"><b>⛔ НА БИРЖЕ ПОЗИЦИЯ БЕЗ СТОПА.</b> Движок остановлен и заявки сняты.'+
+                   '<br>Закрой позицию или поставь стоп в приложении MEXC — сам он этого не сделает.</span><br>' : '')+
         'символ <b>'+escapeHtml(m.symbol||'')+'</b> · зон в движке <b>'+m.zones+'</b>'+
         (m.done?' (исполнено '+m.done+')':'')+
         '<br>поток биржи: '+(m.feed?'идёт':'<span class="neg">НЕТ ДАННЫХ</span>')+
         (m.feedErrors?' · обрывов '+m.feedErrors:'')+
         ' · день: $'+(+m.realized||0).toFixed(2)+' из −$'+m.dailyLimit+
         (m.halted?'<br><span class="neg">ОСТАНОВЛЕНО</span>':'')+
+        /* ЭКСПОЗИЦИЯ ИЗ СВЕРКИ, А НЕ ИЗ СЧЁТЧИКА. Раньше движок накапливал её
+         * сам и никогда не уменьшал; теперь берёт с биржи. Показываем вместе с
+         * лимитом — число без порога ни о чём не говорит. */
+        (m.exposure!=null&&m.maxNotional
+          ? '<br>экспозиция: <b'+(m.exposure>m.maxNotional?' class="neg"':'')+'>$'+m.exposure+
+            '</b> из $'+m.maxNotional+(m.liveOrders?' · заявок '+m.liveOrders:'')
+          : '')+
+        /* Свежесть сверки: если она молчит, все числа выше — вчерашние.
+         * Порог 60 с при периоде опроса 20 с — три пропуска подряд. */
+        (m.armed&&m.recAgeSec!=null&&m.recAgeSec>60
+          ? '<br><span class="neg">сверка с биржей молчит '+m.recAgeSec+' с — состояние позиции неизвестно</span>'
+          : '')+
         /* Состояние ЗАПИСИ — на видном месте. Пропущенный час рынка не
          * восстановить ничем, а терялись данные дважды именно потому, что
          * молчащий рекордер был не виден там, куда смотрят. */
@@ -4154,7 +4175,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
             ? '<br>запись: <b>'+m.rec.live+'</b> символов идёт'+
               (m.rec.stale&&m.rec.stale.length?' · <span class="neg">молчат: '+escapeHtml(m.rec.stale.join(' '))+'</span>':'')
             : '<br><span class="neg">ЗАПИСЬ НЕ ИДЁТ — данные не собираются</span>'+
-              '<br>запусти <b>ПУСК.bat</b> либо ЗАПИСЬ.bat в папке connector')
+              '<br>запусти <b>ПУСК.bat</b> в корне проекта'+
+              ' <span class="gs-note">(ЗАПИСЬ.bat теперь заглушка — запись живёт в ZAPIS-LOOP.bat, его поднимает ПУСК)</span>')
           : ''));
     }catch(e){
       _cnLive=false;
@@ -10498,6 +10520,74 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       document.body.appendChild(b); }
     b.textContent=txt;
   }
+  /* ═══ ТЕРМИНАЛ ПРОВЕРЯЕТ СЕБЯ САМ ═══
+   * ПЕРВАЯ ВЕРСИЯ ЭТОГО БЫЛА ОШИБКОЙ. Я сделал зонд, который надо вставлять в
+   * консоль браузера руками, и назвал это «убрал трейдера из цикла». На деле
+   * я цикл удлинил: открыть консоль, вставить, скопировать, прислать.
+   *
+   * Правильно — страница проверяет себя сама и молчит, пока всё хорошо.
+   * Молчание здесь обязательно: индикатор, который срабатывает на исправном,
+   * перестают читать. За эту сессию я трижды наступил на это сам — сканер
+   * мерил кнопки под мышью, проверка ловила собственный комментарий, ярлык
+   * «ловушка» вешался по четырём сделкам.
+   *
+   * Что проверяется и почему именно это:
+   *  · горизонтальная прокрутка СТРАНИЦЫ — единственный надёжный признак
+   *    сломанной вёрстки. Отдельные элементы могут торчать за край законно:
+   *    вкладки в горизонтальном скроллере, подсказки до позиционирования;
+   *  · цели под палец — ТОЛЬКО при pointer:coarse;
+   *  · механика пикера — та самая связка, что ломала прокрутку на iOS;
+   *  · свежесть потока — автопилот вызывается из обработчика снимка, встала
+   *    лента, и он не запускается вовсе. */
+  function _selfCheck(){
+    try{
+      const W=document.documentElement.clientWidth, H=window.innerHeight;
+      const coarse=!!(window.matchMedia&&matchMedia('(pointer:coarse)').matches);
+      const bad=[];
+
+      const sx=document.documentElement.scrollWidth-W;
+      if(sx>1)bad.push('страница ездит вбок на '+sx+'px');
+
+      if(coarse){
+        let n=0,worst=99;
+        document.querySelectorAll('button,.zone-px,.zone-close,.zone-edit,.zone-del,.hub-tab,.ticker-dd-item')
+          .forEach(el=>{
+            const cs=getComputedStyle(el);
+            if(cs.display==='none'||cs.visibility==='hidden')return;
+            const r=el.getBoundingClientRect();
+            if(r.width<2||r.height<2)return;
+            const m=Math.min(r.width,r.height);
+            if(m<34){n++; if(m<worst)worst=Math.round(m);} });
+        if(n)bad.push('мелких целей '+n+', худшая '+worst+'px');
+      }
+
+      const wrap=document.getElementById('tickerWrap')||document.getElementById('sessTkWrap');
+      const dd=wrap&&wrap.querySelector('.ticker-dd');
+      if(dd){
+        const cs=getComputedStyle(dd);
+        if(cs.position==='fixed'&&cs.webkitOverflowScrolling==='touch')
+          bad.push('пикер: momentum-хак на fixed — на iOS будет прыгать');
+        if(cs.overflowY!=='auto'&&cs.overflowY!=='scroll'&&cs.position==='fixed')
+          bad.push('пикер не прокручивается');
+      }
+
+      if(typeof _dlRunning!=='undefined'&&_dlRunning&&typeof _dlLastSnap!=='undefined'&&_dlLastSnap){
+        const st=(Date.now()-_dlLastSnap)/1000;
+        if(st>25)bad.push('поток молчит '+Math.round(st)+'с');
+      }
+
+      if(bad.length&&typeof _proc==='function')
+        _proc('<b>самопроверка</b> ('+W+'x'+H+', '+(coarse?'палец':'мышь')+'): '+bad.join(' · '),'pr-warn');
+      return bad;
+    }catch(e){ return ['самопроверка упала: '+e.message]; }
+  }
+  /* Первый прогон — через 6 с после загрузки: раньше блоки ещё не встали на
+   * места и любой замер соврёт. Дальше раз в пять минут: вёрстка ломается не
+   * сама по себе, а от смены фазы, поворота экрана и появления данных. */
+  setTimeout(_selfCheck,6000);
+  setInterval(_selfCheck,300000);
+  window.addEventListener('orientationchange',()=>setTimeout(_selfCheck,800));
+
   function _ovReport(){
     const W=document.documentElement.clientWidth;
     if(W>720){ _ovBadge(''); return; }                     // претензия про телефон
