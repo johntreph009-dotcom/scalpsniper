@@ -5627,8 +5627,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
      * постоянно. Свечи при этом не сжимаются в кашу, потому что окно по
      * умолчанию считается от доступной ширины, а не от числа свечей.
      * На телефоне полосы уже: там дорога каждая точка ширины. */
+    /* ═══ ГЛУБОКИЙ ПРОФИЛЬ ВМЕСТО КОРОТКОЙ КНИГИ ═══
+     * ЗАМЕР НА ЖИВОЙ СТРАНИЦЕ: _mxBook даёт 20 уровней на сторону, это ~0.2 по
+     * цене SOL при диапазоне графика 1.48 — стакан занимал 13% высоты и
+     * выглядел обрезком, а не силуэтом.
+     * _deep.prof — 403 уровня, свёрнутые в 80 корзин по ±1% от цены. Это 1.54
+     * при том же диапазоне, то есть ВСЯ высота графика.
+     * Профиль уже накоплен от цены наружу — ровно то, что нужно рисовать.
+     * Свежесть проверяем: мёртвый профиль хуже отсутствующего, он выглядит
+     * как настоящая книга, но описывает прошлое. */
+    const _profOk=(typeof _deep!=='undefined'&&_deep&&Array.isArray(_deep.prof)&&
+                   _deep.prof.length>=8&&_deep.at&&(Date.now()-_deep.at)<20000);
     const _bookOn=(typeof _chartLayers!=='undefined'&&_chartLayers.depth)&&
-                  (typeof _mxBook!=='undefined'&&_mxBook&&Array.isArray(_mxBook.bids)&&_mxBook.bids.length>0);
+                  (_profOk||(typeof _mxBook!=='undefined'&&_mxBook&&Array.isArray(_mxBook.bids)&&_mxBook.bids.length>0));
     const _tapeOn=(typeof _chartLayers!=='undefined'&&_chartLayers.tape)&&
                   (typeof _whFeed!=='undefined'&&Array.isArray(_whFeed)&&_whFeed.length>0);
     const DW=_bookOn?(mob?30:52):0, TW=_tapeOn?(mob?11:16):0;
@@ -6026,35 +6037,55 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(DW>0){
       try{
         const bx0=W-LBL+2, bw=DW-4;
-        const bids=(_mxBook.bids||[]).map(x=>[+x[0],+x[1]]).filter(x=>x[0]>0&&x[1]>0).sort((a,b)=>b[0]-a[0]);
-        const asks=(_mxBook.asks||[]).map(x=>[+x[0],+x[1]]).filter(x=>x[0]>0&&x[1]>0).sort((a,b)=>a[0]-b[0]);
-        let cum=0; const bC=bids.map(([p,v])=>{cum+=p*v;return [p,cum];});
-        cum=0;      const aC=asks.map(([p,v])=>{cum+=p*v;return [p,cum];});
+        let bC=[], aC=[];
+        if(_profOk&&isFinite(currentPrice)&&currentPrice>0){
+          /* Раскладка профиля (документирована в воркере):
+           *   0 … PB-1   — НИЖЕ цены, PB-1 ближе всего, 0 самый дальний вниз;
+           *   PB … 2PB-1 — ВЫШЕ цены, PB ближе всего.
+           * Значения уже накопленные, поэтому пересчитывать нечего — только
+           * разложить по ценам. Середину корзины берём +0.5, иначе ближняя
+           * корзина легла бы ровно на цену и полоса начиналась бы с нуля. */
+          const PB=_deep.profN||40, sp=_deep.profSpan||0.01, pr=_deep.prof, mid=currentPrice;
+          for(let i=0;i<PB;i++){
+            const rel=-((PB-1-i)+0.5)/PB*sp;
+            bC.push([mid*(1+rel), pr[i]||0]);
+          }
+          for(let i=PB;i<Math.min(pr.length,PB*2);i++){
+            const rel=((i-PB)+0.5)/PB*sp;
+            aC.push([mid*(1+rel), pr[i]||0]);
+          }
+          bC.sort((x,y)=>y[0]-x[0]);   // от цены вниз
+          aC.sort((x,y)=>x[0]-y[0]);   // от цены вверх
+        } else if(typeof _mxBook!=='undefined'&&_mxBook){
+          const bids=(_mxBook.bids||[]).map(x=>[+x[0],+x[1]]).filter(x=>x[0]>0&&x[1]>0).sort((a,b)=>b[0]-a[0]);
+          const asks=(_mxBook.asks||[]).map(x=>[+x[0],+x[1]]).filter(x=>x[0]>0&&x[1]>0).sort((a,b)=>a[0]-b[0]);
+          let cum=0; bC=bids.map(([p,v])=>{cum+=p*v;return [p,cum];});
+          cum=0;      aC=asks.map(([p,v])=>{cum+=p*v;return [p,cum];});
+        }
         const mx=Math.max(1,(bC.length?bC[bC.length-1][1]:0),(aC.length?aC[aC.length-1][1]:0));
         const strip=(arr,col)=>{
-          if(!arr.length)return;
-          ctx.beginPath();ctx.moveTo(bx0,toY(arr[0][0]));
-          arr.forEach(([p,c])=>{ if(p<minP||p>maxP)return;
-            ctx.lineTo(bx0+Math.min(bw,bw*c/mx),toY(p)); });
-          const last=arr[arr.length-1][0];
-          ctx.lineTo(bx0,toY(Math.max(minP,Math.min(maxP,last))));
+          const vis=arr.filter(([p])=>p>=minP&&p<=maxP);
+          if(vis.length<2)return;
+          ctx.beginPath();ctx.moveTo(bx0,toY(vis[0][0]));
+          vis.forEach(([p,c])=>ctx.lineTo(bx0+Math.min(bw,bw*c/mx),toY(p)));
+          ctx.lineTo(bx0,toY(vis[vis.length-1][0]));
           ctx.closePath();ctx.fillStyle=col;ctx.fill();
         };
         strip(bC,'rgba(46,224,138,.22)');
         strip(aC,'rgba(255,90,95,.22)');
-        // контур поверх заливки: по нему читаются ступеньки крупных заявок
         const line=(arr,col)=>{
-          if(!arr.length)return;
+          const vis=arr.filter(([p])=>p>=minP&&p<=maxP);
+          if(vis.length<2)return;
           ctx.strokeStyle=col;ctx.lineWidth=1;ctx.beginPath();let st=false;
-          arr.forEach(([p,c])=>{ if(p<minP||p>maxP)return;
-            const x=bx0+Math.min(bw,bw*c/mx), y=toY(p);
+          vis.forEach(([p,c])=>{ const x=bx0+Math.min(bw,bw*c/mx), y=toY(p);
             st?ctx.lineTo(x,y):(ctx.moveTo(x,y),st=true); });
           ctx.stroke();
         };
         line(bC,'rgba(46,224,138,.6)');
         line(aC,'rgba(255,90,95,.6)');
         ctx.font='7px JetBrains Mono,monospace';ctx.textAlign='left';
-        ctx.fillStyle='rgba(255,255,255,.35)';ctx.fillText('СТАКАН',bx0,9);
+        ctx.fillStyle='rgba(255,255,255,.35)';
+        ctx.fillText(_profOk?'СТАКАН ±1%':'СТАКАН 20ур',bx0,9);
       }catch(e){}
     }
 
@@ -6067,22 +6098,39 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
        превращается в равномерный шум, где ничего не видно. */
     if(TW>0){
       try{
-        const tx=W-LBL+DW+TW/2+1, now=Date.now();
-        const feed=_whFeed.slice(-140);
+        const tx0=W-LBL+DW+1, now=Date.now();
+        const AGE=8*60000;                       // окно ленты — восемь минут
+        /* ═══ ТОЧКИ РАЗВЕДЕНЫ ПО ВРЕМЕНИ, А НЕ СВАЛЕНЫ В СТОЛБИК ═══
+         * Первая версия ставила ВСЕ сделки на один X. На полосе в 16 пикселей
+         * триста точек сливались в сплошное пятно: видно, что торгуют, и
+         * больше ничего. Поток — это про порядок событий, значит порядок надо
+         * показать.
+         * Теперь X — возраст: свежее правее. Получается мини-диаграмма
+         * «цена × время» шириной в полосу: видно, идут ли сделки кучно, на
+         * одной цене или лесенкой, и с какой стороны.
+         * Старое гаснет: без этого правый край всегда полон, а левый всегда
+         * пуст, и движение не читается. */
+        const feed=_whFeed.filter(f=>{
+          const t=+f.t||0; return t>0 && (now-t)<AGE;
+        }).slice(-220);
         let vmax=1; feed.forEach(f=>{const v=+f.n||+f.usd||0; if(v>vmax)vmax=v;});
         feed.forEach(f=>{
           const p=+f.px||+f.p; if(!(p>0)||p<minP||p>maxP)return;
-          const age=(now-(+f.t||now))/60000;            // минуты
-          const a=Math.max(0.08,1-age/12);              // за 12 минут гаснет
+          const age=(now-(+f.t||now))/AGE;                 // 0 — только что, 1 — край окна
+          const x=tx0+(1-Math.max(0,Math.min(1,age)))*(TW-2)+1;
+          const a=Math.max(0.10,1-age);
           const v=(+f.n||+f.usd||0)/vmax;
-          const r=1.2+Math.sqrt(Math.max(0,v))*3.2;
+          const r=1+Math.sqrt(Math.max(0,v))*2.6;
           const buy=(f.side==='buy'||f.side===1||f.b===1);
           ctx.fillStyle=(buy?'rgba(46,224,138,':'rgba(255,90,95,')+a.toFixed(2)+')';
-          ctx.beginPath();ctx.arc(tx,toY(p),r,0,Math.PI*2);ctx.fill();
+          ctx.beginPath();ctx.arc(x,toY(p),r,0,Math.PI*2);ctx.fill();
         });
+        /* Тонкая линия у правого края полосы — «сейчас». Без неё непонятно,
+         * с какой стороны свежее, и диаграмма читается задом наперёд. */
+        ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=.7;
+        ctx.beginPath();ctx.moveTo(tx0+TW-1,0);ctx.lineTo(tx0+TW-1,ph);ctx.stroke();
         ctx.font='7px JetBrains Mono,monospace';ctx.textAlign='left';
-        ctx.fillStyle='rgba(255,255,255,.35)';
-        ctx.save();ctx.translate(tx+4,9);ctx.fillText('ЛЕНТА',0,0);ctx.restore();
+        ctx.fillStyle='rgba(255,255,255,.35)';ctx.fillText('8м',tx0,9);
       }catch(e){}
     }
 
