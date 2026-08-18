@@ -1734,6 +1734,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
    * там. В блоке 500px они уже есть — здесь для ширин между 500 и 960. */
   .zone-px{min-height:34px;display:inline-flex;align-items:center;padding:6px 8px;margin:-6px -8px}
   .zone-close{min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center}
+  /* Правка и удаление зоны: в блоке до 500px они уже 40px, но планшет шириной
+   * 641px под то правило не подпадает, а палец у него тот же. Добавлено по
+   * отчёту 17.08 — сам отчёт пришёл с десктопа, но вскрыл эту дыру. */
+  .zone-edit,.zone-del{min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;padding:4px 8px}
   /* Серый блик iOS поверх янтарного акцента — гасим, свой :active уже есть. */
   *{-webkit-tap-highlight-color:transparent}
   /* manipulation убирает двойной тап для зума на кнопках, а с ним и задержку
@@ -10459,7 +10463,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _ovReport(){
     const W=document.documentElement.clientWidth;
     if(W>720){ _ovBadge(''); return; }                     // претензия про телефон
-    const h=_ovScan(), t=_tapScan();
+    /* ═══ РАЗМЕР КНОПКИ ВАЖЕН ТОЛЬКО ПОД ПАЛЬЦЕМ ═══
+     * Отчёт 17.08 пришёл с окна 641px на ДЕСКТОПЕ (dpr 1, мышь) и обвинил
+     * четыре кнопки по 21px. Под мышью 21px — нормальный размер: порог 34px
+     * существует для подушечки пальца, а не для курсора.
+     * Отсекались же мы по ШИРИНЕ окна (>720 — не смотрим), то есть считали
+     * узкое окно телефоном. Ширина не говорит о типе указателя: планшет бывает
+     * шире 720, а окно на мониторе — уже 500.
+     * Сканер, кричащий о непроблемах, перестают читать — а он единственный
+     * способ узнать про вёрстку на устройстве, которого у меня нет.
+     * Обрезку за экран проверяем всегда: она мешает и мыши. */
+    const _coarse = !!(window.matchMedia && matchMedia('(pointer:coarse)').matches);
+    const h=_ovScan(), t=_coarse?_tapScan():[];
     const парт=[];
     if(h.length)парт.push('за экран: '+h.slice(0,4).map(x=>x[0]+' +'+x[1]+'px').join(' · '));
     if(t.length)парт.push('мелкие кнопки: '+t.slice(0,4).map(x=>x[0]+' '+x[1]+'px').join(' · '));
@@ -10471,7 +10486,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
      * показывает четыре худших пункта: больше на телефон не влезет, а список
      * из двадцати строк на 390 пикселях сам станет проблемой вёрстки. */
     const full=['ScalpSniper · вёрстка '+W+'x'+innerHeight+'px · '+new Date().toISOString().slice(0,16),
-      'экран: '+screen.width+'x'+screen.height+' dpr '+(devicePixelRatio||1)+' · '+navigator.userAgent.slice(0,90),''];
+      'экран: '+screen.width+'x'+screen.height+' dpr '+(devicePixelRatio||1)+' · '+navigator.userAgent.slice(0,90),
+      'указатель: '+(_coarse?'палец — размеры кнопок проверяются':'мышь — размеры кнопок НЕ проверяются, 21px под курсор нормальны'),''];
     if(h.length){ full.push('ЗА ЭКРАН ('+h.length+'):');
       h.forEach(x=>full.push('  +'+x[1]+'px  ширина '+x[3]+'px  '+x[2]+(x[4]?'   «'+x[4]+'»':''))); full.push(''); }
     if(t.length){ full.push('МЕЛКИЕ КНОПКИ ('+t.length+'):');
