@@ -1799,7 +1799,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
             <div class="ticker-dd" id="tickerDD"></div>
           </div>
         </div>
-        <div><span class="label">Таймфрейм</span><select id="tf" onchange="_tfChanged()"><option value="1m">1m</option><option value="3m">3m</option><option value="5m" selected>5m</option><option value="15m">15m</option><option value="30m">30m</option><option value="1h">1h</option><option value="4h">4h</option><option value="1d">1D</option></select></div>
+        <div><span class="label">Таймфрейм</span><select id="tf" onchange="_tfChanged()"><option value="1m">1m</option><option value="3m">3m</option><option value="5m" selected>5m</option><option value="15m">15m</option><option value="30m">30m</option><option value="1h">1h</option><option value="2h">2h</option><option value="4h">4h</option><option value="1d">1D</option></select></div>
         <div><span class="label">Плечо ×</span><input id="lev" type="number" value="1" min="1" oninput="saveSettings()"></div>
         <div><span class="label">Текущая цена <span id="pxLiveInd" style="font-size:9px;letter-spacing:.3px;font-family:'JetBrains Mono',monospace;color:var(--text-faint);vertical-align:middle">○</span></span><input id="price" type="number" placeholder="103450"></div>
       </div>
@@ -1888,6 +1888,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <button class="mc-lyr" data-lyr="vol" onclick="toggleLayer('vol')" title="Объём в свечах + метки аномальных всплесков">объём</button>
         <button class="mc-lyr" data-lyr="cvd" onclick="toggleLayer('cvd')" title="CVD-полоса снизу: поток покупок/продаж">CVD</button>
         <button class="mc-lyr" data-lyr="piv" onclick="toggleLayer('piv')" title="Развороты (свинг H/L) + значок реакции зон">развороты</button>
+        <button class="mc-lyr" data-lyr="depth" onclick="toggleLayer('depth')" title="Глубина стакана сбоку от свечей: накопленный объём заявок по ценам. Видно, где стоят стены и куда цене идти дёшево.">стакан</button>
+        <button class="mc-lyr" data-lyr="tape" onclick="toggleLayer('tape')" title="Лента сделок у правого края: каждая точка — сделка, размер по объёму, цвет по стороне, яркость по свежести.">лента</button>
         <button class="mc-lyr" data-lyr="trades" onclick="toggleLayer('trades')" title="Сделки на графике: открытая позиция со стопом и целью, закрытые сделки автопилота (вход → выход), уровни сетки. Видно, где именно покупали и продавали.">сделки</button>
         <button class="mc-lyr" data-lyr="liq" onclick="toggleLayer('liq')" title="Тепловая карта РАСЧЁТНЫХ зон ликвидаций ×25/×50/×100 от цен и объёмов окна. Модель, не фактические данные бирж. Розовое выше цены — шорт-ликвидации (топливо роста), голубое ниже — лонг-ликвидации">ликв</button>
       </div>
@@ -5072,7 +5074,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   // ── Mini chart module ──
   let _klines=[],_klSym='',_klTf='',_chartTimer=null,_zoneHitAreas=[],_chartClickBound=false;
-  let _chartLayers=(()=>{try{return Object.assign({trend:true,vol:true,cvd:true,piv:true,liq:true,trades:true},JSON.parse(localStorage.getItem('msa_chart_layers_v1')||'{}'));}catch(e){return {trend:true,vol:true,cvd:true,piv:true,liq:true};}})();
+  let _chartLayers=(()=>{try{return Object.assign({trend:true,vol:true,cvd:true,piv:true,liq:true,trades:true,depth:true,tape:true},JSON.parse(localStorage.getItem('msa_chart_layers_v1')||'{}'));}catch(e){return {trend:true,vol:true,cvd:true,piv:true,liq:true};}})();
   function _saveChartLayers(){try{localStorage.setItem('msa_chart_layers_v1',JSON.stringify(_chartLayers));}catch(e){}}
   function _markLayers(){document.querySelectorAll('.mc-lyr').forEach(b=>b.classList.toggle('active',!!_chartLayers[b.dataset.lyr]));}
   function toggleLayer(k){_chartLayers[k]=!_chartLayers[k];_saveChartLayers();_markLayers();if(typeof _chartRedraw==='function')_chartRedraw();}
@@ -5475,7 +5477,14 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     // поэтому график не должен зависеть от одной биржи. sym напр. SOLUSDT; предполагаем котировку USDT.
     // 1) Binance (основной)
     try{
-      const r=await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval='+tf+'&limit=65',{cache:'no-store'});
+      /* ═══ ИСТОРИЯ: 500 СВЕЧЕЙ ВМЕСТО 65 ═══
+       * Было 65 — это час на минутном тайме. График выглядел обрезанным
+       * потому что и был обрезан: прокручивать назад было нечего.
+       * 500 — предел Binance без штрафа по весу запроса. На минутке это
+       * восемь часов, на двухчасовом — полтора месяца.
+       * Показывать все 500 сразу нельзя (на 390 пикселях свеча станет уже
+       * пикселя), поэтому окно по умолчанию ограничено в _mcVisible. */
+      const r=await fetch('https://api.binance.com/api/v3/klines?symbol='+sym+'&interval='+tf+'&limit=500',{cache:'no-store'});
       if(r.ok){ const j=await r.json(); if(Array.isArray(j)&&j.length)
         return j.map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5],tb:+k[9]})); }
     }catch(e){}
@@ -5610,7 +5619,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const hNorm=mob?Math.round(Math.min(Math.max(W*0.95,290),440)):260;
     const hTall=mob?Math.round(Math.max(hNorm+140,Math.min(window.innerHeight*0.78,760)))
                    :Math.round(Math.min(window.innerHeight*0.68,560));
-    const H=tall?hTall:hNorm, LBL=mob?64:86;
+    const H=tall?hTall:hNorm;
+    /* ═══ ПОЛОСА СПРАВА: ЦЕНОВАЯ ШКАЛА + СТАКАН + ЛЕНТА ═══
+     * Свечи занимают W−LBL. Расширяя LBL, мы освобождаем справа полосу и
+     * ставим туда глубину стакана и ленту сделок — то, чего нет ни в одном
+     * обычном графике, но что есть у нас: книга и поток идут в терминал
+     * постоянно. Свечи при этом не сжимаются в кашу, потому что окно по
+     * умолчанию считается от доступной ширины, а не от числа свечей.
+     * На телефоне полосы уже: там дорога каждая точка ширины. */
+    const _bookOn=(typeof _chartLayers!=='undefined'&&_chartLayers.depth)&&
+                  (typeof _mxBook!=='undefined'&&_mxBook&&Array.isArray(_mxBook.bids)&&_mxBook.bids.length>0);
+    const _tapeOn=(typeof _chartLayers!=='undefined'&&_chartLayers.tape)&&
+                  (typeof _whFeed!=='undefined'&&Array.isArray(_whFeed)&&_whFeed.length>0);
+    const DW=_bookOn?(mob?30:52):0, TW=_tapeOn?(mob?11:16):0;
+    const LBL=(mob?64:86)+(DW||0)+TW;
     const dpr=Math.min(window.devicePixelRatio||1,3);
     cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);
     cv.style.width=W+'px';cv.style.height=H+'px';
@@ -5988,6 +6010,82 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       ctx.restore();
     }
 
+    /* ═══════════════════════════════════════════════════════════════════
+       ГЛУБИНА СТАКАНА СБОКУ ОТ СВЕЧЕЙ
+
+       Это то, чего нет в обычных графиках: у нас книга приходит постоянно,
+       и её форма — главное, на что смотрит скальпер. Рисуем НАКОПЛЕННЫЙ
+       объём: длина полосы на цене P — это сколько всего стоит между ценой и P.
+       Такой силуэт показывает не отдельные заявки, а где книга ГУСТАЯ и куда
+       цене идти дёшево. Отдельные уровни при этом видны как ступеньки.
+
+       Почему накопленный, а не сырой: сырой объём по уровням это частокол, из
+       которого глаз не собирает картину. Накопленный даёт кривую, по которой
+       сразу видно стену и пустоту.
+       ═══════════════════════════════════════════════════════════════════ */
+    if(DW>0){
+      try{
+        const bx0=W-LBL+2, bw=DW-4;
+        const bids=(_mxBook.bids||[]).map(x=>[+x[0],+x[1]]).filter(x=>x[0]>0&&x[1]>0).sort((a,b)=>b[0]-a[0]);
+        const asks=(_mxBook.asks||[]).map(x=>[+x[0],+x[1]]).filter(x=>x[0]>0&&x[1]>0).sort((a,b)=>a[0]-b[0]);
+        let cum=0; const bC=bids.map(([p,v])=>{cum+=p*v;return [p,cum];});
+        cum=0;      const aC=asks.map(([p,v])=>{cum+=p*v;return [p,cum];});
+        const mx=Math.max(1,(bC.length?bC[bC.length-1][1]:0),(aC.length?aC[aC.length-1][1]:0));
+        const strip=(arr,col)=>{
+          if(!arr.length)return;
+          ctx.beginPath();ctx.moveTo(bx0,toY(arr[0][0]));
+          arr.forEach(([p,c])=>{ if(p<minP||p>maxP)return;
+            ctx.lineTo(bx0+Math.min(bw,bw*c/mx),toY(p)); });
+          const last=arr[arr.length-1][0];
+          ctx.lineTo(bx0,toY(Math.max(minP,Math.min(maxP,last))));
+          ctx.closePath();ctx.fillStyle=col;ctx.fill();
+        };
+        strip(bC,'rgba(46,224,138,.22)');
+        strip(aC,'rgba(255,90,95,.22)');
+        // контур поверх заливки: по нему читаются ступеньки крупных заявок
+        const line=(arr,col)=>{
+          if(!arr.length)return;
+          ctx.strokeStyle=col;ctx.lineWidth=1;ctx.beginPath();let st=false;
+          arr.forEach(([p,c])=>{ if(p<minP||p>maxP)return;
+            const x=bx0+Math.min(bw,bw*c/mx), y=toY(p);
+            st?ctx.lineTo(x,y):(ctx.moveTo(x,y),st=true); });
+          ctx.stroke();
+        };
+        line(bC,'rgba(46,224,138,.6)');
+        line(aC,'rgba(255,90,95,.6)');
+        ctx.font='7px JetBrains Mono,monospace';ctx.textAlign='left';
+        ctx.fillStyle='rgba(255,255,255,.35)';ctx.fillText('СТАКАН',bx0,9);
+      }catch(e){}
+    }
+
+    /* ═══ ЛЕНТА СДЕЛОК У ПРАВОГО КРАЯ ═══
+       Каждая точка — сделка: положение по ЦЕНЕ, размер по объёму, цвет по
+       стороне, прозрачность по свежести. Лента у края, а не отдельной
+       панелью, именно чтобы сделка стояла НА СВОЕЙ ЦЕНЕ: глаз связывает
+       поток с уровнем без перевода взгляда.
+       Свежесть важнее полноты: старые сделки гаснут, иначе полоса
+       превращается в равномерный шум, где ничего не видно. */
+    if(TW>0){
+      try{
+        const tx=W-LBL+DW+TW/2+1, now=Date.now();
+        const feed=_whFeed.slice(-140);
+        let vmax=1; feed.forEach(f=>{const v=+f.n||+f.usd||0; if(v>vmax)vmax=v;});
+        feed.forEach(f=>{
+          const p=+f.px||+f.p; if(!(p>0)||p<minP||p>maxP)return;
+          const age=(now-(+f.t||now))/60000;            // минуты
+          const a=Math.max(0.08,1-age/12);              // за 12 минут гаснет
+          const v=(+f.n||+f.usd||0)/vmax;
+          const r=1.2+Math.sqrt(Math.max(0,v))*3.2;
+          const buy=(f.side==='buy'||f.side===1||f.b===1);
+          ctx.fillStyle=(buy?'rgba(46,224,138,':'rgba(255,90,95,')+a.toFixed(2)+')';
+          ctx.beginPath();ctx.arc(tx,toY(p),r,0,Math.PI*2);ctx.fill();
+        });
+        ctx.font='7px JetBrains Mono,monospace';ctx.textAlign='left';
+        ctx.fillStyle='rgba(255,255,255,.35)';
+        ctx.save();ctx.translate(tx+4,9);ctx.fillText('ЛЕНТА',0,0);ctx.restore();
+      }catch(e){}
+    }
+
     // временные метки по низу ценового поля
     if(candles.length>5&&candles[0].t){
       ctx.font='8px JetBrains Mono,monospace';ctx.fillStyle=P.axisDim;
@@ -6228,8 +6326,31 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   // ── Этап 3: зум/пан — окно по таймстампам, переживает обновления klines ──
   let _mcView={t0:null,t1:null};
+  /* Сколько свечей показывать, когда зум не задан. Раньше показывались ВСЕ, и
+   * при 65 это было нормально. С пятьюстами так нельзя: свеча уже пикселя не
+   * читается, а история нужна не для того, чтобы уместиться в экран, а чтобы
+   * до неё можно было домотать.
+   * Ширина свечи ~4.5 px — это минимум, при котором тело и фитиль различимы
+   * на глаз; отсюда и число, а не «на глазок». */
+  function _mcDefLen(){
+    const el=document.getElementById('miniChart');
+    const W=(el&&el.parentElement&&el.parentElement.clientWidth)||600;
+    /* Отнимаем ВСЮ правую полосу, а не только ценовую шкалу: там теперь ещё
+     * стакан и лента. Первая версия вычитала 90 и не знала о них — свечи
+     * вышли бы уже задуманных 4.5 px, то есть тело и фитиль слились бы.
+     * Резерв считается по той же формуле, что в _drawChart, но с запасом на
+     * включённые слои: лучше показать на десять свечей меньше, чем нечитаемые. */
+    const mob=W<560;
+    const reserve=(mob?64:86)+(mob?30:52)+(mob?11:16);
+    return Math.max(40,Math.min(220,Math.round((W-reserve)/4.5)));
+  }
   function _mcVisible(){
-    if(_mcView.t0==null||_klines.length<12)return _klines;
+    if(_mcView.t0==null){
+      if(_klines.length<12)return _klines;
+      const n=_mcDefLen();
+      return _klines.length>n?_klines.slice(-n):_klines;   // хвост: край рынка всегда виден
+    }
+    if(_klines.length<12)return _klines;
     if(_mcView.right&&_mcView.len)return _klines.slice(-Math.min(_mcView.len,_klines.length)); // окно у правого края липнет к нему — новые свечи всегда видны
     let i0=_klines.findIndex(c=>c.t>=_mcView.t0); if(i0<0)i0=0;
     let i1=-1; for(let i=_klines.length-1;i>=0;i--){ if(_klines[i].t<=_mcView.t1){i1=i;break;} }
@@ -6240,7 +6361,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     const full=_klines.length; if(full<14)return;
     const vis=_mcVisible(), gi0=_klines.indexOf(vis[0]), len=vis.length;
     const newLen=Math.max(12,Math.min(full,Math.round(len*factor)));
-    if(newLen>=full){ _mcView={t0:null,t1:null}; _chartRedraw(); return; }
+    /* ОТДАЛЕНИЕ ДО ВСЕЙ ИСТОРИИ. Раньше при достижении полного размера вид
+     * сбрасывался в null — и это было верно, пока null означал «показать всё».
+     * После того как окно по умолчанию стало ограниченным, null означает
+     * «показать хвост», и отдалить график до всех 500 свечей стало нельзя: он
+     * схлопывался обратно. Теперь полный охват задаётся ЯВНО. */
+    if(newLen>=full){
+      _mcView={t0:_klines[0].t,t1:_klines[full-1].t,len:full,right:true};
+      _chartRedraw(); return;
+    }
     const anchor=gi0+cxFrac*(len-1);
     let ns=Math.round(anchor-cxFrac*(newLen-1));
     ns=Math.max(0,Math.min(full-newLen,ns));
@@ -6295,7 +6424,25 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     if(_klines.length>400)_klines.shift();
     return true;
   }
+  /* ═══ ОДНА ОТРИСОВКА НА КАДР ═══
+   * _chartRedraw зовут из десятка мест: тик цены, смена слоя, обновление
+   * позиции, зум, ресайз. Каждый вызов рисовал полотно СИНХРОННО, поэтому за
+   * один кадр график перерисовывался по нескольку раз — работа впустую, а на
+   * телефоне ещё и рывки: браузер успевает показать промежуточный кадр.
+   *
+   * Теперь вызовы копятся и схлопываются в одну отрисовку на кадре анимации.
+   * Это не «оптимизация на всякий случай»: при частой ленте разница между
+   * пятью отрисовками на кадр и одной — это разница между дёрганьем и
+   * плавностью, и она видна глазом.
+   *
+   * _chartRedrawNow оставлен для случаев, где кадр ждать нельзя (снимок в
+   * буфер, печать). */
+  let _rafPend=0;
   function _chartRedraw(){
+    if(_rafPend)return;
+    _rafPend=requestAnimationFrame(()=>{ _rafPend=0; _chartRedrawNow(); });
+  }
+  function _chartRedrawNow(){
     const lp=parseFloat(document.getElementById('livePrice').value)||parseFloat(document.getElementById('price').value)||null;
     // Достраиваем последнюю свечу ПЕРЕД отрисовкой: иначе кадр покажет
     // состояние до тика, и живой она будет выглядеть с задержкой в один кадр.
@@ -6314,7 +6461,25 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   // ── переключение ТФ прямо на графике (как на бирже) ──
   function setChartTf(tf){
     const sel=document.getElementById('tf');
-    if(sel)sel.value=tf;
+    /* ═══ ПОЧЕМУ ЗДЕСЬ ПРОВЕРКА, А НЕ ПРОСТО ПРИСВАИВАНИЕ ═══
+     * Кнопка «2ч» перекидывала на 5 минут. Причина: в кнопках был вариант 2h,
+     * а в списке <select> его не было. Присваивание select.value для
+     * несуществующего варианта не бросает ошибку — оно молча делает значение
+     * ПУСТЫМ, и дальше всё читает пустоту как «по умолчанию».
+     *
+     * Это худший вид рассинхрона: две копии одного списка, и разошлись они
+     * тихо. Поэтому теперь несуществующий вариант — громкая ошибка в консоли,
+     * а не тихий откат. И проверка на совпадение наборов стоит в ПРОВЕРКА.py,
+     * чтобы они не разъехались снова. */
+    if(sel){
+      const has=[...sel.options].some(o=>o.value===tf);
+      if(!has){
+        console.error('таймфрейм '+tf+' есть в кнопках, но НЕТ в списке #tf — кнопка бесполезна');
+        if(typeof _proc==='function')_proc('таймфрейм '+tf+' не заведён в списке — кнопка не сработает','pr-dn');
+        return;                       // молча откатываться к чужому ТФ хуже, чем не сделать ничего
+      }
+      sel.value=tf;
+    }
     _tfChanged();
   }
   // ── СМЕНА ТАЙМФРЕЙМА → ПЕРЕСЧЁТ ЗОН (сегмент C3) ──────────────────────────
