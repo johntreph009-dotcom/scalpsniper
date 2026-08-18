@@ -1888,6 +1888,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <button class="mc-lyr" data-lyr="vol" onclick="toggleLayer('vol')" title="Объём в свечах + метки аномальных всплесков">объём</button>
         <button class="mc-lyr" data-lyr="cvd" onclick="toggleLayer('cvd')" title="CVD-полоса снизу: поток покупок/продаж">CVD</button>
         <button class="mc-lyr" data-lyr="piv" onclick="toggleLayer('piv')" title="Развороты (свинг H/L) + значок реакции зон">развороты</button>
+        <button class="mc-lyr" data-lyr="trades" onclick="toggleLayer('trades')" title="Сделки на графике: открытая позиция со стопом и целью, закрытые сделки автопилота (вход → выход), уровни сетки. Видно, где именно покупали и продавали.">сделки</button>
         <button class="mc-lyr" data-lyr="liq" onclick="toggleLayer('liq')" title="Тепловая карта РАСЧЁТНЫХ зон ликвидаций ×25/×50/×100 от цен и объёмов окна. Модель, не фактические данные бирж. Розовое выше цены — шорт-ликвидации (топливо роста), голубое ниже — лонг-ликвидации">ликв</button>
       </div>
       <canvas id="miniChart" height="180"></canvas>
@@ -5071,7 +5072,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   }
   // ── Mini chart module ──
   let _klines=[],_klSym='',_klTf='',_chartTimer=null,_zoneHitAreas=[],_chartClickBound=false;
-  let _chartLayers=(()=>{try{return Object.assign({trend:true,vol:true,cvd:true,piv:true,liq:true},JSON.parse(localStorage.getItem('msa_chart_layers_v1')||'{}'));}catch(e){return {trend:true,vol:true,cvd:true,piv:true,liq:true};}})();
+  let _chartLayers=(()=>{try{return Object.assign({trend:true,vol:true,cvd:true,piv:true,liq:true,trades:true},JSON.parse(localStorage.getItem('msa_chart_layers_v1')||'{}'));}catch(e){return {trend:true,vol:true,cvd:true,piv:true,liq:true};}})();
   function _saveChartLayers(){try{localStorage.setItem('msa_chart_layers_v1',JSON.stringify(_chartLayers));}catch(e){}}
   function _markLayers(){document.querySelectorAll('.mc-lyr').forEach(b=>b.classList.toggle('active',!!_chartLayers[b.dataset.lyr]));}
   function toggleLayer(k){_chartLayers[k]=!_chartLayers[k];_saveChartLayers();_markLayers();if(typeof _chartRedraw==='function')_chartRedraw();}
@@ -5848,6 +5849,145 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         ctx.fillStyle='#ffd24a';ctx.beginPath();ctx.arc(xc,toY(c.h)-6,2.3,0,Math.PI*2);ctx.fill();
       }
     });
+    /* ═══════════════════════════════════════════════════════════════════
+       СЛОЙ «СДЕЛКИ»: ГДЕ ИМЕННО ПОКУПАЛИ И ПРОДАВАЛИ
+
+       ЧЕГО НЕ ХВАТАЛО. На графике были свечи и зоны, но не было ни одной
+       отметки о том, что происходило на самом деле: открытая позиция
+       показывалась плашкой поверх графика с одной цифрой прибыли, сделки
+       автопилота не показывались вовсе, сетка жила отдельной панелью.
+       Трейдер видел «+111 USDT» и не видел, откуда они взялись.
+
+       ЧТО РИСУЕМ, в порядке от старого к новому:
+         1. уровни сетки — горизонтали, залитые ноги ярче пустых;
+         2. закрытые сделки автопилота — вход и выход, соединённые линией,
+            цвет по исходу;
+         3. открытые позиции — вход, стоп и цель, с заливкой между входом и
+            текущей ценой.
+       Порядок важен: свежее должно лежать поверх старого, иначе история
+       перекрывает то, что происходит сейчас.
+
+       ВРЕМЯ → X. У свечей есть t, шаг берём из разницы соседних. Событие вне
+       окна графика не рисуем вовсе — растягивать его к краю значит показать
+       вход там, где его не было. Событие БЕЗ времени (старые записи) рисуем
+       только горизонталью цены: цена известна, момент нет.
+       ═══════════════════════════════════════════════════════════════════ */
+    if(L.trades&&candles.length>1){
+      const _t0=candles[0].t||0, _dt=Math.max(1,(candles[1].t||0)-(candles[0].t||0));
+      const inY=v=>isFinite(v)&&v>=minP&&v<=maxP;
+      const xOfT=ts=>{
+        if(!(ts>0)||!_t0)return null;
+        const i=(ts-_t0)/_dt;
+        if(i<-0.5||i>candles.length-0.5)return null;
+        return pad+Math.max(0,Math.min(candles.length-1,i))*cw+cw/2;
+      };
+      const right=W-LBL-2;
+      ctx.save();
+
+      /* ── 1. СЕТКА ── */
+      try{
+        if(typeof _gs!=='undefined'&&_gs&&Array.isArray(_gs.levels)){
+          const filled=new Set((_gs.inv||[]).map(x=>+x.entry));
+          _gs.levels.forEach(lv=>{
+            const px=+lv.px; if(!inY(px))return;
+            const y=toY(px), on=filled.has(px);
+            ctx.setLineDash(on?[]:[2,4]);
+            ctx.strokeStyle=on?'rgba(120,180,255,.55)':'rgba(120,180,255,.18)';
+            ctx.lineWidth=on?1.2:.7;
+            ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(right,y);ctx.stroke();
+          });
+          ctx.setLineDash([]);
+        }
+      }catch(e){}
+
+      /* ── 2. ЗАКРЫТЫЕ СДЕЛКИ АВТОПИЛОТА ──
+       * hold в секундах, поэтому время входа = t − hold×1000. Записи сетки
+       * (proto GRID) пропускаем: у них нет одной цены входа, они про корзину. */
+      try{
+        if(typeof _ap!=='undefined'&&Array.isArray(_ap.log)){
+          const recent=_ap.log.slice(-60);
+          recent.forEach(r=>{
+            if(!r||r.proto==='GRID')return;
+            const e=+r.entry,x2v=+r.exit;
+            if(!inY(e)&&!inY(x2v))return;
+            const tOut=+r.t, tIn=tOut-(+r.hold||0)*1000;
+            const xi=xOfT(tIn), xo=xOfT(tOut);
+            if(xi==null&&xo==null)return;
+            const win=(+r.bps||0)>=0;
+            const col=win?'rgba(46,224,138,':'rgba(255,90,95,';
+            const ye=toY(e), yx=toY(x2v);
+            if(xi!=null&&xo!=null&&inY(e)&&inY(x2v)){
+              ctx.strokeStyle=col+'.5)';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+              ctx.beginPath();ctx.moveTo(xi,ye);ctx.lineTo(xo,yx);ctx.stroke();
+              ctx.setLineDash([]);
+            }
+            /* Вход — треугольник по стороне сделки, выход — квадрат. Форма
+             * важнее цвета: цветом уже закодирован исход, и различать вход от
+             * выхода одним лишь оттенком на плотном графике не получается. */
+            if(xi!=null&&inY(e)){
+              const up=r.side==='long';
+              ctx.fillStyle=col+'.85)';
+              ctx.beginPath();
+              if(up){ctx.moveTo(xi,ye-5);ctx.lineTo(xi-4,ye+3);ctx.lineTo(xi+4,ye+3);}
+              else   {ctx.moveTo(xi,ye+5);ctx.lineTo(xi-4,ye-3);ctx.lineTo(xi+4,ye-3);}
+              ctx.closePath();ctx.fill();
+            }
+            if(xo!=null&&inY(x2v)){
+              ctx.fillStyle=col+'.85)';
+              ctx.fillRect(xo-2.5,yx-2.5,5,5);
+            }
+          });
+        }
+      }catch(e){}
+
+      /* ── 3. ОТКРЫТЫЕ ПОЗИЦИИ ──
+       * И автопилота, и ручные из массива positions. Рисуются последними и
+       * ярче всего: это единственное, что прямо сейчас стоит денег. */
+      const openList=[];
+      try{ if(typeof _ap!=='undefined'&&_ap.pos)
+        openList.push({entry:+_ap.pos.entry,stop:+_ap.pos.stop,tp:+_ap.pos.tp,
+                       side:_ap.pos.side,t0:+_ap.pos.t0,tag:_ap.pos.proto||'АВТО'}); }catch(e){}
+      try{ if(typeof positions!=='undefined'&&Array.isArray(positions))
+        positions.forEach(p=>openList.push({entry:+p.entry,stop:+p.stop,tp:+p.target,
+                       side:p.side,t0:+(p.t||p.openedAt||0),tag:'ПОЗИЦИЯ'})); }catch(e){}
+
+      openList.forEach(p=>{
+        if(!inY(p.entry))return;
+        const ye=toY(p.entry), xi=xOfT(p.t0);
+        const cur=isFinite(currentPrice)?currentPrice:null;
+        const dir=p.side==='long'?1:-1;
+        const good=cur!=null?((cur-p.entry)*dir>=0):true;
+        /* Заливка от входа до текущей цены — «сколько прошло в нашу сторону».
+         * Она между двумя ЦЕНАМИ, а не до края экрана: иначе на глаз кажется,
+         * будто позиция держится всё время окна. */
+        if(cur!=null&&inY(cur)){
+          const x1=(xi!=null?xi:pad), yc=toY(cur);
+          ctx.fillStyle=good?'rgba(46,224,138,.10)':'rgba(255,90,95,.10)';
+          ctx.fillRect(x1,Math.min(ye,yc),Math.max(2,right-x1),Math.abs(yc-ye));
+        }
+        // вход
+        ctx.strokeStyle='rgba(255,255,255,.75)';ctx.lineWidth=1.2;ctx.setLineDash([]);
+        ctx.beginPath();ctx.moveTo(pad,ye);ctx.lineTo(right,ye);ctx.stroke();
+        ctx.font='8.5px JetBrains Mono,monospace';
+        ctx.fillStyle='rgba(255,255,255,.9)';ctx.textAlign='left';
+        ctx.fillText(p.tag+' '+(p.side==='long'?'▲':'▼')+' '+_fmtP(p.entry),pad+3,ye-3);
+        if(xi!=null){ ctx.fillStyle='rgba(255,255,255,.95)';
+          ctx.beginPath();ctx.arc(xi,ye,3.2,0,Math.PI*2);ctx.fill(); }
+        // стоп и цель — пунктиром, подписи у правого края шкалы
+        [[p.stop,'rgba(255,90,95,.8)','SL'],[p.tp,'rgba(46,224,138,.8)','TP']].forEach(([v,c,lab])=>{
+          if(!inY(v))return;
+          const y=toY(v);
+          ctx.strokeStyle=c;ctx.lineWidth=.9;ctx.setLineDash([5,4]);
+          ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(right,y);ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle=c;ctx.textAlign='right';
+          ctx.fillText(lab,right-2,y-3);
+          ctx.textAlign='left';
+        });
+      });
+      ctx.restore();
+    }
+
     // временные метки по низу ценового поля
     if(candles.length>5&&candles[0].t){
       ctx.font='8px JetBrains Mono,monospace';ctx.fillStyle=P.axisDim;
@@ -7218,14 +7358,34 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   function _tdInner(syms,pick){
     const hasMeta=Object.keys(_tkMeta).length>0;
     let head='';
-    if(hasMeta){ const chip=(k,l)=>`<button type="button" class="tdd-sort${_tkSort===k?' on':''}" onpointerdown="event.preventDefault();event.stopPropagation();_setTkSort('${k}')">${l}</button>`;
+    if(hasMeta){ /* Чипы сортировки — та же болезнь: касание срабатывало сразу. Они стоят
+       * в шапке списка, и палец задевает их при прокрутке. */
+      const chip=(k,l)=>`<button type="button" class="tdd-sort${_tkSort===k?' on':''}" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();_setTkSort('${k}')">${l}</button>`;
       head=`<div class="ticker-dd-head"><span>топ дня</span><span class="tdd-sorts">${chip('rng','волат')}${chip('vol','объём')}${chip('chg','Δ%')}</span></div>`; }
     const clean=(syms||[]).filter(_symOk);
     if(clean.length!==(syms||[]).length&&typeof console!=='undefined')
       console.warn('пикер: отброшено имён неверной формы — '+((syms||[]).length-clean.length));
     if(!clean.length)return head+'<div class="ticker-dd-empty">нет совпадений</div>';
     const list=hasMeta?_tdSort(clean):clean;
-    return head+list.map(s=>`<div class="ticker-dd-item" data-sym="${s}" onpointerdown="event.preventDefault();${pick}('${s}')"><span class="tdd-sym">${s}/USDT</span>${_tdMetaHtml(_tkMeta[s])}</div>`).join('');
+    /* ═══ ВЫБОР ПО КЛИКУ, А НЕ ПО КАСАНИЮ ═══
+     * ЭТО И БЫЛО «пикер не работает на телефоне». Было
+     *     onpointerdown="event.preventDefault(); _setTicker('BTC')"
+     * На сенсоре pointerdown срабатывает В МОМЕНТ КАСАНИЯ, до того как палец
+     * сдвинулся. Значит любое касание списка мгновенно выбирало монету, и
+     * прокрутить его было физически нельзя: тронул, чтобы листнуть, — выбрал и
+     * закрыл. Отсюда же прежняя жалоба «при скроллинге окно скипается»: окно не
+     * пропадало, оно закрывалось выбором. Я тогда списал это на momentum-хак в
+     * CSS и ошибся — тот действительно вреден на iOS, но причина была здесь.
+     *
+     * click отличает тап от прокрутки сам: браузер не выдаёт click, если палец
+     * сдвинулся дальше порога или контейнер прокрутился. Ничего изобретать не
+     * нужно, нужно перестать мешать.
+     *
+     * preventDefault убран намеренно: на pointerdown он подавляет и сам click,
+     * ради которого всё делается. stopPropagation оставлен на pointerdown —
+     * он не мешает прокрутке, но не даёт закрывающему обработчику на document
+     * сработать раньше выбора. */
+    return head+list.map(s=>`<div class="ticker-dd-item" data-sym="${s}" onpointerdown="event.stopPropagation()" onclick="${pick}('${s}')"><span class="tdd-sym">${s}/USDT</span>${_tdMetaHtml(_tkMeta[s])}</div>`).join('');
   }
   function _renderTickerDD(syms){ const dd=document.getElementById('tickerDD'); if(!dd)return; dd.innerHTML=_tdInner(syms.length?syms:[],'_setTicker'); _markActiveChip(); }
   function _setTkSort(k){ _tkSort=k;
