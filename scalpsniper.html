@@ -6643,20 +6643,39 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     cv.addEventListener('touchend',e=>{ if(e.touches.length)return;
       const t=Date.now(); if(t-_mcTap<320){ e.preventDefault(); _mcResetView(); _mcTap=0; } else _mcTap=t; },{passive:false});
         // тач: пинч — зум; один палец — кроссхэйр (полный вид) или пан (в зуме)
-        let _tPinch=null,_tPan=null;
+        /* ═══ ЖЕСТ РЕШАЕТСЯ НАПРАВЛЕНИЕМ, А НЕ РЕЖИМОМ ═══
+         * БЫЛО: один палец = перекрестье, и только В ЗУМЕ = панорама. То есть в
+         * обычном виде до истории было не добраться — сначала догадайся сделать
+         * пинч. А история теперь глубокая: 500 свечей грузятся именно ради
+         * прокрутки назад, и с телефона они были недостижимы.
+         *
+         * СТАЛО как в профессиональных терминалах: направление ПЕРВОГО движения
+         * решает. Повёл вбок — листаешь историю, вверх-вниз — смотришь цену под
+         * пальцем. Порог 6 пикселей: ниже него режим не выбирается, иначе
+         * дрожание руки решит за трейдера. Выбранный режим держится до
+         * отпускания — на диагональном движении график иначе дёргался бы между
+         * прокруткой и перекрестьем. */
+        let _tPinch=null,_tPan=null,_tMode=null,_tSX=0,_tSY=0;
         cv.addEventListener('touchstart',e=>{const r=cv.getBoundingClientRect();
-          if(e.touches.length===2){ _tPinch=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); }
-          else{ const t=e.touches[0]; if(_mcView.t0!=null)_tPan=t.clientX-r.left; else _crosshair(t.clientX-r.left,t.clientY-r.top); }
+          if(e.touches.length===2){ _tPinch=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); _tMode=null; }
+          else{ const t=e.touches[0]; _tSX=t.clientX-r.left; _tSY=t.clientY-r.top; _tPan=_tSX; _tMode=null; }
         },{passive:true});
         cv.addEventListener('touchmove',e=>{const r=cv.getBoundingClientRect();
           if(e.touches.length===2&&_tPinch!=null){ const nd=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
             if(Math.abs(nd-_tPinch)>12){ _mcZoom(nd>_tPinch?0.8:1.25,0.5); _tPinch=nd; } }
-          else if(_tPan!=null&&e.touches.length===1){ const g=_chartGeo,x=e.touches[0].clientX-r.left;
-            if(g){ const dC=Math.round((_tPan-x)/(g.cw||6)); if(dC){_mcPan(dC);_tPan=x;} } }
-          else if(e.touches.length===1){ const t=e.touches[0]; _crosshair(t.clientX-r.left,t.clientY-r.top); }
+          else if(e.touches.length===1){
+            const t=e.touches[0], x=t.clientX-r.left, y=t.clientY-r.top;
+            if(_tMode===null){
+              const dx=Math.abs(x-_tSX), dy=Math.abs(y-_tSY);
+              if(Math.max(dx,dy)>=6)_tMode=(dx>dy)?'pan':'cross';
+            }
+            if(_tMode==='pan'){ const g=_chartGeo;
+              if(g){ const dC=Math.round((_tPan-x)/(g.cw||6)); if(dC){_mcPan(dC);_tPan=x;} } }
+            else if(_tMode==='cross'){ _crosshair(x,y); }
+          }
           e.preventDefault();
         },{passive:false});
-        cv.addEventListener('touchend',e=>{ if(e.touches.length<2)_tPinch=null; if(e.touches.length===0){_tPan=null; setTimeout(()=>_chartRedraw(),1400);} },{passive:true});
+        cv.addEventListener('touchend',e=>{ if(e.touches.length<2)_tPinch=null; if(e.touches.length===0){_tPan=null;_tMode=null; setTimeout(()=>_chartRedraw(),1400);} },{passive:true});
         cv.addEventListener('click',e=>{
           if(_dragMoved){_dragMoved=false;return;} // после перетаскивания не прыгаем к карточке
           const rect=cv.getBoundingClientRect();
