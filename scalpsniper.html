@@ -30,12 +30,21 @@
      запасные, они прописаны осмысленно: SF Mono на Apple, Consolas на Windows. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500;700;800&family=Rajdhani:wght@600;700&family=Archivo:wght@600;800&family=Chakra+Petch:wght@500;600;700&display=swap">
 <style>
   /* Chakra Petch — техничная угловатая антиква, читаемая в интерфейсе.
      Цифры НАМЕРЕННО остаются в JetBrains Mono: в терминале колонки чисел
      должны выстраиваться по разрядам, а пропорциональный шрифт их развалит. */
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Rajdhani:wght@600;700&family=Archivo:wght@600;800&family=Chakra+Petch:wght@500;600;700&display=swap');
+  /* ═══ ШРИФТЫ ГРУЗЯТСЯ ССЫЛКОЙ В ШАПКЕ, А НЕ ОТСЮДА ═══
+ * Здесь стоял @import со всеми семействами. Он работал, но находится ВНУТРИ
+ * стилей: браузер обнаруживает его только разобрав CSS, то есть запрос за
+ * шрифтами уходит позже, чем мог бы. Ссылка в <head> вместе с preconnect
+ * стартует сразу.
+ *
+ * ОТДЕЛЬНО ПРО МОЮ ОШИБКУ: я решил, что шрифты вообще не подключены, потому
+ * что искал <link> и @font-face и не искал @import. Вывод «терминал выглядит
+ * правильно только на машине трейдера» был неверным — они грузились у всех.
+ * Искать надо ВСЕ способы подключения, а не тот, который ожидаешь увидеть. */
   :root{
     --bg:#0a0b0d; --panel:#121417; --panel-2:#181b1f; --line:#262b30; --line-soft:#1d2125;
     --text:#e3e7ea; --text-dim:#bcc4cc; --text-faint:#96a1aa;
@@ -1817,6 +1826,30 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .zone-note{ font-size:11px; }
 .badge{ font-size:11px; font-weight:700; }
 
+/* ═══ ТРЕНД ДНЯ И КОНТЕКСТ — ОДНА ПАНЕЛЬ ═══
+ * Были две отдельные плашки со своими рамками, поставленные вплотную
+ * (у нижней стоял margin:-4px, чтобы прижаться). Две рамки в четырёх
+ * пикселях друг от друга читаются как шов, а не как структура: глаз видит
+ * границу там, где смысл один — «что сейчас с рынком».
+ *
+ * Панель теперь одна, внутри — две строки, разделённые тонкой линией.
+ * Узлы оставлены раздельными намеренно: их наполняет разный код, и
+ * объединять надо оформление, а не логику. */
+.day-head{
+  margin:0 0 8px; padding:0; border-radius:8px;
+  background:var(--panel); border:1px solid var(--line);
+  overflow:hidden;
+}
+.day-head:empty{ display:none; }
+.day-head > .day-trend,
+.day-head > .day-ctx{
+  margin:0; border:0; border-radius:0; background:transparent;
+}
+/* Разделитель появляется только когда видны ОБЕ строки: если контекст скрыт,
+ * висящая линия обозначала бы пустоту. */
+.day-head > .day-ctx{ border-top:1px solid var(--line-soft,rgba(255,255,255,.06)); }
+.day-head > .day-trend[style*="display:none"] + .day-ctx{ border-top:0; }
+
 /* ═══ ЖИВЫЕ ЧИСЛА — ТОЛЬКО МОНОШИРИННЫМ ═══
  * ЗАМЕР НА ЖИВОЙ СТРАНИЦЕ: у Rajdhani и Chakra Petch по-настоящему
  * пропорциональные цифры, и tabular-nums их НЕ чинит — в этих шрифтах просто
@@ -2148,8 +2181,13 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   <!-- ===== ZONES (shared, always visible) ===== -->
   <div class="section-title" id="zonesTitle" style="justify-content:space-between;flex-wrap:nowrap">Зоны на сессию<span class="hint-wrap" style="margin-right:auto"><i class="hint-ico">?</i><span class="hint-tip">★★★ — высокий приоритет, подсвечивается первой · ★★ в сессии приглушены · ⏰ — экспирация зоны по времени · Клик по цене внутри карточки зоны копирует её в буфер</span></span> <span class="tag" style="flex-shrink:0">локально</span><button class="clear-zones-btn" onclick="clearAllZones()" title="Удалить все зоны">Очистить</button></div>
   <div class="zones-fresh" id="zonesFresh"><span id="zonesFreshTxt"></span><button class="zf-plan" onclick="_prepToggle()" title="План: протоколы с фитом, чеклист входа, готовность — разворачивается на месте">◈ план</button><button class="zf-refresh" onclick="_schedRun('zones',true)" title="Пересобрать зоны из стакана сейчас (без скринов). Автообновление это не отменяет">↻ Обновить</button><button class="zf-refresh" id="schedBtn" onclick="_schedToggle()" title="Автообновление зон и разбора">⏱ авто</button><button class="zf-refresh" id="hapBtn" onclick="_hapticToggle()" title="Тактильная отдача на телефоне (Android; в iOS Safari Web Vibration API отсутствует)">◈ вибро</button></div>
-  <div id="dayTrend" class="day-trend" style="display:none"></div>
-  <div id="dayCtx" class="day-ctx" style="display:none"></div>
+  <!-- Тренд дня и контекст — одна панель: это один взгляд, а не два.
+       Внутренние блоки остались отдельными узлами, потому что их наполняет
+       разный код; объединено оформление, а не логика. -->
+  <div id="dayHead" class="day-head" style="display:none">
+    <div id="dayTrend" class="day-trend" style="display:none"></div>
+    <div id="dayCtx" class="day-ctx" style="display:none"></div>
+  </div>
   <div id="mpChip" class="day-ctx" style="display:none" title="Max Pain ближайшей опционной экспирации: страйк, где продавцы опционов теряют меньше всего (данные открытого интереса). Гравитация — дистанция цены до уровня. Наблюдение, не прогноз."></div>
   <div class="zone-read" id="zoneRead" style="display:none"></div>
   <!-- input tools: collapsible (вставка + ручное добавление + депозит) -->
@@ -6784,6 +6822,15 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   // Пересчёт здесь безусловный: смена ТФ — явное действие трейдера, а не фон.
   // Дебаунс 600 мс — щёлканье 1m→5m→15m→1h не должно запускать четыре разбора.
   let _tfDeb=null, _tfPrev=null;
+  /* Обёртка тренда и контекста показывается, только если внутри есть видимая
+   * строка. Иначе на пустом инструменте висела бы пустая рамка — та самая
+   * «дырка», из-за которой блоки и лепили вплотную вручную. */
+  function _dayHeadSync(){
+    const w=document.getElementById('dayHead'); if(!w)return;
+    const vis=[...w.children].some(c=>c.style.display!=='none'&&c.innerHTML.trim());
+    w.style.display=vis?'':'none';
+  }
+  setInterval(_dayHeadSync,1000);
   function _tfChanged(){
     saveSettings();
     _markChartTf();
@@ -6812,7 +6859,12 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     const sym=_symFromTicker(raw);
     if(st)st.textContent='загрузка…';
     const data=await _fetchKlines(sym,tf);
-    if(data){_klines=data;_klSym=sym;_klTf=tf;if(st)st.textContent='live';_sessHist=data.map(c=>c.c);if(typeof _sessDrawPrice==='function')_sessDrawPrice();}
+    if(data){
+      /* Вид сбрасывается при смене инструмента или таймфрейма: сохранённые
+       * границы времени принадлежали ДРУГИМ данным. Без сброса после
+       * переключения можно оказаться в окне, которого в новом наборе нет. */
+      if(_klSym!==sym||_klTf!==tf)_mcView={t0:null,t1:null};
+      _klines=data;_klSym=sym;_klTf=tf;if(st)st.textContent='live';_sessHist=data.map(c=>c.c);if(typeof _sessDrawPrice==='function')_sessDrawPrice();}
     else{if(st)st.textContent='нет данных';}
     _chartRedraw();
   }
@@ -6862,9 +6914,29 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
           _drag=null; cv.style.cursor='crosshair'; _chartRedraw(); };
         cv.addEventListener('mouseup',_endDrag);
         cv.addEventListener('mouseleave',()=>{ if(_drag)_endDrag(); else _chartRedraw(); });
-        cv.addEventListener('wheel',e=>{ e.preventDefault(); const p=_rel(e); const g=_chartGeo;
+        /* ═══ КОЛЕСО НЕ ДОЛЖНО ЗАБИРАТЬ ПРОКРУТКУ СТРАНИЦЫ ═══
+         * НАЙДЕНО ЗАМЕРОМ 19.08. preventDefault() стоял БЕЗУСЛОВНО: когда
+         * трейдер листает длинную страницу и курсор проходит над графиком,
+         * страница замирает, а график отдаляется. Несколько щелчков колеса — и
+         * он на всех 500 свечах по 2 пикселя, где свечи нечитаемы, а стекло
+         * выключается порогом. Я дважды поймал терминал в этом состоянии и
+         * сперва принял его за случайность замера.
+         *
+         * Правило простое: колесо принадлежит графику, только пока графику есть
+         * куда двигаться. Упёрлись в предел — отдаём прокрутку странице, как это
+         * делает overscroll-behavior для обычных блоков.
+         * Так остаётся и зум колесом (он удобен), и возможность просто пролистать
+         * страницу мимо графика. */
+        cv.addEventListener('wheel',e=>{
+          const out=e.deltaY>0;                       // вниз = отдаляем
+          const full=_klines.length, vis=_mcVisible().length;
+          const atFull = vis>=full;                   // дальше отдалять некуда
+          const atMin  = vis<=12;                     // ближе приближать некуда
+          if((out&&atFull)||(!out&&atMin))return;      // предел — колесо уходит странице
+          e.preventDefault();
+          const p=_rel(e); const g=_chartGeo;
           const frac=g?Math.max(0,Math.min(1,p.x/Math.max(1,g.W-g.LBL))):0.5;
-          _mcZoom(e.deltaY>0?1.25:0.8,frac); },{passive:false});
+          _mcZoom(out?1.25:0.8,frac); },{passive:false});
         cv.addEventListener('dblclick',e=>{e.preventDefault();_mcResetView();});
     /* Двойной клик — мышь. На сенсоре зум делается пинчем, а вернуться было
      * нечем: dblclick после двойного тапа iOS отдаёт не всегда, и его глотает
