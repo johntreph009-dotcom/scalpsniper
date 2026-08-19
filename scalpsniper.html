@@ -5644,6 +5644,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
                   (typeof _whFeed!=='undefined'&&Array.isArray(_whFeed)&&_whFeed.length>0);
     const DW=_bookOn?(mob?30:52):0, TW=_tapeOn?(mob?11:16):0;
     const LBL=(mob?64:86)+(DW||0)+TW;
+    /* ═══ ГРАНИЦА ЦЕНОВОЙ ШКАЛЫ ═══
+     * Правая полоса теперь делится на три: стакан, лента, ценовая шкала.
+     * SCX — левый край ИМЕННО ШКАЛЫ. До этой правки всё, что рисовалось «в
+     * полосе», отсчитывалось от W-LBL, то есть от начала СТАКАНА: подложки
+     * бейджей зон закрашивали стакан и ленту целиком, и новые слои были
+     * невидимы. Ошибка не в них — их просто закрашивали сверху. */
+    const SCX=W-LBL+(DW||0)+TW;
     const dpr=Math.min(window.devicePixelRatio||1,3);
     cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);
     cv.style.width=W+'px';cv.style.height=H+'px';
@@ -5678,9 +5685,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(W-LBL,gy);ctx.stroke();
       ctx.setLineDash([]);
       ctx.fillStyle=P.axis;
-      ctx.fillText(_fmtP(gp),W-LBL+4,Math.max(8,Math.min(ph-2,gy+3)));
+      ctx.fillText(_fmtP(gp),SCX+4,Math.max(8,Math.min(ph-2,gy+3)));
     }
     ctx.strokeStyle=P.scaleLine;ctx.beginPath();ctx.moveTo(W-LBL,0);ctx.lineTo(W-LBL,H);ctx.stroke();
+    if(SCX>W-LBL+1){ ctx.strokeStyle='rgba(255,255,255,.06)';ctx.beginPath();
+      ctx.moveTo(SCX,0);ctx.lineTo(SCX,ph);ctx.stroke(); }
     _zoneHitAreas=[];
     let offTop=0,offBot=0; // stack counters for off-range zone markers
     let offHidTop=0,offHidBot=0; // сколько зон свернули в счётчик, чтобы не залить график
@@ -6166,12 +6175,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       let prevB=-99;
       _zBadges.forEach(b=>{
         const by=Math.max(9,Math.min(ph-9,Math.max(b.y,prevB+17))); prevB=by;
+        /* Выноска идёт от истинной цены к сдвинутой подписи и заканчивается
+         * у КРАЯ ШКАЛЫ, а не у края всей полосы: иначе линия перечёркивала
+         * стакан. */
         if(Math.abs(by-b.y)>2){ ctx.strokeStyle='rgba('+b.rgb+',.5)';ctx.lineWidth=.7;ctx.setLineDash([]);
-          ctx.beginPath();ctx.moveTo(plotW,b.y);ctx.lineTo(W-LBL+2,by);ctx.stroke(); }
-        ctx.fillStyle=P.badgeBg;ctx.fillRect(W-LBL+1,by-8,LBL-2,16);
-        ctx.fillStyle='rgba('+b.rgb+',.2)';ctx.fillRect(W-LBL+1,by-8,LBL-2,16);
+          ctx.beginPath();ctx.moveTo(plotW,b.y);ctx.lineTo(SCX+2,by);ctx.stroke(); }
+        const bwd=Math.max(20,(LBL-(DW||0)-TW)-2);
+        ctx.fillStyle=P.badgeBg;ctx.fillRect(SCX+1,by-8,bwd,16);
+        ctx.fillStyle='rgba('+b.rgb+',.2)';ctx.fillRect(SCX+1,by-8,bwd,16);
         ctx.fillStyle='rgba('+b.rgb+',1)';ctx.font='bold 8.5px JetBrains Mono,monospace';
-        ctx.fillText(b.txt,W-LBL+4,by+3.5);
+        ctx.fillText(b.txt,SCX+4,by+3.5);
       });
     }
     // ── ТРЕНД: MA-лента, цвет по тренду дня + стрелка направления ──
@@ -6289,7 +6302,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       ctx.beginPath();ctx.moveTo(0,py);ctx.lineTo(W-LBL,py);ctx.stroke();
       ctx.restore();ctx.setLineDash([]);
       // ценник-пилюля со скруглением и янтарной каймой — это «сейчас», главный якорь глаза
-      const bxp=W-LBL+2, byp=py-8, bwp=LBL-4, bhp=16, rr=4;
+      /* Ценник «сейчас» — в ШКАЛЕ, а не во всей полосе. Тот же класс ошибки,
+       * что у бейджей зон: отсчёт от W-LBL и ширина LBL закрашивали стакан и
+       * ленту. Главный якорь глаза не должен стирать соседей. */
+      const bxp=SCX+2, byp=py-8, bwp=Math.max(20,(LBL-(DW||0)-TW)-4), bhp=16, rr=4;
       ctx.save();ctx.shadowColor='rgba(255,122,24,.55)';ctx.shadowBlur=8;
       ctx.beginPath();
       ctx.moveTo(bxp+rr,byp);ctx.lineTo(bxp+bwp-rr,byp);ctx.quadraticCurveTo(bxp+bwp,byp,bxp+bwp,byp+rr);
