@@ -5873,20 +5873,85 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       }
     });
     const pad=4,cw=(W-pad*2-LBL)/Math.max(candles.length,1);
+    /* ═══════════════════════════════════════════════════════════════════
+       СТЕКЛЯННЫЕ СВЕЧИ
+
+       «Стекло» — это не прозрачность сама по себе, а три вещи вместе:
+       вертикальный градиент внутри тела (светлее сверху, плотнее снизу),
+       обводка ярче заливки и блик по верхней кромке. Уберите любую — и
+       получится просто бледный прямоугольник.
+
+       ГДЕ ЗДЕСЬ ГРАНИЦЫ, ЗАДАННЫЕ ФИЗИКОЙ, А НЕ ВКУСОМ:
+       · радиус скругления не может быть больше четверти ширины и трети
+         высоты. При свече 4.5 px и радиусе 2.5 тело превратится в пилюлю, а
+         доджи (открытие = закрытие) скругление съест целиком;
+       · градиент и скругление включаются только при ширине ≥3 px и высоте
+         ≥3 px. Ниже этого порога они не видны, но стоят времени: при сильном
+         отдалении на экране сотни свечей;
+       · заливка не бледнее 0.55 снизу. Свеча лежит поверх подсветки зон, и
+         слишком прозрачное тело перестаёт читаться на цветном фоне — это
+         терминал, а не витрина.
+       ═══════════════════════════════════════════════════════════════════ */
+    const _rgbc=(h6)=>{
+      if(!h6)return '255,255,255';
+      if(h6[0]!=='#')return h6.replace(/^rgba?\(|\)$/g,'').split(',').slice(0,3).join(',');
+      const v=h6.slice(1);
+      const n=v.length===3?v.split('').map(c=>c+c).join(''):v;
+      return [0,2,4].map(i=>parseInt(n.substr(i,2),16)).join(',');
+    };
+    /* roundRect есть не во всех браузерах, которыми пользуются с телефона.
+     * Запасной путь рисует то же самое дугами — иначе на старом Safari
+     * график исчез бы целиком, а не потерял скругление. */
+    const _rrect=(g,x,y,w,h,r)=>{
+      r=Math.max(0,Math.min(r,w/2,h/2));
+      if(g.roundRect){ g.beginPath(); g.roundRect(x,y,w,h,r); return; }
+      g.beginPath();
+      g.moveTo(x+r,y); g.lineTo(x+w-r,y); g.arcTo(x+w,y,x+w,y+r,r);
+      g.lineTo(x+w,y+h-r); g.arcTo(x+w,y+h,x+w-r,y+h,r);
+      g.lineTo(x+r,y+h); g.arcTo(x,y+h,x,y+h-r,r);
+      g.lineTo(x,y+r); g.arcTo(x,y,x+r,y,r); g.closePath();
+    };
+    const _RGB_UP=_rgbc(P.candleUp), _RGB_DN=_rgbc(P.candleDn);
+
     const vols=candles.map(c=>+c.v||0),maxV=Math.max(1,...vols),avgV=vols.reduce((a,b)=>a+b,0)/(vols.length||1);
     candles.forEach((c,i)=>{
       const xc=pad+i*cw+cw/2,green=c.c>=c.o,col=green?P.candleUp:P.candleDn;
-      const bw=Math.max(2,Math.round(cw*0.68)); // тела постоянной ширины, полный контраст — объём ушёл в гистограмму
-      const x=Math.round(xc)+0.5; // пиксель-выравнивание фитиля → чёткая 1px линия
-      ctx.strokeStyle=col;ctx.lineWidth=mob?1.3:1;ctx.setLineDash([]);
+      const rgb=green?_RGB_UP:_RGB_DN;
+      const bw=Math.max(2,Math.round(cw*0.68));
+      const x=Math.round(xc)+0.5;
+      /* Фитиль полупрозрачный и с круглым торцом: он подчинён телу, а не
+       * спорит с ним за внимание. Раньше фитиль был той же плотности, что
+       * тело, и при частоколе свечей поле выглядело решёткой. */
+      ctx.save();
+      ctx.strokeStyle='rgba('+rgb+',.62)';ctx.lineWidth=mob?1.3:1;
+      ctx.lineCap='round';ctx.setLineDash([]);
       ctx.beginPath();ctx.moveTo(x,toY(c.h));ctx.lineTo(x,toY(c.l));ctx.stroke();
+      ctx.restore();
       const top=Math.round(Math.min(toY(c.o),toY(c.c))),ht=Math.max(1.5,Math.round(Math.abs(toY(c.o)-toY(c.c))));
       const bx=Math.round(xc-bw/2);
       const live=i===candles.length-1;
-      if(live){ ctx.save();ctx.shadowColor=col;ctx.shadowBlur=9; }   // живая свеча светится — глаз сразу цепляет край рынка
-      ctx.fillStyle=col;ctx.fillRect(bx,top,bw,ht);
+      const rich=(bw>=3&&ht>=3);            // ниже порога стекло не видно, но стоит времени
+      if(live){ ctx.save();ctx.shadowColor=col;ctx.shadowBlur=9; }
+      if(rich){
+        const r=Math.min(2.5,bw*0.25,ht/3);
+        _rrect(ctx,bx,top,bw,ht,r);
+        const g=ctx.createLinearGradient(0,top,0,top+ht);
+        g.addColorStop(0,'rgba('+rgb+',.62)');   // верх легче — свет падает сверху
+        g.addColorStop(0.55,'rgba('+rgb+',.80)');
+        g.addColorStop(1,'rgba('+rgb+',.95)');   // низ плотный — тело «наливается»
+        ctx.fillStyle=g;ctx.fill();
+        ctx.strokeStyle='rgba('+rgb+',.95)';ctx.lineWidth=1;ctx.stroke();
+      } else {
+        ctx.fillStyle=col;ctx.fillRect(bx,top,bw,ht);
+      }
       if(live)ctx.restore();
-      if(ht>2.5){ ctx.fillStyle='rgba(255,255,255,.20)';ctx.fillRect(bx,top,bw,1.2); }   // верхний блик — телу объём
+      /* Блик — внутри верхней кромки и с отступом на радиус, иначе он
+       * вылезает за скругление и угол выглядит обрубленным. */
+      if(rich&&ht>4){
+        const r=Math.min(2.5,bw*0.25,ht/3);
+        ctx.fillStyle='rgba(255,255,255,.22)';
+        ctx.fillRect(bx+r*0.7,top+1,Math.max(1,bw-r*1.4),1);
+      } else if(ht>2.5){ ctx.fillStyle='rgba(255,255,255,.20)';ctx.fillRect(bx,top,bw,1.2); }
       if(L.vol&&avgV>0&&(+c.v||0)>avgV*2){ // RVOL-спайк — где реально дрались
         ctx.fillStyle='#ffd24a';ctx.beginPath();ctx.arc(xc,toY(c.h)-6,2.3,0,Math.PI*2);ctx.fill();
       }
@@ -6080,8 +6145,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
           ctx.lineTo(bx0,toY(vis[vis.length-1][0]));
           ctx.closePath();ctx.fillStyle=col;ctx.fill();
         };
-        strip(bC,'rgba(46,224,138,.22)');
-        strip(aC,'rgba(255,90,95,.22)');
+        /* Полоса глубины наливается от оси наружу: у самой цены книга плотная
+         * и полоса ярче, к краям гаснет. Плоская заливка читалась как
+         * однородное пятно и не показывала, где книга кончается. */
+        const grad=(rgbs)=>{ const g=ctx.createLinearGradient(bx0,0,bx0+bw,0);
+          g.addColorStop(0,'rgba('+rgbs+',.30)'); g.addColorStop(1,'rgba('+rgbs+',.07)'); return g; };
+        strip(bC,grad(_RGB_UP));
+        strip(aC,grad(_RGB_DN));
         const line=(arr,col)=>{
           const vis=arr.filter(([p])=>p>=minP&&p<=maxP);
           if(vis.length<2)return;
@@ -6325,8 +6395,26 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         const vbw=Math.max(1.5,cw*0.6);
         candles.forEach((c,i)=>{
           const vn=(+c.v||0)/maxV, vh=Math.max(1,vn*(laneH-12));
-          ctx.fillStyle=(c.c>=c.o)?'rgba(46,224,138,.32)':'rgba(255,90,95,.32)';
-          ctx.fillRect(pad+i*cw+cw/2-vbw/2,H-3-vh,vbw,vh);
+          const rgb=(c.c>=c.o)?_RGB_UP:_RGB_DN;
+          const vx=pad+i*cw+cw/2-vbw/2, vy=H-3-vh;
+          /* Столбик объёма — то же стекло: скруглён сверху и налит снизу.
+           * Скругляем ТОЛЬКО верх: низ стоит на оси, и круглое основание
+           * оторвало бы столбик от неё. */
+          if(vbw>=3&&vh>=3){
+            const r=Math.min(2,vbw*0.3,vh/2);
+            ctx.beginPath();
+            ctx.moveTo(vx,vy+vh); ctx.lineTo(vx,vy+r);
+            ctx.arcTo(vx,vy,vx+r,vy,r); ctx.lineTo(vx+vbw-r,vy);
+            ctx.arcTo(vx+vbw,vy,vx+vbw,vy+r,r); ctx.lineTo(vx+vbw,vy+vh);
+            ctx.closePath();
+            const g=ctx.createLinearGradient(0,vy,0,vy+vh);
+            g.addColorStop(0,'rgba('+rgb+',.42)');
+            g.addColorStop(1,'rgba('+rgb+',.16)');
+            ctx.fillStyle=g;ctx.fill();
+          } else {
+            ctx.fillStyle='rgba('+rgb+',.32)';
+            ctx.fillRect(vx,vy,vbw,vh);
+          }
         });
       }
       if(L.cvd){
