@@ -4702,7 +4702,12 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       let capped=false;
       if(cap>0&&px>0&&vol*px>cap){ vol=+(cap/px).toFixed(6); capped=true; }
       if(capped)skipped.push(px+': объём срезан до лимита движка $'+cap);
-      out.push({px,stop,vol,side,kind:z.kind||'fade',proto:z.proto||null,note:z.note||''});
+      /* Плечо кладём в КАЖДУЮ зону: MEXC требует его в заявке на открытие, а
+       * из разметки оно не приходит. Без него биржа отвечает «2006: Leverage
+       * multiplier…» — отказ за отсутствие поля, читаемый как ошибка размера.
+       * Источник тот же, что у робота: настройка автопилота. */
+      const _lev=(typeof AP_LEV!=='undefined'&&AP_LEV>0)?AP_LEV:0;
+      out.push({px,stop,vol,side,kind:z.kind||'fade',proto:z.proto||null,note:z.note||'',lev:_lev});
     }
     const inf=document.getElementById('cnInfo');
     if(!out.length){
@@ -9967,6 +9972,9 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   // а от этого числа зависит вся экономика — цели протоколов, гейт матожидания и минимальный шаг сетки.
   // Даже при нулевой комиссии остаётся спред/проскальзывание: модель считает по mid, реальный вход его пересекает.
   let AP_FEE=5; try{const _f=localStorage.getItem('msa_ap_fee_v1'); if(_f!=null&&isFinite(+_f)&&+_f>=0)AP_FEE=+_f;}catch(e){}
+  /* Тейкерская ставка — по ФАКТУ списаний с биржи, а не по документации.
+   * Документация обещала 1 б.п., счёт показал 8.01. Верим счёту. */
+  let AP_TAKER_BPS=8.01; try{const _t=localStorage.getItem('msa_ap_taker_v1'); if(_t!=null&&isFinite(+_t)&&+_t>=0)AP_TAKER_BPS=+_t;}catch(e){}
   function _apSetFee(){
     const v=prompt('Издержки на круг, bps (комиссия + проскальзывание).\nНулевая комиссия у мейкера → ставь оценку спреда, обычно 0–2.',String(AP_FEE));
     if(v==null)return; const n=(typeof _pf==='function')?_pf(v):parseFloat(v);
@@ -11160,15 +11168,25 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     let sOut=null; try{ const mm=_apMicro(); sOut=mm?mm.spreadBps:null; }catch(e){}
     const sIn=(p.spreadIn!=null?p.spreadIn:sOut);
     const takerExit=(reason!=='tp');
+    /* ═══ КОМИССИЯ БОЛЬШЕ НЕ НОЛЬ ═══
+     * В модели стояло AP_FEE=0, потому что у трейдера нулевой МЕЙКЕР. Но выход
+     * по стопу идёт по рынку — это ТЕЙКЕР, и по фактическим списаниям он стоит
+     * 8.01 б.п. Пока комиссия считалась нулём, бумага показывала прибыль там,
+     * где счёт терял: за первую боевую сессию −$15.74 при «результате $0.00».
+     *
+     * Вход и тейк — пост-онли, значит мейкер, значит ноль. Тейкер платится
+     * ровно на убыточных выходах, и модель обязана это знать. */
+    const feeTaker=(typeof AP_TAKER_BPS!=='undefined'?AP_TAKER_BPS:8.01);
+    const feeReal=takerExit?feeTaker:0;
     const costBps=(sIn!=null||sOut!=null)
       ? +(((sIn!=null?sIn:sOut)/2) + (takerExit?((sOut!=null?sOut:sIn)/2):0)).toFixed(3)
       : null;
     // netReal — то, что осталось бы на счёте. bps остаётся как есть, чтобы не
     // ломать сравнение со старыми записями: две колонки честнее одной подкрученной.
-    const netReal=(costBps!=null)?+(bps-costBps).toFixed(2):null;
+    const netReal=(costBps!=null)?+(bps-costBps-feeReal).toFixed(2):null;
     // fit и fee пишем в запись: без них журнал нельзя честно разбирать задним числом
     // (фит не логировался вообще → порог подбирать было не на чем; издержки менялись → старые bps несравнимы с новыми)
-    const rec={t:Date.now(),proto:p.proto,side:p.side,entry:+p.entry.toFixed(6),exit:+px.toFixed(6),bps,netReal,costBps,spreadIn:sIn,spreadOut:sOut,takerExit,seg:p.seg,reason,hold:Math.round((Date.now()-p.t0)/1e3),part:!!p.part,conf:p.conf||[],against:p.against||[],fit:p.fit!=null?p.fit:null,fee:AP_FEE};
+    const rec={t:Date.now(),proto:p.proto,side:p.side,entry:+p.entry.toFixed(6),exit:+px.toFixed(6),bps,netReal,costBps,spreadIn:sIn,spreadOut:sOut,takerExit,seg:p.seg,reason,hold:Math.round((Date.now()-p.t0)/1e3),part:!!p.part,conf:p.conf||[],against:p.against||[],fit:p.fit!=null?p.fit:null,fee:AP_FEE,feeReal,feeTaker};
     /* Закрытие уходит на биржу ПЕРВЫМ делом — раньше журналов и отрисовки.
      * Разница в сотню миллисекунд на выходе стоит дороже, чем аккуратность
      * порядка записей; журнал подождёт, позиция — нет. */
