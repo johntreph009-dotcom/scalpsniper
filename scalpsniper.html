@@ -9757,7 +9757,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
           return '<br>экспозиция <b>$'+Math.round(notion)+'</b> ('+n+' ×$'+_apNotional()+', маржа $'+Math.round(marg)+')'
             +' · до ликвидации <b class="'+(warn?'gs-dn':'gs-up')+'">~'+(left/100).toFixed(2)+'%</b>'
             +' <span class="gs-note">при плече '+AP_LEV+'×</span>'; })():'')
-      +'<br><span class="gs-note">'+(_gs.inv.length>=3?'высиживает инвентарь — стопов нет, хвост гасится прибылью выигравших ног':'собирает шаг — лесенка едет за ценой')+' · модель · тренажёр</span>';
+      +'<br><span class="gs-note">'+(_gs.inv.length>=3?'высиживает инвентарь — стопов нет, хвост гасится прибылью выигравших ног':'собирает шаг — лесенка едет за ценой')+' · модель · '+(_armPrev?'<b class="neg">БОЙ</b>':'тренажёр')+'</span>';
   }
 
   // ═══════════ АВТОПИЛОТ (демо) — стратегии из реестра сами открывают ВИРТУАЛЬНЫЕ сделки ═══════════
@@ -9786,14 +9786,14 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     if(v==null)return; const n=(typeof _pf==='function')?_pf(v):parseFloat(v);
     if(!isFinite(n)||n<=0)return; AP_MARGIN=n;
     try{localStorage.setItem('msa_ap_margin_v1',String(n));}catch(e){}
-    if(typeof _proc==='function')_proc('маржа на ордер: <b>$'+n+'</b> · номинал $'+_apNotional());
+    if(typeof _proc==='function')_proc('маржа на ордер: <b>$'+n+'</b> · номинал $'+_apNotional().toFixed(2));
   }
   function _apSetLev(){
     const v=prompt('Плечо на ордер (×).\nНоминал позиции = маржа × плечо. Ликвидация ориентировочно при движении 100/плечо % против позиции.',String(AP_LEV));
     if(v==null)return; const n=(typeof _pf==='function')?_pf(v):parseFloat(v);
     if(!isFinite(n)||n<=0)return; AP_LEV=n;
     try{localStorage.setItem('msa_ap_lev_v1',String(n));}catch(e){}
-    if(typeof _proc==='function')_proc('плечо: <b>×'+n+'</b> · номинал $'+_apNotional()+' · запас до ликвидации ~'+(100/n).toFixed(2)+'%');
+    if(typeof _proc==='function')_proc('плечо: <b>×'+n+'</b> · номинал $'+_apNotional().toFixed(2)+' · запас до ликвидации ~'+(100/n).toFixed(2)+'%');
   }
   /* ═══ ЕДИНИЦА ВЫВОДА — USDT ═══
    * Внутри всё считается в БАЗИСНЫХ ПУНКТАХ, и это не пережиток: bps не зависят
@@ -9829,7 +9829,9 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   }
   function _apCfgOut(){
     const o=document.getElementById('cfgOut'); if(!o)return;
-    o.innerHTML='номинал <b>$'+_apNotional()+'</b> · до ликвидации ~<b>'+(100/AP_LEV).toFixed(2)+'%</b>'
+    /* Деньги — всегда с копейками. 90.9 × 33 в двоичной арифметике даёт
+     * 2999.7000000000003, и на экране это читается как сбой. */
+    o.innerHTML='номинал <b>$'+_apNotional().toFixed(2)+'</b> · до ликвидации ~<b>'+(100/AP_LEV).toFixed(2)+'%</b>'
       +' · шаг сетки от <b>'+(Math.max(0.0008,AP_FEE*2*4/1e4)/4*1e4).toFixed(1)+' bps</b>';
   }
   function _apCfgInit(){
@@ -10287,7 +10289,8 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       : (k==='whale') ? '<button type="button" class="zf-refresh'+(whOn?' on':'')+'" onclick="_whToggle()">'+(whOn?'⏹ Остановить ленту':'▶ Включить ленту')+'</button> <span class="gs-note">работает и на других вкладках</span>'
       : (k==='liq') ? '<button type="button" class="zf-refresh'+(lqOn?' on':'')+'" onclick="_liqToggle()">'+(lqOn?'⏹ Остановить фид':'▶ Включить фид')+'</button> <span class="gs-note">работает и на других вкладках</span>'
       : (k==='book') ? '<span class="gs-note">клик по уровню копирует цену · у стен показан сценарий: отскок / пробой / разъедают</span>'
-      : (k==='auto') ? '<span class="gs-note">движок-диспетчер: сетка в рейндже, направленные в тренде · всё виртуально, ордера не выставляются</span>'
+      : (k==='auto') ? '<span class="gs-note">движок-диспетчер: сетка в рейндже, направленные в тренде · '
+          +(_armPrev?'<b class="neg">ордера уходят на биржу</b>':'всё виртуально, ордера не выставляются')+'</span>'
       : '<span class="gs-note">живой лог решений движка · пишется всегда, даже когда вкладка закрыта</span>';
   }
   // индикаторы отражают РЕАЛЬНОЕ состояние потоков, а не выбранную вкладку
@@ -11151,7 +11154,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     }
     const mode=_ap.gridOn?'СЕТКА (рейндж)':'НАПРАВЛЕННЫЙ (тренд/поток)';
     p.innerHTML='<b>АВТОПИЛОТ</b> · режим <b>'+mode+'</b> · сегмент <b>'+_apSegKey(m.f)+'</b> · лидер '+lead+' '+(S[lead]||0)+'%'
-      +'<br><span class="gs-note">ордер:</span> <b class="ap-fee">$'+AP_MARGIN+' × '+AP_LEV+'×</b> = номинал <b>$'+_apNotional()+'</b>'
+      +'<br><span class="gs-note">ордер:</span> <b class="ap-fee">$'+(+AP_MARGIN).toFixed(2)+' × '+AP_LEV+'×</b> = номинал <b>$'+_apNotional().toFixed(2)+'</b>'
       /* ═══ ДЕНЬГИ ПОКАЗЫВАЮТСЯ ВМЕСТЕ С ОСНОВАНИЕМ ═══
        * НАЙДЕНО ЗОНДОМ НА ЖИВОЙ СТРАНИЦЕ 17.08: на задеплоенной копии стояли
        * маржа 500 × плечо 36 = номинал $18000 при поле депозита $20000, тогда
@@ -11196,7 +11199,16 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       +' <span class="gs-note">(меняется в блоке «Параметры ордера» выше)</span>'
       +'<br>'+posHtml
       +'<br>сегодня: <b>'+_ap.today.n+'</b> сд · WR '+(wr==null?'—':wr+'%')+expHtml+' · <b class="'+cls(_ap.today.sum)+'">'+_usd(_ap.today.sum)+'</b>'+beTxt+(last?' · последние, USDT: '+last:'')
-      +'<br><span class="gs-note">виртуально · комиссия '+AP_FEE+' bps в PnL · модель · тренажёр — реальные ордера не открывает</span>';
+      /* ═══ ПОДПИСЬ ОБЯЗАНА ЗНАТЬ ПРО БОЕВОЙ РЕЖИМ ═══
+       * Строка «тренажёр — реальные ордера не открывает» стояла всегда, в том
+       * числе при включённом бое. Это худший вид неверной подписи: она не
+       * просто устарела, она успокаивает ровно там, где нужна осторожность.
+       * Пометка про режим должна приходить из одного источника с самим
+       * режимом — из ответа движка, а не из намерений вёрстки. */
+      +'<br><span class="gs-note">'+(_armPrev
+          ? '<b class="neg">БОЕВОЙ РЕЖИМ: решения уходят на биржу настоящими ордерами</b>'
+          : 'виртуально · модель · тренажёр — реальные ордера не открывает')
+        +' · комиссия '+AP_FEE+' bps в PnL</span>';
   }
 
   // ═══════════ ФОН РЫНКА: толпа vs киты + новостные триггеры · ЛЕНТА ПРОЦЕССИНГА ═══════════
