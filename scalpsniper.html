@@ -1850,6 +1850,25 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .day-head > .day-ctx{ border-top:1px solid var(--line-soft,rgba(255,255,255,.06)); }
 .day-head > .day-trend[style*="display:none"] + .day-ctx{ border-top:0; }
 
+/* ═══ ТУМБЛЕР БОЕВОГО РЕЖИМА ═══
+ * Внешне отличается от остальных кнопок намеренно: это единственный элемент
+ * страницы, который переводит деньги из виртуальных в настоящие. Во включённом
+ * состоянии он горит акцентом и подписан словами, а не значком. */
+.cn-live{display:flex;align-items:center;gap:10px;margin:8px 0 2px;padding:8px 10px;
+  border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.02)}
+.cn-live.on{border-color:var(--accent);background:rgba(255,122,24,.10)}
+.cn-sw{position:relative;display:inline-block;width:44px;height:24px;flex:0 0 auto;cursor:pointer}
+.cn-sw input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.cn-sw span{position:absolute;inset:0;border-radius:24px;background:#3a3f47;transition:background .15s}
+.cn-sw span::before{content:'';position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;
+  background:#c9ced6;transition:transform .15s}
+.cn-sw input:checked + span{background:var(--accent)}
+.cn-sw input:checked + span::before{transform:translateX(20px);background:#fff}
+.cn-sw input:focus-visible + span{outline:2px solid var(--accent);outline-offset:2px}
+.cn-sw-txt{display:flex;flex-direction:column;line-height:1.25;min-width:0}
+.cn-sw-txt b{font-size:12px;letter-spacing:.04em}
+.cn-live.on .cn-sw-txt b{color:var(--accent)}
+
 /* ═══ ЖИВЫЕ ЧИСЛА — ТОЛЬКО МОНОШИРИННЫМ ═══
  * ЗАМЕР НА ЖИВОЙ СТРАНИЦЕ: у Rajdhani и Chakra Petch по-настоящему
  * пропорциональные цифры, и tabular-nums их НЕ чинит — в этих шрифтах просто
@@ -2001,7 +2020,16 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         <button class="cn-btn" id="cnSend" onclick="cnSendZones()" disabled>▲ отправить план</button>
         <button class="cn-btn cn-panic" id="cnPanic" onclick="cnPanic()" disabled>✕ снять всё</button>
       </div>
-      <div class="cn-note">Боевой режим включается только флагом <code>--armed</code> в консоли. Отсюда его включить нельзя — намеренно: браузер открыт всегда, и случайный клик не должен стоить денег.</div>
+      <!-- ═══ ТУМБЛЕР БОЕВОГО РЕЖИМА ═══
+           Право торговать выдаёт ЗАПУСК движка (ключ --allow-arm) — действие у
+           клавиатуры, один раз за сеанс. Тумблер распоряжается уже выданным
+           правом. Разоружить можно всегда, даже без права: браузер способен
+           сделать безопаснее, но не опаснее. -->
+      <div class="cn-live" id="cnLiveRow" style="display:none">
+        <label class="cn-sw"><input type="checkbox" id="cnArm" onchange="cnArmToggle(this)"><span></span></label>
+        <div class="cn-sw-txt"><b id="cnArmLbl">БОЕВОЙ РЕЖИМ</b><span id="cnArmSub" class="gs-note">выключен · робот торгует на бумаге</span></div>
+      </div>
+      <div class="cn-note" id="cnArmNote">Право включать бой выдаётся при запуске движка. Без него тумблер не появится.</div>
     </div>
     <div class="sess-walls" id="sessWalls" title="Сводная карта ликвидности: ближайшие концентрации в книге (агрегация нескольких площадок в долях) и дистанции до них"></div>
     <div class="whale-panel" id="whaleSess"></div>
@@ -4335,13 +4363,98 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
               '<br>запусти <b>ПУСК.bat</b> в корне проекта'+
               ' <span class="gs-note">(ЗАПИСЬ.bat теперь заглушка — запись живёт в ZAPIS-LOOP.bat, его поднимает ПУСК)</span>')
           : ''));
+      _cnArmSync(m);
     }catch(e){
       _cnLive=false;
+      _cnArmSync(null);
       cnSet('движок не запущен','',
         'Запусти в консоли: <code>node Trade.js ETH_USDT 0.01</code>'+
         '<br>Или разом всё: файл <b>ПУСК.bat</b> в папке проекта.');
     }finally{ _cnBusy=false; }
   }
+
+  /* ═══ ТУМБЛЕР ОТРАЖАЕТ ДВИЖОК, А НЕ НАОБОРОТ ═══
+   * Состояние берётся из ответа движка на каждом опросе. Свою копию флага
+   * страница не держит намеренно: если бы держала, при расхождении она
+   * показывала бы «выключено» на работающей торговле. Источник правды один —
+   * тот, кто ставит ордера.
+   *
+   * В localStorage состояние не сохраняется: перезапуск всегда начинается с
+   * выключенного. */
+  let _armPrev=null;
+  function _cnArmSync(m){
+    const row=document.getElementById('cnLiveRow'), box=document.getElementById('cnArm'),
+          lbl=document.getElementById('cnArmLbl'), sub=document.getElementById('cnArmSub'),
+          note=document.getElementById('cnArmNote');
+    if(!row||!box)return;
+    if(!m){ row.style.display='none'; if(note)note.style.display=''; _armPrev=null; return; }
+    if(!m.allowArm){
+      row.style.display='none';
+      if(note){ note.style.display='';
+        note.innerHTML='Право включать бой выдаётся при запуске движка (<code>--allow-arm</code>). '+
+          'Сейчас его нет — робот торгует на бумаге.'; }
+      _armPrev=null; return;
+    }
+    row.style.display='';
+    if(note)note.style.display='none';
+    box.checked=!!m.armed;
+    row.classList.toggle('on',!!m.armed);
+    if(lbl)lbl.textContent=m.armed?'БОЕВОЙ РЕЖИМ · ВКЛЮЧЁН':'БОЕВОЙ РЕЖИМ';
+    if(sub){
+      const lot=(m.minCoins!=null)?(' · лот от '+m.minCoins+' монет'):'';
+      /* ═══ ОДИН НОМИНАЛ, ВИДНЫЙ В ОБОИХ МЕСТАХ ═══
+       * Автопилот берёт размер из своей настройки (маржа × плечо), движок
+       * режет по своему лимиту. Пока эти два числа не видно рядом, расхождение
+       * проявляется отказом на КАЖДОМ входе — и выглядит как поломка связи,
+       * а не как «поставь размер поменьше». */
+      const want=(typeof _apNotional==='function')?_apNotional():0;
+      const cap=+m.maxNotional||0;
+      const over=(want>0&&cap>0&&want>cap);
+      sub.innerHTML=(m.armed
+        ? '<span class="pos">решения робота уходят на биржу</span>'
+        : 'выключен · робот торгует на бумаге')+lot+
+        (want>0?'<br>номинал автопилота <b>$'+want+'</b> · лимит движка <b>$'+cap+'</b>':'')+
+        (over?'<br><span class="neg">Номинал больше лимита — движок отклонит каждый вход.</span>'+
+              ' Поставь маржу так, чтобы маржа × плечо ≤ $'+cap+'.':'');
+    }
+    /* Смена состояния — событие, а не деталь: пишем в процессинг, чтобы в
+     * журнале сессии осталось, с какого момента шли настоящие деньги. */
+    if(_armPrev!==null&&_armPrev!==!!m.armed&&typeof _proc==='function')
+      _proc(m.armed?'БОЕВОЙ РЕЖИМ ВКЛЮЧЁН — ордера уходят на биржу':'боевой режим выключен');
+    _armPrev=!!m.armed;
+  }
+
+  async function cnArmToggle(el){
+    const on=!!(el&&el.checked);
+    /* Подтверждение только на ВКЛЮЧЕНИЕ. Спрашивать разрешения выключить —
+     * ставить препятствие ровно там, где нужна скорость. */
+    if(on&&!confirm('Включить боевой режим?\n\nРешения автопилота начнут уходить на биржу настоящими ордерами.\nСтоп ставится вместе с заявкой, лимиты движка остаются в силе.')){
+      el.checked=false; return;
+    }
+    el.disabled=true;
+    try{
+      const r=await fetch('/api/arm',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({on})});
+      const j=await r.json();
+      if(!r.ok||j.ok===false){
+        el.checked=!on;
+        const inf=document.getElementById('cnInfo');
+        if(inf)inf.innerHTML='<span class="neg">Не переключилось.</span> '+escapeHtml(j&&j.why||'движок отказал');
+        _haptic('warn');
+      }else{ _haptic(on?'warn':'ok'); }
+    }catch(e){ el.checked=!on; }
+    finally{ el.disabled=false; cnPoll&&cnPoll(); }
+  }
+
+  /* ═══ ГОЛОС ТЕРМИНАЛА ═══
+   * Движок закрывает позицию, если страница замолчала дольше 45 секунд:
+   * вкладку закрыли, компьютер уснул — вести позицию стало некому. Биржевой
+   * стоп при этом на месте, но «убыток ограничен» и «позицией управляют» —
+   * разные вещи. Голос подаём чаще порога с запасом. */
+  setInterval(()=>{
+    if(typeof _cnLocal==='function'&&!_cnLocal())return;
+    fetch('/api/alive',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{});
+  },10000);
   /* Зоны переводим в формат движка ЗДЕСЬ: терминал знает, что значит его
    * собственная разметка, движок — нет. Зона без стопа не отправляется, и
    * причина видна там, где её можно исправить. */
@@ -10483,12 +10596,112 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         entryPx:rec.entry||null, notional:notional, pnl:pnl,
         bps:rec.bps, seg:rec.seg||null, hold:rec.hold||null,
         plan:null,                      // движок не «следовал плану» — дисциплину не разбавляет
-        note:'', grade:null, stars:2, triggered:true
+        note:'', grade:null, stars:2, triggered:true,
+        /* ═══ ЧЕМ ПОДТВЕРЖДАЕТСЯ ЧИСЛО ═══
+         * Журнал хранил результат и выбрасывал всё, чем его можно перепроверить.
+         * Итог в $3000 без этих полей нельзя ни подтвердить, ни опровергнуть:
+         * неизвестно, сколько из него РЕАЛИЗОВАНО, а сколько — плавающая
+         * переоценка незакрытого; по какой цене считался выход; какие издержки
+         * вычтены. Пересчитать задним числом невозможно — данных просто нет.
+         *
+         * Поля идут отдельным узлом, чтобы не мешаться в разборе руками. */
+        raw:{
+          fee:(rec.fee!=null?rec.fee:null),          // издержки, вычтенные ПРИ записи
+          pairs:(rec.pairs!=null?rec.pairs:null),    // сетка: сколько пар закрыто
+          fills:(rec.fills!=null?rec.fills:null),
+          floatAtStop:(rec.floatAtStop!=null?rec.floatAtStop:null),  // сколько висело незакрытым
+          invLeft:(rec.invLeft!=null?(Array.isArray(rec.invLeft)?rec.invLeft.length:rec.invLeft):null),
+          netReal:(rec.netReal!=null?rec.netReal:null),               // реализованная часть
+          costBps:(rec.costBps!=null?rec.costBps:null),
+          spreadIn:(rec.spreadIn!=null?rec.spreadIn:null),
+          spreadOut:(rec.spreadOut!=null?rec.spreadOut:null),
+          takerExit:(rec.takerExit!=null?!!rec.takerExit:null),       // выход по рынку?
+          capHit:(rec.capHit!=null?!!rec.capHit:null),
+          reason:rec.reason||null
+        }
       });
       saveJournal();
       if(typeof renderJournal==='function')renderJournal();
+      _apJournalOut(journal[0]);       // ← та же запись уходит на диск движка
     }catch(e){ try{console.warn('[scalpsniper] _apToJournal:',e&&e.message);}catch(_){} }
   }
+
+  /* ═══ ЖУРНАЛ НЕ ДОЛЖЕН ЖИТЬ ТОЛЬКО ВО ВКЛАДКЕ ═══
+   * Неделя бумажной торговли лежала в localStorage — то есть её нельзя было
+   * ни разобрать анализом, ни увидеть с телефона, и она исчезала вместе с
+   * очисткой данных сайта. Каждая закрытая сделка теперь дублируется движку
+   * строкой на диск.
+   *
+   * Три свойства, без которых это только вредило бы:
+   *   1. Молча. Движок не запущен или страница открыта не с него — терминал
+   *      работает как раньше, без единого сообщения об ошибке. Журнал на
+   *      экране остаётся источником правды для пользователя.
+   *   2. Не теряет. Неотправленное копится в очереди и уходит следующей
+   *      попыткой, поэтому запуск движка в середине дня подбирает и прошлое.
+   *   3. Не удваивает. У записи есть id, движок отсеивает повторы по нему —
+   *      иначе досылка после перезагрузки удваивала бы статистику именно там,
+   *      где вкладку перезапускали чаще. */
+  const _apJQ=[];
+  let _apJBusy=false;
+  function _apJournalOut(row){
+    if(!row)return;
+    _apJQ.push(row);
+    try{ localStorage.setItem('msa_ap_jq_v1',JSON.stringify(_apJQ.slice(-500))); }catch(e){}
+    _apJFlush();
+  }
+  async function _apJFlush(){
+    if(_apJBusy||!_apJQ.length)return;
+    if(typeof _cnLocal==='function'&&!_cnLocal())return;   // страница не с движка — некому слать
+    _apJBusy=true;
+    const batch=_apJQ.slice(0,200);
+    try{
+      const r=await fetch('/api/journal',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({rows:batch})});
+      if(r.ok){
+        _apJQ.splice(0,batch.length);
+        try{ localStorage.setItem('msa_ap_jq_v1',JSON.stringify(_apJQ)); }catch(e){}
+      }
+    }catch(e){ /* движок не отвечает — очередь остаётся, попробуем позже */ }
+    _apJBusy=false;
+  }
+  /* Поднимаем недоотправленное с прошлого раза и пробуем раз в минуту. */
+  try{
+    const q=JSON.parse(localStorage.getItem('msa_ap_jq_v1')||'[]');
+    if(Array.isArray(q))_apJQ.push(...q);
+  }catch(e){}
+  setInterval(_apJFlush,60000);
+  setTimeout(_apJFlush,4000);
+
+  /* ═══ ДОСЫЛКА ВСЕГО НАКОПЛЕННОГО ═══
+   * Журнал за прошлые недели лежит в localStorage и на диск сам не попадёт:
+   * досылка ловит только НОВЫЕ закрытия. Значит вся уже наторгованная история
+   * осталась бы невидимой для разбора — ровно та, которую и надо разбирать.
+   *
+   * Поэтому один раз за сеанс отправляем журнал целиком. Это безопасно:
+   * движок отсеивает повторы по id, поэтому повторная отправка тысячи строк
+   * добавит ноль. Батчами по 200, чтобы не собирать мегабайтный запрос. */
+  let _apJBFdone=false;
+  async function _apJBackfill(){
+    if(_apJBFdone)return;
+    if(typeof _cnLocal==='function'&&!_cnLocal())return;
+    if(!Array.isArray(journal)||!journal.length)return;
+    _apJBFdone=true;
+    let sent=0,added=0,dup=0;
+    for(let i=0;i<journal.length;i+=200){
+      const batch=journal.slice(i,i+200);
+      try{
+        const r=await fetch('/api/journal',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({rows:batch})});
+        if(!r.ok){ _apJBFdone=false; break; }      // движок отказал — попробуем в следующий раз
+        const j=await r.json();
+        sent+=batch.length; added+=(j&&j.added)||0; dup+=(j&&j.dup)||0;
+      }catch(e){ _apJBFdone=false; break; }
+    }
+    if(sent&&typeof _proc==='function')
+      _proc('журнал выгружен на диск: отправлено '+sent+', новых '+added+', уже было '+dup
+            +' · разбор: node ЖУРНАЛ.js');
+  }
+  setTimeout(_apJBackfill,6000);
   function _apLogGrid(st,m){
     // reason теперь несёт ПРИЧИНУ остановки, а не общее «mode»: без неё
     // нельзя понять, что именно резать при калибровке — время, просадку
@@ -10534,7 +10747,57 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     _ap.pos={proto,side:plan.side,entry:m.px,spreadIn:(m.spreadBps!=null?m.spreadBps:null),stop:m.px*(1-dir*plan.stopBps/1e4),tp:m.px*(1+dir*plan.tpBps/1e4),t0:Date.now(),seg:_apSegKey(m.f),ref:plan.ref||null,fit,conf:conf||[],against:against||[]};
     if(typeof _proc==='function')_proc('вход: <b>'+proto+'</b> '+(plan.side==='long'?'LONG':'SHORT')+' @ '+m.px.toFixed(_dlDec)+' · стоп '+_usd(-plan.stopBps)+' / тейк '+_usd(plan.tpBps)+' <span class="gs-note">('+plan.stopBps+'/'+plan.tpBps+' bps)</span> · фит '+fit+'%'
       +((conf&&conf.length)?' · конфлюенс: '+conf.join(', '):'')+((against&&against.length)?' · спорили: '+against.join(', '):''));
+    /* То же решение — на биржу. Уходит только при включённом боевом режиме;
+     * бумажный путь выше от этого не меняется ни на строчку, поэтому «на
+     * бумаге» и «в бою» это один и тот же алгоритм, а не два похожих. */
+    _apIntent({op:'open',side:plan.side,px:m.px,
+      stopPx:_ap.pos.stop,tpPx:_ap.pos.tp,proto,seg:_ap.pos.seg,kind:'break'});
   }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     НАМЕРЕНИЕ НА БИРЖУ
+     ═══════════════════════════════════════════════════════════════════
+     Шлём РЕШЕНИЕ, а не готовый ордер: цену к шагу, объём в контрактах, тип
+     заявки и проверку лимитов собирает движок. Если бы заявку собирала
+     страница, весь риск-контроль движка стал бы декоративным — достаточно
+     было бы прислать другое число.
+
+     Номинал берём из настройки автопилота (_apNotional) — той же, по которой
+     считается бумажный PnL. Одна цифра на оба режима: иначе «идентично» не
+     получится по определению.
+
+     Молча и без ожидания: торговое решение не должно ждать сети. Ошибку
+     покажем в процессинге, но алгоритм её не ждёт. */
+  function _apIntent(x){
+    try{
+      if(typeof _cnLocal==='function'&&!_cnLocal())return;   // страница не с движка
+      if(!_cnLive)return;                                     // движок не отвечает
+      if(!_armPrev)return;                                    // боевой режим выключен
+      const body=Object.assign({
+        id:'i'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+        notional:(typeof _apNotional==='function')?_apNotional():0,
+        lev:(typeof AP_LEV!=='undefined')?AP_LEV:0
+      },x);
+      fetch('/api/intent',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body)})
+        .then(r=>r.json().then(j=>({r,j})))
+        .then(({r,j})=>{
+          if(!r.ok||j.ok===false){
+            if(typeof _proc==='function')_proc('<span class="neg">биржа не приняла:</span> '+escapeHtml(j&&(j.why||j.error)||('код '+r.status)));
+            return;
+          }
+          if(j.dry)return;
+          if(x.op==='open'&&typeof _proc==='function')
+            _proc('<b class="pos">НА БИРЖЕ:</b> '+j.order.vol+' контр. ('+j.coins+' монет) по '+j.order.price+
+                  ' · стоп '+(j.order.stopLossPrice||'—')+' · ордер '+escapeHtml(String(j.orderId||'—')));
+          if(x.op!=='open'&&typeof _proc==='function'&&j.closed&&j.closed.length)
+            _proc('<b class="pos">НА БИРЖЕ:</b> закрыто позиций '+j.closed.length);
+          _apLastExec=j;
+        })
+        .catch(()=>{});
+    }catch(e){}
+  }
+  let _apLastExec=null;
   function _apManage(m){
     const p=_ap.pos, dir=p.side==='long'?1:-1;
     let reason=null;
@@ -10589,6 +10852,10 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     // fit и fee пишем в запись: без них журнал нельзя честно разбирать задним числом
     // (фит не логировался вообще → порог подбирать было не на чем; издержки менялись → старые bps несравнимы с новыми)
     const rec={t:Date.now(),proto:p.proto,side:p.side,entry:+p.entry.toFixed(6),exit:+px.toFixed(6),bps,netReal,costBps,spreadIn:sIn,spreadOut:sOut,takerExit,seg:p.seg,reason,hold:Math.round((Date.now()-p.t0)/1e3),part:!!p.part,conf:p.conf||[],against:p.against||[],fit:p.fit!=null?p.fit:null,fee:AP_FEE};
+    /* Закрытие уходит на биржу ПЕРВЫМ делом — раньше журналов и отрисовки.
+     * Разница в сотню миллисекунд на выходе стоит дороже, чем аккуратность
+     * порядка записей; журнал подождёт, позиция — нет. */
+    _apIntent({op:'close',reason,px:+px.toFixed(8),proto:p.proto,side:p.side});
     _apArchive(rec);                                   // полная копия в IDB — окно ниже обрезается, архив нет
     _apToJournal(rec,'autopilot');                     // и в общий журнал, сегмент «autopilot»
     _ap.log.push(rec); if(_ap.log.length>300)_ap.log=_ap.log.slice(-300);
