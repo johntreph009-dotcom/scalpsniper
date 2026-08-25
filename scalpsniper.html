@@ -4325,6 +4325,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       if(!r.ok)throw new Error('код '+r.status);
       const m=await r.json();
       _cnLive=true;
+      _cnLastStatus=m;
       cnSet(m.naked?'ПОЗИЦИЯ БЕЗ СТОПА':(m.armed?'БОЕВОЙ РЕЖИМ':'сухой ход'),
         m.naked?'armed':(m.armed?'armed':'on'),
         /* ═══ ПОЗИЦИЯ БЕЗ ЗАЩИТЫ — ПЕРВОЙ СТРОКОЙ И КРУПНО ═══
@@ -4381,7 +4382,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
    *
    * В localStorage состояние не сохраняется: перезапуск всегда начинается с
    * выключенного. */
-  let _armPrev=null;
+  let _armPrev=null, _cnLastStatus=null;
   function _cnArmSync(m){
     const row=document.getElementById('cnLiveRow'), box=document.getElementById('cnArm'),
           lbl=document.getElementById('cnArmLbl'), sub=document.getElementById('cnArmSub'),
@@ -4410,18 +4411,65 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       const want=(typeof _apNotional==='function')?_apNotional():0;
       const cap=+m.maxNotional||0;
       const over=(want>0&&cap>0&&want>cap);
+      /* ═══ МАРЖА ПРОТИВ СВОБОДНЫХ СРЕДСТВ ═══
+       * Номинал влезает в лимит движка — и всё равно не открывается, если на
+       * счёте нет маржи под него. Маржа $100 при балансе $100 не оставляет
+       * ничего даже на комиссию открытия, и отказ приходит от биржи кодом,
+       * который читается как поломка связи. Показываем обе величины рядом:
+       * это единственный способ увидеть причину до первого отказа. */
+      const lev=(typeof AP_LEV!=='undefined'&&AP_LEV>0)?AP_LEV:1;
+      const needM=want>0?want/lev:0;
+      const free=+m.free||0;
+      const tight=(needM>0&&free>0&&needM>free*0.95);
       sub.innerHTML=(m.armed
         ? '<span class="pos">решения робота уходят на биржу</span>'
         : 'выключен · робот торгует на бумаге')+lot+
-        (want>0?'<br>номинал автопилота <b>$'+want+'</b> · лимит движка <b>$'+cap+'</b>':'')+
+        (want>0?'<br>номинал <b>$'+want+'</b> (маржа $'+needM.toFixed(0)+' × '+lev+'x) · лимит движка <b>$'+cap+'</b>'
+               +(free>0?' · свободно <b>$'+free.toFixed(2)+'</b>':''):'')+
         (over?'<br><span class="neg">Номинал больше лимита — движок отклонит каждый вход.</span>'+
-              ' Поставь маржу так, чтобы маржа × плечо ≤ $'+cap+'.':'');
+              ' Поставь маржу так, чтобы маржа × плечо ≤ $'+cap+'.':'')+
+        (tight&&!over?'<br><span class="neg">Маржи впритык.</span> Нужно $'+needM.toFixed(2)+
+              ', свободно $'+free.toFixed(2)+' — на комиссию не остаётся.':'')+
+        /* ═══ ПОДГОНКА РАЗМЕРА ОДНОЙ КНОПКОЙ ═══
+         * Оставлять человеку арифметику «маржа × плечо ≤ лимит, и ещё запас на
+         * комиссию» — значит оставлять место ошибке ровно там, где она стоит
+         * денег. Кнопка считает и ставит; что именно она поставит, написано на
+         * ней самой, а не выясняется после нажатия. */
+        ((over||tight)&&cap>0
+          ? '<br><button class="cn-btn" onclick="_apFitSize()">подогнать маржу под лимит</button>'
+          : '');
     }
     /* Смена состояния — событие, а не деталь: пишем в процессинг, чтобы в
      * журнале сессии осталось, с какого момента шли настоящие деньги. */
     if(_armPrev!==null&&_armPrev!==!!m.armed&&typeof _proc==='function')
       _proc(m.armed?'БОЕВОЙ РЕЖИМ ВКЛЮЧЁН — ордера уходят на биржу':'боевой режим выключен');
     _armPrev=!!m.armed;
+  }
+
+  /* Ставит маржу так, чтобы номинал влез в лимит движка и остался запас на
+   * комиссии. Запас 5% — не суеверие: у биржи своя ставка начальной маржи и
+   * свои тарифы, и «впритык по нашим расчётам» означает «уже нет по её». */
+  function _apFitSize(){
+    try{
+      const m=_cnLastStatus; if(!m)return;
+      const lev=(typeof AP_LEV!=='undefined'&&AP_LEV>0)?AP_LEV:1;
+      const cap=+m.maxNotional||0;
+      const free=+m.free||0;
+      let margin=cap/lev;                              // потолок по лимиту движка
+      if(free>0)margin=Math.min(margin,free*0.95);     // потолок по свободным средствам
+      margin=Math.floor(margin*100)/100;               // вниз: вверх — это взять риска больше
+      if(!(margin>0)){
+        if(typeof _proc==='function')_proc('<span class="neg">подогнать не вышло:</span> нет ни лимита, ни свободных средств');
+        return;
+      }
+      AP_MARGIN=margin;
+      try{localStorage.setItem('msa_ap_margin_v1',String(margin));}catch(e){}
+      if(typeof _proc==='function')
+        _proc('маржа <b>$'+margin.toFixed(2)+'</b> × '+lev+'x = номинал <b>$'+(margin*lev).toFixed(0)+
+              '</b> · лимит движка $'+cap+(free>0?' · свободно $'+free.toFixed(2):''));
+      if(typeof _apRender==='function')_apRender();
+      cnPoll&&cnPoll();
+    }catch(e){}
   }
 
   async function cnArmToggle(el){
@@ -10792,10 +10840,53 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
                   ' · стоп '+(j.order.stopLossPrice||'—')+' · ордер '+escapeHtml(String(j.orderId||'—')));
           if(x.op!=='open'&&typeof _proc==='function'&&j.closed&&j.closed.length)
             _proc('<b class="pos">НА БИРЖЕ:</b> закрыто позиций '+j.closed.length);
+          /* ═══ ФАКТ ИСПОЛНЕНИЯ — В ЗАПИСЬ ЖУРНАЛА ═══
+           * Без этого биржевые сделки в разборе не появятся НИКОГДА: он
+           * считает биржевой только запись с идентификатором ордера, и это
+           * правильно — отсутствие пометки не должно превращаться в
+           * достижение. Значит пометку надо ставить там, где она рождается.
+           *
+           * Дописываем в последнюю запись журнала, а не создаём новую:
+           * решение робота одно, у него два описания — модельное и биржевое.
+           * Разводить их по строкам значило бы удвоить статистику. */
+          try{
+            const row=Array.isArray(journal)?journal[0]:null;
+            if(row){
+              row.virtual=false;
+              row.raw=row.raw||{};
+              row.raw.orderId=j.orderId||(j.closed&&j.closed.length?('flat:'+j.closed.length):null);
+              row.raw.exchange='MEXC';
+              row.raw.sentVol=j.order?j.order.vol:null;      // контракты, как ушло на биржу
+              row.raw.sentPx=j.order?j.order.price:null;
+              row.raw.sentStop=j.order?j.order.stopLossPrice:null;
+              row.raw.sentNotional=j.notional!=null?j.notional:null;
+              /* Версия записи. Движок отбивает повторы по id — иначе досылка
+               * из очереди удваивала бы статистику. Но обновление это не
+               * повтор, а уточнение: та же сделка, ставшая известной точнее.
+               * Номер версии отличает одно от другого, а журнал остаётся
+               * дописываемым — строки не переписываются, что для торгового
+               * лога важнее компактности. */
+              row._rev=(+row._rev||0)+1;
+              if(typeof saveJournal==='function')saveJournal();
+              _apJournalOut(row);
+            }
+          }catch(e){}
           _apLastExec=j;
         })
-        .catch(()=>{});
-    }catch(e){}
+        .catch(e=>{
+          /* Сеть отвалилась в момент отправки. Молчать здесь нельзя: на экране
+           * робот продолжит «торговать», и разница между бумагой и биржей
+           * останется незамеченной ровно тогда, когда она есть. */
+          if(typeof _proc==='function')_proc('<span class="neg">намерение не ушло на биржу</span> ('+escapeHtml(String(e&&e.message||e))+')');
+        });
+    }catch(e){
+      /* ═══ ЭТОТ CATCH БЫЛ НЕМЫМ ═══
+       * Любая ошибка здесь означала бы, что автопилот торгует на бумаге, а
+       * трейдер считает, что в бою: на экране всё то же самое. Отказ обязан
+       * быть громким — это единственное место, где «ничего не произошло»
+       * стоит денег. */
+      if(typeof _proc==='function')_proc('<span class="neg">СБОЙ ОТПРАВКИ НА БИРЖУ:</span> '+escapeHtml(String(e&&e.message||e))+' — робот идёт по бумаге');
+    }
   }
   let _apLastExec=null;
   function _apManage(m){
