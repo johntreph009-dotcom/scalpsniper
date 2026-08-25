@@ -4424,7 +4424,11 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       sub.innerHTML=(m.armed
         ? '<span class="pos">решения робота уходят на биржу</span>'
         : 'выключен · робот торгует на бумаге')+lot+
-        (want>0?'<br>номинал <b>$'+want+'</b> (маржа $'+needM.toFixed(0)+' × '+lev+'x) · лимит движка <b>$'+cap+'</b>'
+        /* Округляем ЯВНО. Номинал считается как маржа × плечо, и 91 × 33
+         * в двоичной арифметике даёт 2999.7000000000003 — на экране это
+         * выглядит как сбой, хотя число верное. Деньги показываем с двумя
+         * знаками, всегда. */
+        (want>0?'<br>номинал <b>$'+(+want).toFixed(2)+'</b> (маржа $'+needM.toFixed(2)+' × '+lev+'x) · лимит движка <b>$'+(+cap).toFixed(2)+'</b>'
                +(free>0?' · свободно <b>$'+free.toFixed(2)+'</b>':''):'')+
         (over?'<br><span class="neg">Номинал больше лимита — движок отклонит каждый вход.</span>'+
               ' Поставь маржу так, чтобы маржа × плечо ≤ $'+cap+'.':'')+
@@ -4465,7 +4469,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       AP_MARGIN=margin;
       try{localStorage.setItem('msa_ap_margin_v1',String(margin));}catch(e){}
       if(typeof _proc==='function')
-        _proc('маржа <b>$'+margin.toFixed(2)+'</b> × '+lev+'x = номинал <b>$'+(margin*lev).toFixed(0)+
+        _proc('маржа <b>$'+margin.toFixed(2)+'</b> × '+lev+'x = номинал <b>$'+(margin*lev).toFixed(2)+
               '</b> · лимит движка $'+cap+(free>0?' · свободно $'+free.toFixed(2):''));
       if(typeof _apRender==='function')_apRender();
       cnPoll&&cnPoll();
