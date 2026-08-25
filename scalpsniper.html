@@ -1826,6 +1826,26 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .zone-note{ font-size:11px; }
 .badge{ font-size:11px; font-weight:700; }
 
+/* ═══ СВОРАЧИВАНИЕ КОНТЕКСТА ДНЯ ═══
+ * Тренд дня, контекст и байас — три ряда чипов, которые на телефоне занимают
+ * пол-экрана, а смотрят в них раз в сессию. Панель складывается в одну строку;
+ * в свёрнутом виде остаётся сводка — направление тренда и то, что горит
+ * красным. Состояние держится в localStorage: свернул один раз — свёрнуто и
+ * завтра. */
+.dh-bar{display:flex;align-items:center;justify-content:space-between;width:100%;
+  background:none;border:0;border-bottom:1px solid var(--line-soft,rgba(255,255,255,.06));
+  padding:7px 11px;cursor:pointer;color:inherit;font:inherit;text-align:left}
+.dh-bar:hover{background:rgba(255,255,255,.03)}
+.dh-sum{font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.75;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.dh-chev{flex:0 0 auto;margin-left:8px;opacity:.6;transition:transform .15s}
+.day-head.collapsed .dh-chev{transform:rotate(-90deg)}
+.day-head.collapsed .dh-body{display:none}
+.day-head.collapsed .dh-bar{border-bottom:0}
+/* Байас переезжает внутрь панели: своя рамка ему больше не нужна. */
+.day-head > .dh-body > .session-ctx{background:none;backdrop-filter:none;border:0;
+  border-top:1px solid var(--line-soft,rgba(255,255,255,.06));border-radius:0;margin:0;padding:8px 11px}
+
 /* ═══ ТРЕНД ДНЯ И КОНТЕКСТ — ОДНА ПАНЕЛЬ ═══
  * Были две отдельные плашки со своими рамками, поставленные вплотную
  * (у нижней стоял margin:-4px, чтобы прижаться). Две рамки в четырёх
@@ -2213,8 +2233,16 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
        Внутренние блоки остались отдельными узлами, потому что их наполняет
        разный код; объединено оформление, а не логика. -->
   <div id="dayHead" class="day-head" style="display:none">
-    <div id="dayTrend" class="day-trend" style="display:none"></div>
-    <div id="dayCtx" class="day-ctx" style="display:none"></div>
+    <!-- Шапка нужна не для красоты: без неё панель нельзя свернуть, а на
+         телефоне четыре ряда чипов съедают экран целиком. В свёрнутом виде
+         остаётся строка тренда — то единственное, что смотрят постоянно. -->
+    <button type="button" class="dh-bar" id="dayHeadBar" onclick="_dayHeadToggle()" aria-expanded="true">
+      <span class="dh-sum" id="dayHeadSum">контекст дня</span><span class="dh-chev">▾</span>
+    </button>
+    <div class="dh-body" id="dayHeadBody">
+      <div id="dayTrend" class="day-trend" style="display:none"></div>
+      <div id="dayCtx" class="day-ctx" style="display:none"></div>
+    </div>
   </div>
   <div id="mpChip" class="day-ctx" style="display:none" title="Max Pain ближайшей опционной экспирации: страйк, где продавцы опционов теряют меньше всего (данные открытого интереса). Гравитация — дистанция цены до уровня. Наблюдение, не прогноз."></div>
   <div class="zone-read" id="zoneRead" style="display:none"></div>
@@ -4661,6 +4689,19 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         skipped.push(px+(_riskMoney>0?': объём не посчитался (стоп равен цене?)'
                                      :': заполни депозит и риск% — из них считается объём'));
         continue; }
+      /* ═══ ОБЪЁМ РЕЖЕТСЯ ЛИМИТОМ ДВИЖКА ═══
+       * Риск на зону постоянный, а расстояние до стопа у зон разное — значит
+       * номинал у зон разный, и у тех, где стоп ближе, он вылетает за лимит.
+       * В первой боевой сессии это дало «объём ордера $3466 больше лимита
+       * $3000» на каждой второй зоне: план принят, а исполнить нечего.
+       *
+       * Режем объём так, чтобы номинал влез. Риск на такой зоне окажется
+       * меньше заданного — и это правильный знак ошибки: лучше меньше риска,
+       * чем отказ на исполнении. */
+      const cap=(_cnLastStatus&&+_cnLastStatus.maxNotional)||0;
+      let capped=false;
+      if(cap>0&&px>0&&vol*px>cap){ vol=+(cap/px).toFixed(6); capped=true; }
+      if(capped)skipped.push(px+': объём срезан до лимита движка $'+cap);
       out.push({px,stop,vol,side,kind:z.kind||'fade',proto:z.proto||null,note:z.note||''});
     }
     const inf=document.getElementById('cnInfo');
@@ -4687,7 +4728,14 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         _haptic('warn');   // 'err' в _HAP нет — брал бы запасной tap; 'warn' определён
         return;
       }
+      /* Сколько зон реально может стоять одновременно — вопрос маржи, а не
+       * разметки. Без этой строки отказы «суммарная экспозиция больше лимита»
+       * читаются как поломка, хотя это арифметика счёта. */
+      const capT=(_cnLastStatus&&+_cnLastStatus.maxNotionalTotal)||0;
+      const capO=(_cnLastStatus&&+_cnLastStatus.maxNotional)||0;
+      const fit=(capT>0&&capO>0)?Math.max(1,Math.floor(capT/capO)):0;
       if(inf&&!quiet)inf.innerHTML='План отправлен: принято <b>'+j.accepted+'</b>'+
+        (fit?' · одновременно помещается <b>'+fit+'</b> '+(fit===1?'зона':'зоны')+' — остальные ждут освобождения маржи':'')+
         (_riskMoney>0?' · риск $'+_riskMoney.toFixed(2)+' на зону ('+escapeHtml(_sizeSrc)+')':'')+
         (j.rejected&&j.rejected.length?', отклонено '+j.rejected.length+' — '+escapeHtml(j.rejected.join('; ')):'')+
         (skipped.length?'<br>не отправлено из терминала: '+escapeHtml(skipped.join('; ')):'');
@@ -7101,11 +7149,52 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   /* Обёртка тренда и контекста показывается, только если внутри есть видимая
    * строка. Иначе на пустом инструменте висела бы пустая рамка — та самая
    * «дырка», из-за которой блоки и лепили вплотную вручную. */
+  /* ═══ БАЙАС ПЕРЕЕЗЖАЕТ В ЭТУ ЖЕ ПАНЕЛЬ ═══
+   * Он жил отдельной плашкой ниже по странице, хотя отвечает на тот же вопрос,
+   * что тренд и контекст: «что сейчас с рынком и чего делать не стоит».
+   * Переносим сам УЗЕЛ, а не копируем содержимое: код, который его наполняет,
+   * ищет элементы по id и о переезде не узнает. */
+  function _dayHeadAdopt(){
+    const body=document.getElementById('dayHeadBody');
+    const ctx=document.getElementById('sessionCtx');
+    if(body&&ctx&&ctx.parentElement!==body)body.appendChild(ctx);
+  }
+
+  /* Свёрнутая панель обязана оставлять сводку — иначе сворачивание превращает
+   * её в кнопку без смысла. Берём направление тренда и всё, что помечено
+   * тревожным классом: это ровно то, ради чего в неё смотрят. */
+  function _dayHeadSummary(){
+    try{
+      const t=document.getElementById('dayTrend');
+      const dir=t?(t.textContent||'').replace(/\s+/g,' ').trim().slice(0,42):'';
+      const bad=[...document.querySelectorAll('#dayHeadBody .neg, #dayHeadBody .warn')]
+        .map(e=>(e.textContent||'').trim()).filter(Boolean).slice(0,2).join(' · ');
+      return [dir,bad].filter(Boolean).join('  ·  ')||'контекст дня';
+    }catch(e){ return 'контекст дня'; }
+  }
+
+  function _dayHeadToggle(){
+    const w=document.getElementById('dayHead'); if(!w)return;
+    const on=w.classList.toggle('collapsed');
+    const b=document.getElementById('dayHeadBar');
+    if(b)b.setAttribute('aria-expanded',on?'false':'true');
+    try{ localStorage.setItem('msa_dayhead_collapsed',on?'1':''); }catch(e){}
+    _dayHeadSync();
+  }
+
   function _dayHeadSync(){
     const w=document.getElementById('dayHead'); if(!w)return;
-    const vis=[...w.children].some(c=>c.style.display!=='none'&&c.innerHTML.trim());
+    _dayHeadAdopt();
+    const body=document.getElementById('dayHeadBody');
+    const vis=body?[...body.children].some(c=>c.style.display!=='none'&&c.innerHTML.trim()):false;
     w.style.display=vis?'':'none';
+    const sum=document.getElementById('dayHeadSum');
+    if(sum&&w.classList.contains('collapsed'))sum.textContent=_dayHeadSummary();
+    else if(sum)sum.textContent='контекст дня';
   }
+  try{ if(localStorage.getItem('msa_dayhead_collapsed')){
+    const w=document.getElementById('dayHead'); if(w)w.classList.add('collapsed');
+  } }catch(e){}
   setInterval(_dayHeadSync,1000);
   function _tfChanged(){
     saveSettings();
