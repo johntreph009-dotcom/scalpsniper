@@ -4551,7 +4551,45 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   /* Зоны переводим в формат движка ЗДЕСЬ: терминал знает, что значит его
    * собственная разметка, движок — нет. Зона без стопа не отправляется, и
    * причина видна там, где её можно исправить. */
-  async function cnSendZones(){
+  /* ═══════════════════════════════════════════════════════════════════
+     ПЛАН ДЕРЖИТСЯ АКТУАЛЬНЫМ САМ
+     ═══════════════════════════════════════════════════════════════════
+     Разметка пересчитывается по ходу сессии, а движок узнавал об этом только
+     когда человек нажмёт «отправить план». То есть между «зоны изменились» и
+     «движок знает новые зоны» стояло ручное действие — и всё это время движок
+     исполнял устаревший план либо не имел его вовсе.
+
+     Сравниваем отпечаток текущих зон с последним отправленным и шлём при
+     расхождении. Раз в пять секунд: чаще незачем — разметка так быстро не
+     меняется, а мост нагружать ради нуля смысла нет.
+
+     Отпечаток строится по тому, что реально влияет на исполнение — цена, стоп,
+     тип, протокол. Пересчёт, не изменивший ни одного из этих чисел, отправки
+     не вызывает. */
+  let _cnLastPlan=null, _cnAutoBusy=false;
+  function _cnPlanPrint(){
+    try{
+      if(!Array.isArray(zones)||!zones.length)return '';
+      return zones.map(z=>[+z.px||0,+z.stop||0,z.kind||'',z.proto||''].join(':')).join('|');
+    }catch(e){ return ''; }
+  }
+  async function _cnAutoPlan(){
+    if(_cnAutoBusy)return;
+    if(typeof _cnLocal==='function'&&!_cnLocal())return;
+    if(!_cnLive)return;
+    const print=_cnPlanPrint();
+    if(!print)return;                       // зон нет — отправлять нечего, и это не ошибка
+    if(print===_cnLastPlan)return;          // ничего не изменилось
+    _cnAutoBusy=true;
+    try{
+      await cnSendZones(true);              // тихо: без хлопот в панели
+      _cnLastPlan=print;
+    }catch(e){}
+    _cnAutoBusy=false;
+  }
+  setInterval(_cnAutoPlan,5000);
+
+  async function cnSendZones(quiet){
     const out=[], skipped=[];
     /* ═══ ОБЪЁМ СЧИТАЕТСЯ ОТ РИСКА НА ЗОНУ ═══
      * Поля объёма у зоны не было НИГДЕ: ни z.vol, ни z.qty не присваивались, и
@@ -4568,7 +4606,32 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
      * линией: посчитанный здесь объём они всё равно проверяют. */
     const _dep=_pf((document.getElementById('deposit')||{}).value);
     const _rsk=_pf((document.getElementById('depRisk')||{}).value);
-    const _riskMoney=(_dep>0&&_rsk>0)?_dep*_rsk/100:0;
+    let _riskMoney=(_dep>0&&_rsk>0)?_dep*_rsk/100:0;
+    /* ═══ ЗАПАСНОЙ ИСТОЧНИК РАЗМЕРА — НАСТРОЙКА АВТОПИЛОТА ═══
+     * «Отправлять нечего» получалось каждый раз, когда поля депозита и риска
+     * пусты: без них объём не считался, и КАЖДАЯ зона отсеивалась. Отказ был
+     * верным по букве и бесполезным по сути — размер позиции в приложении уже
+     * задан, просто в другом месте: маржа × плечо у автопилота.
+     *
+     * Требовать второй раз то же самое — значит держать два источника правды о
+     * размере и ждать, что человек будет их синхронизировать. Берём номинал
+     * автопилота и делим на расстояние до стопа: объём получается тот же по
+     * смыслу (риск на зону), но считать его не из чего лишнего.
+     *
+     * Поля депозита остаются главными, если заполнены: явное намерение
+     * трейдера важнее умолчания. */
+    let _sizeSrc='депозит × риск%';
+    if(!(_riskMoney>0)){
+      const nom=(typeof _apNotional==='function')?_apNotional():0;
+      const px0=+(zones[0]&&zones[0].px)||0, st0=+(zones[0]&&zones[0].stop)||0;
+      if(nom>0&&px0>0&&st0>0){
+        /* Риск на зону = номинал × относительное расстояние до стопа. Так
+         * номинал совпадает с тем, чем торгует автопилот, а не задаётся
+         * отдельно. */
+        _riskMoney=nom*Math.abs(px0-st0)/px0;
+        _sizeSrc='номинал автопилота $'+nom.toFixed(2);
+      }
+    }
     for(const z of zones){
       const px=+z.px, stop=+z.stop;
       let vol=+z.qty||+z.vol||0;
@@ -4601,7 +4664,14 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       out.push({px,stop,vol,side,kind:z.kind||'fade',proto:z.proto||null,note:z.note||''});
     }
     const inf=document.getElementById('cnInfo');
-    if(!out.length){ if(inf)inf.innerHTML='<span class="neg">Отправлять нечего.</span> '+escapeHtml(skipped.join('; ')); return; }
+    if(!out.length){
+      /* Причину отказа надо назвать целиком, а не отдать список из одного
+       * слова. «Отправлять нечего» без объяснения — тупик, в который упираются
+       * молча. */
+      if(inf&&!quiet)inf.innerHTML='<span class="neg">Отправлять нечего.</span> Зон в разметке: <b>'+zones.length+'</b>.'+
+        (skipped.length?'<br>'+escapeHtml(skipped.join('; ')):'')+
+        (!(_riskMoney>0)?'<br>Размер не из чего посчитать: заполни депозит и риск% — или задай маржу и плечо у автопилота.':'');
+      return; }
     try{
       const r=await fetch('/api/zones',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({zones:out})});
@@ -4617,8 +4687,8 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         _haptic('warn');   // 'err' в _HAP нет — брал бы запасной tap; 'warn' определён
         return;
       }
-      if(inf)inf.innerHTML='План отправлен: принято <b>'+j.accepted+'</b>'+
-        (_riskMoney>0?' · объём от риска $'+_riskMoney.toFixed(2)+' на зону':'')+
+      if(inf&&!quiet)inf.innerHTML='План отправлен: принято <b>'+j.accepted+'</b>'+
+        (_riskMoney>0?' · риск $'+_riskMoney.toFixed(2)+' на зону ('+escapeHtml(_sizeSrc)+')':'')+
         (j.rejected&&j.rejected.length?', отклонено '+j.rejected.length+' — '+escapeHtml(j.rejected.join('; ')):'')+
         (skipped.length?'<br>не отправлено из терминала: '+escapeHtml(skipped.join('; ')):'');
       _haptic('ok');
