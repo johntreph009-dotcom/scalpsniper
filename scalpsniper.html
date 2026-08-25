@@ -4341,7 +4341,28 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         '<br>поток биржи: '+(m.feed?'идёт':'<span class="neg">НЕТ ДАННЫХ</span>')+
         (m.feedErrors?' · обрывов '+m.feedErrors:'')+
         ' · день: $'+(+m.realized||0).toFixed(2)+' из −$'+m.dailyLimit+
-        (m.halted?'<br><span class="neg">ОСТАНОВЛЕНО</span>':'')+
+        /* ═══ ОСТАНОВКА: ПРИЧИНА И ВЫХОД ИЗ НЕЁ ═══
+         * Раньше было просто «ОСТАНОВЛЕНО» — без причины и без способа снять.
+         * Снять можно было только правкой файла на диске, то есть выходом из
+         * приложения, которого мы обещали не требовать. Кнопка не отменяет
+         * защиту: движок переспрашивает биржу и продолжит только если позиций
+         * без стопа действительно нет. */
+        (m.halted
+          ? '<br><span class="neg"><b>ТОРГОВЛЯ ОСТАНОВЛЕНА</b>'+(m.haltReason?': '+escapeHtml(m.haltReason):'')+'</span>'
+            +'<br><button class="cn-btn" onclick="cnResume(this)">продолжить — движок перепроверит биржу</button>'
+          : '')+
+        /* ═══ ЧТО СЕЙЧАС НА БИРЖЕ ═══
+         * Позиции и их стопы жили только в консоли. На вопрос «что у меня
+         * открыто» ответа в приложении не было вовсе — а это первый вопрос,
+         * который задают, когда что-то пошло не так. */
+        ((m.pos&&m.pos.length)
+          ? '<br>на бирже:'+m.pos.map(p=>
+              '<br>&nbsp;&nbsp;<b>'+(p.side==='long'?'LONG':'SHORT')+'</b> '+p.vol+' контр. по '+p.px+
+              ' · $'+p.notional+
+              (p.stop?' · стоп <b class="pos">'+p.stop+'</b>'+
+                       (p.stopVol&&p.stopVol<p.vol?' <span class="neg">(только на '+p.stopVol+' из '+p.vol+')</span>':'')
+                     :' · <b class="neg">СТОПА НЕТ</b>')).join('')
+          : '<br>на бирже позиций нет')+
         /* ЭКСПОЗИЦИЯ ИЗ СВЕРКИ, А НЕ ИЗ СЧЁТЧИКА. Раньше движок накапливал её
          * сам и никогда не уменьшал; теперь берёт с биржи. Показываем вместе с
          * лимитом — число без порога ни о чём не говорит. */
@@ -4474,6 +4495,26 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       if(typeof _apRender==='function')_apRender();
       cnPoll&&cnPoll();
     }catch(e){}
+  }
+
+  /* Снятие остановки. Движок не верит на слово: он делает сверку с биржей и
+   * отказывает, если есть позиция без стопа. Кнопка здесь — способ попросить
+   * перепроверить, а не способ отменить проверку. */
+  async function cnResume(btn){
+    if(btn)btn.disabled=true;
+    try{
+      const r=await fetch('/api/resume',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      const j=await r.json();
+      const inf=document.getElementById('cnInfo');
+      if(r.ok&&j.ok!==false){
+        if(typeof _proc==='function')_proc('остановка снята'+(j.was?' (была: '+escapeHtml(j.was)+')':'')+' — сверка чистая');
+        _haptic('ok');
+      }else{
+        if(inf)inf.innerHTML='<span class="neg">Не снялось.</span> '+escapeHtml(j&&j.why||'движок отказал');
+        _haptic('warn');
+      }
+    }catch(e){}
+    finally{ if(btn)btn.disabled=false; cnPoll&&cnPoll(); }
   }
 
   async function cnArmToggle(el){
