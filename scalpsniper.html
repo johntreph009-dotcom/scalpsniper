@@ -122,6 +122,37 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   /* zone pill внутри phase-nav (видна во время сессии) */
   .hdr-zone-pill{display:none;align-items:center;gap:5px;font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.5px;padding:5px 9px;border-radius:4px;border:1px solid var(--zone-hdr-col);color:var(--zone-hdr-col);background:var(--zone-hdr-bg,rgba(255,255,255,.04));white-space:nowrap;transition:all .2s;flex-shrink:0}
   .phase-nav.nav-zone .hdr-zone-pill{display:flex}
+  /* ═══ ПЛАШКА ЗОНЫ НЕ ВЫДАВЛИВАЕТ ШАПКУ ═══
+     Замер вёрстки на 441px: #hdrZoneKind («WATCH») уходил за экран на 3px.
+     Причина — flex-shrink:0 вместе с white-space:nowrap: плашка отказывалась
+     сжиматься, а текст отказывался переноситься, и лишнее уезжало наружу.
+     Три пикселя — мелочь, но горизонтальная прокрутка в шапке появляется
+     от любого превышения, и дальше её ловят уже глазами, а не замером.
+     Разрешаем сжатие с многоточием; на совсем узком номер зоны важнее
+     названия типа — он и остаётся. */
+  /* ═══ ДОЗОР ═══ Янтарь ТОЛЬКО на названии формации; числа замера намеренно
+     приглушены и моноширинны — они справка, а не призыв. Отдельного «зелёного
+     сигнала» здесь нет и быть не должно. */
+  .dz-block{margin-top:10px;padding:9px 10px;border:1px solid rgba(255,122,24,.22);border-radius:6px;background:rgba(255,122,24,.04)}
+  .dz-head{font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;color:var(--acc,#ff7a18);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .dz-sub{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:9px;font-weight:400;letter-spacing:0;color:rgba(255,255,255,.4);white-space:nowrap}
+  .dz-list{margin-top:7px;display:flex;flex-direction:column;gap:6px}
+  .dz-item{display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:4px;background:rgba(255,255,255,.03);border-left:2px solid rgba(255,122,24,.5)}
+  .dz-name{font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:.5px;color:#e8e8e8;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+  .dz-dir{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:9px;letter-spacing:.5px;color:rgba(255,255,255,.5);flex-shrink:0}
+  .dz-num{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:9px;line-height:1.45;color:rgba(255,255,255,.45);overflow-wrap:anywhere}
+  .dz-warn{color:rgba(255,180,120,.75)}
+  .dz-foot{margin-top:7px;font-family:'Rajdhani',sans-serif;font-size:10px;letter-spacing:.4px;color:rgba(255,255,255,.35)}
+  .dz-empty{font-family:'Rajdhani',sans-serif;font-size:11px;color:rgba(255,255,255,.35);padding:2px 0}
+  .hdr-zone-pill{min-width:0}
+  .hdr-zone-pill>span{overflow:hidden;text-overflow:ellipsis;min-width:0}
+  @media (max-width:520px){
+    .hdr-zone-pill{flex-shrink:1;padding:5px 7px}
+    /* Разделитель прятать ОТДЕЛЬНО: это был текстовый узел, и CSS его не
+       видел — в узком окне осталась бы висеть «● 9 ·» с точкой в никуда.
+       Обернули в span специально ради этого. */
+    #hdrZoneKind,.hzp-sep{display:none}
+  }
   .brand{display:flex;align-items:center;gap:13px}
   .brand-mark{width:38px;height:38px;flex-shrink:0}
   .brand h1{font-family:'Space Grotesk','Rajdhani','Chakra Petch','Segoe UI',system-ui,-apple-system,sans-serif;font-size:25px;font-weight:700;letter-spacing:1.5px;line-height:1;text-transform:uppercase}
@@ -352,6 +383,50 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .sync-status{font-size:11px;font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;min-height:13px;letter-spacing:.2px}
   /* ── мост с коннектором ── */
   .cn-block{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0;background:var(--panel)}
+  /* ═══════════════════════════════════════════════════════════════════════
+     ХАБ: ОКАНТОВКА ПОКАЗЫВАЕТ СОСТОЯНИЕ, А НЕ НАСТРОЕНИЕ
+     ═══════════════════════════════════════════════════════════════════════
+     Пять состояний, пять видов — и ни одного «просто красиво»:
+       hub-wait   движка нет либо связь молчит — окантовка тусклая, НЕ дышит;
+       hub-on     связь есть, сухой ход — янтарь, медленное ровное дыхание;
+       hub-armed  боевой режим — янтарь ярче и вдвое быстрее: видно от двери;
+       hub-halt   торговля остановлена — красный, дыхание замирает совсем;
+       hub-naked  позиция без стопа — красный и БЫСТРЫЙ: это не состояние,
+                  а происшествие, и выглядеть оно обязано иначе, чем покой.
+     Остановка и происшествие разведены нарочно: у них разная срочность, а
+     раньше обе приходили одним классом «armed».
+     Остановленное дыхание при остановке торговли не случайность: замершая
+     анимация читается как «процесс встал» без единого слова.
+
+     ДЫШИТ ПСЕВДОЭЛЕМЕНТ, А НЕ БЛОК. Анимировать box-shadow на живой странице
+     дорого — каждый кадр пересчитывает тень. Здесь двигаются только opacity и
+     transform на ::after, это композиция на GPU и не трогает раскладку.
+
+     ПУЛЬС ПРИВЯЗАН К ПОТОКУ. Класс hub-beat снимается, когда счётчик сообщений
+     биржи перестаёт расти (см. cnPoll). Свечение, идущее при мёртвом потоке,
+     успокаивало бы ровно тогда, когда нужна тревога. */
+  .hub{position:relative;isolation:isolate;transition:border-color .3s ease}
+  .hub::after{content:'';position:absolute;inset:-1px;border-radius:9px;pointer-events:none;
+    z-index:-1;opacity:0;transition:opacity .4s ease}
+  .hub-wait{border-color:var(--line)}
+  .hub-wait::after{opacity:0}
+  .hub-on{border-color:rgba(255,122,24,.35)}
+  .hub-on::after{opacity:.5;box-shadow:0 0 0 1px rgba(255,122,24,.30),0 0 14px rgba(255,122,24,.16)}
+  .hub-armed{border-color:rgba(255,122,24,.75)}
+  .hub-armed::after{opacity:1;box-shadow:0 0 0 1px rgba(255,122,24,.55),0 0 22px rgba(255,122,24,.30)}
+  .hub-halt{border-color:rgba(248,81,73,.70)}
+  .hub-halt::after{opacity:1;box-shadow:0 0 0 1px rgba(248,81,73,.50),0 0 18px rgba(248,81,73,.22)}
+  .hub-naked{border-color:rgba(248,81,73,.95)}
+  .hub-naked::after{opacity:1;box-shadow:0 0 0 1px rgba(248,81,73,.75),0 0 26px rgba(248,81,73,.40)}
+  /* Дыхание включается ТОЛЬКО когда идут сообщения биржи. Остановка НЕ дышит
+     нарочно: замершая окантовка читается как «процесс встал» без слов. */
+  .hub-beat.hub-on::after{animation:hubBreath 3.2s ease-in-out infinite}
+  .hub-beat.hub-armed::after{animation:hubBreath 1.6s ease-in-out infinite}
+  .hub-beat.hub-naked::after{animation:hubBreath .7s ease-in-out infinite}
+  @keyframes hubBreath{0%,100%{transform:scale(1);opacity:.45}50%{transform:scale(1.006);opacity:1}}
+  /* Уважение к системной настройке: анимация — не единственный носитель
+     смысла, цвет несёт то же самое, поэтому её можно снять без потерь. */
+  @media (prefers-reduced-motion:reduce){.hub::after{animation:none!important}}
   .cn-head{display:flex;align-items:center;gap:7px;font:700 11px Rajdhani,sans-serif;letter-spacing:.09em;color:var(--text-dim)}
   .cn-dot{width:8px;height:8px;border-radius:50%;background:var(--text-faint);flex-shrink:0}
   .cn-dot.on{background:var(--green);box-shadow:0 0 6px rgba(63,185,80,.6)}
@@ -491,6 +566,69 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
    * Пускаем по два в ряд: равенство сохраняется, читаемость возвращается. */
   .day-ctx .dc-chip{ flex:1 1 calc(50% - 7px); }
 }
+/* ═══════════════════════════════════════════════════════════════════════════
+   ЧИСЛО, НЕ ПОМЕСТИВШЕЕСЯ В ЧИП, — ЭТО ДРУГОЕ ЧИСЛО
+   ═══════════════════════════════════════════════════════════════════════════
+   03.09.2026 трейдер показал стрелками на чипы контекста. Данные в них были:
+   FND = +0.0045%. А на экране стояло «+0.…»: значению отводилось 35px при
+   нужных 62, и `text-overflow:ellipsis` резал его после второго знака.
+   «+0.» читается как ноль. Ставка финансирования, показанная нулём, — это не
+   «мелкий косметический дефект», это неверное показание прибора.
+
+   Причина в том, что чипы сделали одинаковой ширины (flex:1 1 0), чтобы они
+   не прыгали при смене значения. Задача верная, средство слишком грубое:
+   равенство получили ценой обрезки самого длинного.
+
+   Лечим иначе — ширина по САМОМУ ДЛИННОМУ, а не по среднему:
+     · flex-basis:auto + min-width — чип не уже разумного минимума, но растёт
+       под содержимое, поэтому обрезать нечего;
+     · tabular-nums — цифры одной ширины, и значение не дёргает соседей при
+       смене 0.85 на 1.20. Прыжки лечатся моноширинностью цифр, а не обрезкой;
+     · overflow:visible на значении — страховка на случай, если ширину снова
+       кто-то ограничит: пусть лучше вылезет, чем соврёт. */
+.day-ctx .dc-chip{flex:0 1 auto;min-width:96px;width:auto}
+.day-ctx .dc-chip b{overflow:visible;text-overflow:clip;font-variant-numeric:tabular-nums}
+.day-ctx .dc-chip .dc-k{flex-shrink:0}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ОКАНТОВКА ЧИПА = «ЗДЕСЬ ЕСТЬ ЧТО СМОТРЕТЬ», А НЕ УКРАШЕНИЕ
+   ═══════════════════════════════════════════════════════════════════════════
+   Требование трейдера: подсветить эти элементы. Подсвечиваем ПО СМЫСЛУ, а не
+   подряд: светится тот чип, чьё значение вышло из спокойного диапазона —
+   классы dc-high (RVOL высокий), dc-buy / dc-sell (перевес потока). Спокойное
+   значение остаётся тусклым, и тогда свечение что-то значит. Если светится
+   всё, не светится ничего — это тот же закон, по которому тревога,
+   срабатывающая всегда, перестаёт быть тревогой.
+
+   Цвет янтарный ДАЖЕ для dc-buy: зелёная рамка читается как «покупай», а чип
+   контекста — наблюдение, а не сигнал. Тот же запрет действует на плашке
+   формаций, и нарушать его в другом месте значит завести вторую политику.
+
+   :has() поддержан в этом Chrome (проверено на живой странице), а при
+   отсутствии поддержки правило просто не применится — чипы останутся
+   читаемыми. Ухудшение безопасное. */
+.day-ctx .dc-chip:has(.dc-high),
+.day-ctx .dc-chip:has(.dc-buy),
+.day-ctx .dc-chip:has(.dc-sell){
+  border-color:rgba(255,122,24,.55);
+  box-shadow:0 0 0 1px rgba(255,122,24,.18),0 0 12px rgba(255,122,24,.14);
+}
+/* Вялый рынок — тусклее обычного: «смотреть не на что» тоже показание. */
+.day-ctx .dc-chip:has(.dc-low){border-color:var(--line-soft);opacity:.72}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ЦЕНА В ЗОНЕ — САМЫЙ ГРОМКИЙ МОМЕНТ СЕССИИ
+   ═══════════════════════════════════════════════════════════════════════════
+   Строка цены светится ровно тогда, когда цена ВОШЛА в размеченную зону: это
+   единственная секунда, ради которой открыт терминал. В остальное время она
+   спокойная — иначе подсветка перестанет отличать «пора» от «идёт запись».
+   Состояние берём из #liveStatus, который уже пишет «ЗОНА N · ПРОТОКОЛ»;
+   второго источника не заводим. */
+.live-bar{border-radius:8px;transition:box-shadow .35s ease,border-color .35s ease}
+.live-bar:has(#liveStatus.in-zone){
+  box-shadow:0 0 0 1px rgba(255,122,24,.5),0 0 18px rgba(255,122,24,.22);
+}
+@media (prefers-reduced-motion:reduce){.live-bar{transition:none}}
   .dc-buy{color:var(--green)}.dc-sell{color:var(--danger)}.dc-flat{color:var(--text-dim)}
   .dc-high{color:var(--accent)}.dc-norm{color:var(--text-dim)}.dc-low{color:var(--text-faint)}
   .dc-note{margin-left:auto;font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace}
@@ -1965,7 +2103,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       <button data-ph="journal" onclick="setPhase('journal')">③ ЖУРНАЛ</button>
       <!-- Тренажёр перестал быть отдельным экраном: стакан и автопилот стали вкладками хаба в Сессии -->
     </div>
-    <div class="hdr-zone-pill" id="hdrZonePill">● <span id="hdrZoneNum"></span> · <span id="hdrZoneKind"></span></div>
+    <div class="hdr-zone-pill" id="hdrZonePill">● <span id="hdrZoneNum"></span><span class="hzp-sep"> · </span><span id="hdrZoneKind"></span></div>
   </div>
   <p class="phase-desc" id="phaseDesc">До сессии — читаешь рынок, размечаешь зоны: ⚡ быстрые зоны из стакана, разбор из чата или ручной ввод. В сессии — только исполнение.</p>
 
@@ -2039,6 +2177,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       <div class="cn-acts">
         <button class="cn-btn" id="cnSend" onclick="cnSendZones()" disabled>▲ отправить план</button>
         <button class="cn-btn cn-panic" id="cnPanic" onclick="cnPanic()" disabled>✕ снять всё</button>
+      <button class="btn" onclick="cnReport()" title="Итог за сутки: сделки, издержки, часы записи, остановки">▤ итог суток</button>
       </div>
       <!-- ═══ ТУМБЛЕР БОЕВОГО РЕЖИМА ═══
            Право торговать выдаёт ЗАПУСК движка (ключ --allow-arm) — действие у
@@ -2050,6 +2189,17 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         <div class="cn-sw-txt"><b id="cnArmLbl">БОЕВОЙ РЕЖИМ</b><span id="cnArmSub" class="gs-note">выключен · робот торгует на бумаге</span></div>
       </div>
       <div class="cn-note" id="cnArmNote">Право включать бой выдаётся при запуске движка. Без него тумблер не появится.</div>
+      <!-- ═══ ДОЗОР: ФОРМАЦИИ ЖИВЬЁМ ═══
+           Показываем ТО, ЧТО ВИДНО, вместе с замеренным числом. Ни одна
+           формация не отделена от нуля, поэтому здесь нет и не будет цены
+           входа, стопа или цели: это наблюдение, а решение за трейдером.
+           Плашка без числа читается как сигнал, что бы ни было написано
+           рядом, — поэтому эпизоды, EV и интервал едут вместе с названием. -->
+      <div class="dz-block" id="dzBlock" style="display:none">
+        <div class="dz-head">◈ ФОРМАЦИИ <span class="dz-sub" id="dzSub"></span></div>
+        <div class="dz-list" id="dzList"></div>
+        <div class="dz-foot">Наблюдение, не сигнал. Уровни и решение — за тобой.</div>
+      </div>
     </div>
     <div class="sess-walls" id="sessWalls" title="Сводная карта ликвидности: ближайшие концентрации в книге (агрегация нескольких площадок в долях) и дистанции до них"></div>
     <div class="whale-panel" id="whaleSess"></div>
@@ -3465,6 +3615,14 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     if(a>=0&&a!==_lastAlertZone&&phase==='live'){_zoneBeep();_zoneTitleFlash();if(typeof _haptic==='function')_haptic('zone');}
     _lastAlertZone=a;
     if(a>=0&&!zones[a].triggeredAt&&!zones[a].closed&&!zones[a].expired){zones[a].triggeredAt=Date.now();save();}
+    /* ═══ ОКАНТОВКА СТРОКИ ЦЕНЫ — ОДИН КЛАСС, ОДИН ИСТОЧНИК ═══
+     * Строка светится ровно тогда, когда цена ВОШЛА в размеченную зону. Это
+     * единственная секунда, ради которой открыт терминал, и она обязана
+     * отличаться от «идёт запись» видом, а не только текстом.
+     * Условие берём ОТСЮДА же (activeZoneIdx), а не заводим второе: два
+     * источника одного состояния разъезжаются, и подсветка начинает врать
+     * раньше, чем текст. */
+    st.classList.toggle('in-zone', !!lp && a>=0);
     if(!lp){st.textContent='введи цену';st.style.color='var(--text-dim)';card.classList.add('hide');}
     else if(a>=0){
       const z=zones[a],k=KIND[z.kind];
@@ -3743,6 +3901,113 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   }
   // ── demo positions (мультипозиции, сегментированы по тикеру) ──
   let positions=[], closingPosId=null, pendingPosSide=null, pos_kindHint='fade';
+  /* ═══ НАСТОЯЩИЕ ПОЗИЦИИ С БИРЖИ ═══
+   * `positions` выше — ВИРТУАЛЬНЫЕ: их заводит трейдер из зоны, они лежат в
+   * localStorage. Позиция, открытая роботом на бирже, до сих пор жила только
+   * строчкой в панели КОННЕКТОР и не попадала ни в хаб, ни на график. На
+   * вопрос «что у меня открыто» приложение отвечало не там, куда смотрят.
+   *
+   * Держим их ОТДЕЛЬНЫМ списком, но рисуем ТЕМ ЖЕ кодом. Два рендерера для
+   * одного и того же — это два экземпляра правды, а они всегда расходятся.
+   *
+   * И НЕ СОХРАНЯЕМ в localStorage: владелец этих позиций — биржа. Сохранённая
+   * копия пережила бы закрытие сделки и показывала бы позицию, которой нет.
+   * Пустой список честнее устаревшего. */
+  let livePositions=[];
+  function _livePosFromStatus(st){
+    try{
+      const csz=(+st.contractSize>0)?+st.contractSize:1;
+      const tk=_tkKey();
+      livePositions=(st.pos||[]).map(p=>({
+        id:'live_'+p.id, ticker:tk, live:true,
+        side:p.side, entry:+p.px, units:Math.abs(+p.vol)*csz,
+        stop:p.stop?+p.stop:null,
+        /* Тейк тактический и живёт в движке один на позицию. */
+        target:(+st.softTp>0)?+st.softTp:null,
+        notional:+p.notional||0,
+        stopVol:p.stopVol?+p.stopVol*csz:null
+      })).filter(p=>isFinite(p.entry)&&p.entry>0&&p.units>0);
+    }catch(e){ livePositions=[]; }
+    try{ renderPosition(); }catch(e){}
+  }
+  /* ═══════════════════════════════════════════════════════════════════════
+   * ДОЗОР: ЧТО ВИДНО НА РЫНКЕ ПРЯМО СЕЙЧАС
+   * ═══════════════════════════════════════════════════════════════════════
+   * Движок держит скользящее окно признаков и гоняет по ним ТЕ ЖЕ формации,
+   * которыми считается вердикт (Формации.js — один файл на замер и на показ).
+   * Здесь мы только рисуем то, что он прислал.
+   *
+   * ═══ ПОЧЕМУ ЧИСЛО ОБЯЗАТЕЛЬНО ═══
+   * Название формации без замера читается как рекомендация, что бы ни было
+   * написано рядом. Поэтому под каждым названием стоит: сколько эпизодов,
+   * какой EV, какой доверительный интервал — и прямо сказано, отделена ли
+   * она от нуля. На 01.09.2026 НИ ОДНА не отделена, и это должно быть видно
+   * не в документации, а в плашке.
+   *
+   * Формации, которой нет в вердикте, приписывается «не замерена» — это
+   * честнее пустого места: пустое место читается как «всё в порядке».
+   *
+   * ═══ ЧЕГО ЗДЕСЬ НЕТ ═══
+   * Цены входа, стопа и цели. Не потому что лень, а потому что уровни — это
+   * решение трейдера; выдав их, инструмент превращается в советчика, чьи
+   * рекомендации ничем не обеспечены. */
+  function _dozorFromStatus(st){
+    const box=document.getElementById('dzBlock');
+    if(!box) return;
+    const d=st&&st.дозор;
+    if(!d){ box.style.display='none'; return; }
+    box.style.display='';
+    const sub=document.getElementById('dzSub');
+    const list=document.getElementById('dzList');
+
+    /* Пока окно не наполнилось — говорим «ещё смотрю», а НЕ «формаций нет».
+       Разница та же, что между «данных нет» и «я не посчитал». */
+    if(!d.готов){
+      const pct=d.надо?Math.min(99,Math.round(100*(d.отсчётов||0)/d.надо)):0;
+      if(sub) sub.textContent='окно набирается · '+pct+'%';
+      const мин=Math.ceil((d.надо-(d.отсчётов||0))/60);
+      if(list) list.innerHTML='<div class="dz-empty">Ещё не смотрю: нужно '+мин+' мин наблюдения'+
+        (d.порогиИз==='архив'
+          ? ' — только на оглядку формаций. Пороги уже готовы из истории.'
+          : ' — пороги набираются по сессии, потому что файла порогов нет. Посчитай формации, и разогрев сократится втрое.')+
+        '</div>';
+      return;
+    }
+    const когда=d.вердиктОт?(' · вердикт от '+String(d.вердиктОт).slice(0,10)):' · ЗАМЕРА НЕТ';
+    /* ═══ ОТКУДА ПОРОГИ — ЧАСТЬ ОСНОВАНИЯ, А НЕ ДЕТАЛЬ ═══
+     * Порог решает, ЧТО считать формацией. Взятый из архива — та же мерка,
+     * которой её мерили, и число рядом относится к этому событию. Взятый из
+     * получаса сессии — другая мерка, и число относится к другому событию.
+     * Не сказать об этом значит показать правдоподобное число не о том. */
+    const ист=d.порогиИз==='архив'
+      ? (' · пороги из истории'+(d.порогиОт?(' от '+String(d.порогиОт).slice(0,10)):''))
+      : ' · <span class="dz-warn">пороги по окну сессии, не по истории</span>';
+    if(sub) sub.innerHTML=(d.формаций||0)+' в библиотеке'+когда+ист;
+
+    const hits=Array.isArray(d.последние)?d.последние:[];
+    if(!hits.length){
+      if(list) list.innerHTML='<div class="dz-empty">Пока ничего из библиотеки не сложилось.</div>';
+      return;
+    }
+    const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    if(list) list.innerHTML=hits.map(h=>{
+      const z=h.замер;
+      let num;
+      if(!z){
+        num='<span class="dz-warn">не замерена — верить нечему</span>';
+      }else{
+        const ci=Array.isArray(z.ci)?('['+z.ci[0]+'; '+z.ci[1]+']'):'';
+        num=z.эпизодов+' эпизодов · EV $'+z.EV+' '+esc(ci)+
+            (z.отделена?'':' <span class="dz-warn">· от нуля НЕ отделена</span>');
+      }
+      const t=h.t?new Date(h.t).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'';
+      return '<div class="dz-item">'+
+        '<div class="dz-name"><span>'+esc(h.name)+'</span>'+
+        '<span class="dz-dir">'+(h.long?'ВВЕРХ':'ВНИЗ')+' · '+esc(h.px)+' · '+esc(t)+'</span></div>'+
+        '<div class="dz-num">'+num+'</div></div>';
+    }).join('');
+  }
+
   let _pxMap={}, _prevPnlById={};
   function savePos(){ try{positions.length?localStorage.setItem('msa_pos_v2',JSON.stringify(positions)):localStorage.removeItem('msa_pos_v2');}catch(e){} }
   function loadPos(){
@@ -3765,6 +4030,30 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   function renderPosition(){
     const el=document.getElementById('posBlock'); if(!el)return;
     let html='';
+    /* Настоящие — ПЕРВЫМИ и с пометкой. Смешать их с виртуальными без метки
+       значило бы дать трейдеру принять учебную позицию за боевую; цена такой
+       путаницы — реальные деньги против воображаемых. */
+    livePositions.forEach(p=>{
+      const px=_pxFor(p.ticker), pnl=_pnlOf(p,px), dir=p.side==='long'?1:-1;
+      const pnlPct=(px&&p.entry)?((px-p.entry)/p.entry*100*dir):null;
+      const cls=pnl==null?'':(pnl>=0?'pos-win':'pos-loss');
+      html+='<div class="pos-card '+cls+'" style="border-color:#ff7a18">'+
+        '<div class="pos-row"><b style="color:#ff7a18">● НА БИРЖЕ</b> '+
+        '<b>'+(p.side==='long'?'LONG':'SHORT')+'</b> '+
+        p.units+' по '+p.entry+' · $'+Math.round(p.notional)+'</div>'+
+        '<div class="pos-row">'+
+          (pnl!=null?('P&L <b class="'+(pnl>=0?'pos':'neg')+'">'+(pnl>=0?'+':'')+pnl.toFixed(2)+
+                      '</b> ('+(pnlPct>=0?'+':'')+pnlPct.toFixed(2)+'%)'):'P&L —')+
+          (p.stop?(' · стоп <b class="pos">'+p.stop+'</b>'+
+                   (+p.stop===+p.entry?' <b style="color:#ff7a18">БУ</b>':'')+
+                   (p.stopVol&&p.stopVol<p.units*0.999
+                     ?' <span class="neg">(только на '+p.stopVol+')</span>':''))
+                 :' · <b class="neg">СТОПА НЕТ</b>')+
+          (p.target?(' · тейк <b class="pos">'+p.target+'</b>'):'')+
+        '</div>'+
+        '<div class="pos-row" style="opacity:.65">ведёт движок · закрывать здесь нечем: '+
+        'команда идёт через панель КОННЕКТОР</div></div>';
+    });
     positions.forEach(p=>{
       const tk=(p.ticker||'BTC/USDT').toUpperCase(), cur=tk===_tkKey(), px=_pxFor(tk);
       const pnl=_pnlOf(p,px); const dir=p.side==='long'?1:-1;
@@ -4009,9 +4298,38 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     pnlEl.textContent=journal.length?(totalPnl>0?'+':'')+totalPnl.toFixed(2)+' USDT':'—';
     pnlEl.className='jsv '+pnlClass(totalPnl);
     // виртуальные показываем рядом, но отдельной строкой — видно и не смешано
+    /* ═══ ДВИЖОК ПРОТИВ АВТОПИЛОТА, А НЕ «РЕАЛЬНОЕ ПРОТИВ ВИРТУАЛЬНОГО» ═══
+     * Деление было надвое: реальное и виртуальное. Но в «реальное» попадали
+     * И боевые сделки движка, И ручные, импортированные с биржи. Смотреть на
+     * такую сумму бессмысленно: она отвечает на вопрос «сколько денег»,
+     * а не на «работает ли робот».
+     *
+     * Сравнивать надо ТРИ источника, и разница между ними содержательная:
+     *   движок    — что робот действительно получил на бирже, с проскальзыванием;
+     *   автопилот — что он же получил бы на бумаге, без спреда и отказов;
+     *   рука      — торговля трейдера, к роботу отношения не имеющая.
+     *
+     * Расхождение «движок минус автопилот» и есть цена исполнения. Пока эти
+     * два числа лежали в разных кучах, увидеть её было негде. */
+    const bySrc = (arr, want) => arr.filter(e => (e.src || 'рука') === want);
+    const engine = bySrc(trades, 'engine');
+    const autop  = allTrades.filter(e => (e.src || '') === 'autopilot');
+    const hand   = trades.filter(e => (e.src || 'рука') !== 'engine');
+    const sum = a => a.reduce((s2, e) => s2 + (+e.pnl || 0), 0);
+    const fmt = v => (v > 0 ? '+' : '') + v.toFixed(2);
+    const parts = [];
+    if (engine.length) parts.push(`движок ${engine.length} · ${fmt(sum(engine))} USDT`);
+    if (autop.length)  parts.push(`автопилот ${autop.length} · ${fmt(sum(autop))} (бумага)`);
+    if (hand.length)   parts.push(`рука ${hand.length} · ${fmt(sum(hand))}`);
+    /* Цена исполнения — главное число этой строки. Показываем только когда
+     * есть что сравнивать: одна сделка против пятидесяти сравнением не
+     * является. */
+    if (engine.length >= 3 && autop.length >= 3) {
+      const dEng = sum(engine) / engine.length, dAut = sum(autop) / autop.length;
+      parts.push(`на сделку: движок ${fmt(dEng)} против бумаги ${fmt(dAut)}`);
+    }
     document.getElementById('jPnlSub').textContent=
-      (trades.length?`${trades.length} реальных сделок`:'реальных сделок нет')
-      +(virt.length?` · движок: ${virt.length} вирт. ${(virtPnl>0?'+':'')+virtPnl.toFixed(2)} USDT (в итог не входит)`:'');
+      (parts.length ? parts.join(' · ') : 'сделок нет');
     const tcEl=document.getElementById('jTradeCount');
     tcEl.textContent=journal.length?trades.length+'  /  '+(journal.length-trades.length):'—';
     tcEl.className='jsv '+(journal.length?'':'dim');
@@ -4066,7 +4384,15 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     const gradeHtml=e.grade?`<span class="gbadge gb${e.grade}">${e.grade}</span>`:'';
     const dt=new Date(e.ts);
     const dateStr=dt.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'})+' '+dt.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
-    const meta=[(e.ticker+' '+(e.tf||'')).trim(), e.side?((e.side==='long'?'лонг':'шорт')+(e.lev?' ×'+e.lev:'')):'', PROTO_LABELS[e.protocol]||e.protocol, e.zPx!=null?`зона ${e.zPx}`:'', e.entryPx?`вход ${e.entryPx}`:'', e.notional?`объём ${e.notional} USDT`:'', e.durMin!=null?e.durMin+' мин':'', e.note?`"${e.note}"`:''].filter(Boolean).join(' · ');
+    /* ═══ ОТКУДА СДЕЛКА — ПЕРВЫМ, А НЕ В КОНЦЕ ═══
+     * В списке боевые сделки движка, бумажные решения автопилота и ручная
+     * торговля выглядели одинаково. Отличить их можно было только по
+     * суммарной строке сверху, то есть уже потеряв связь со строкой.
+     * А это разные вещи: у бумаги нет ни спреда, ни отказов биржи, и
+     * сравнивать её с боем можно только зная, что есть что. */
+    const SRC_LBL = { engine: '⚙ ДВИЖОК', autopilot: '◇ бумага' };
+    const srcTag = SRC_LBL[e.src] || (e.virtual ? '◇ бумага' : '✋ рука');
+    const meta=[srcTag, (e.ticker+' '+(e.tf||'')).trim(), e.side?((e.side==='long'?'лонг':'шорт')+(e.lev?' ×'+e.lev:'')):'', PROTO_LABELS[e.protocol]||e.protocol, e.zPx!=null?`зона ${e.zPx}`:'', e.entryPx?`вход ${e.entryPx}`:'', e.notional?`объём ${e.notional} USDT`:'', e.durMin!=null?e.durMin+' мин':'', e.note?`"${e.note}"`:''].filter(Boolean).join(' · ');
     const mEsc=escapeHtml(meta), pos=top!=null?`;top:${top}px`:'';
     return `<div class="je" style="border-left-color:${e.outcome==='win'?'var(--green)':e.outcome==='loss'?'var(--danger)':'var(--line)'}${pos}">
         <span class="je-out ${oCls}">${oLbl}</span>
@@ -4326,12 +4652,56 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
    * Открытый с github.io он про движок ничего не знает и честно об этом говорит,
    * вместо того чтобы молча показывать «не подключён». */
   let _cnLive=false, _cnBusy=false;
-  function cnSet(state, cls, info){
+  /* Сколько сообщений биржи было на прошлом опросе. Ноль как стартовое
+     значение честен: до первого ответа поток не подтверждён, и дышать нечему. */
+  let _cnTicksWas=0;
+  /* hub — класс ОКАНТОВКИ. Отдельным аргументом, а не выводом из cls: точка и
+     окантовка отвечают на разные вопросы. Точка говорит «связь есть», окантовка
+     — «что сейчас происходит», и остановка с происшествием у неё разные, хотя
+     точка у них одна. Не передали — берём cls, как было. */
+  function cnSet(state, cls, info, hub){
     const d=document.getElementById('cnDot'), st=document.getElementById('cnState'),
           inf=document.getElementById('cnInfo'), a=document.getElementById('cnSend'),
           p=document.getElementById('cnPanic');
     if(!d)return;
     d.className='cn-dot'+(cls?' '+cls:'');
+    /* ═══ ОКАНТОВКА БЛОКА = СОСТОЯНИЕ ПРОЦЕССА, А НЕ УКРАШЕНИЕ ═══
+     * Требование трейдера 03.09.2026: блок должен «жить». Живость здесь имеет
+     * ровно один честный смысл — показывать, ЧТО СЕЙЧАС ДЕЛАЕТ движок.
+     *
+     * ПОЧЕМУ НЕ ПРОСТО КРАСИВАЯ АНИМАЦИЯ. Свечение, которое идёт всегда,
+     * выглядит одинаково и при работающем движке, и при мёртвом — то есть
+     * успокаивает ровно тогда, когда нужна тревога. Мы это уже проходили в
+     * коде: тревога, срабатывающая всегда, перестаёт быть тревогой; подпись
+     * «тренажёр» висела при включённом бое. Поэтому класс приходит ИЗ ТОГО ЖЕ
+     * состояния, что и точка, а пульс (ниже, в cnPoll) двигается только когда
+     * растёт счётчик сообщений биржи. Замер потока встал — свечение замерло.
+     *
+     * ЦВЕТ КОДИРУЕТ СОСТОЯНИЕ СИСТЕМЫ, А НЕ МНЕНИЕ О РЫНКЕ. Зелёного «входи»
+     * здесь быть не может: тот же запрет действует для плашки формаций. */
+    const blk=document.getElementById('cnBlock');
+    if(blk){
+      /* Если состояние окантовки не передали — выводим его из последнего
+         статуса движка, а не из класса точки. Точка знает только «связь есть»;
+         окантовка обязана различать происшествие, остановку и режим, иначе
+         позиция без стопа выглядит так же, как штатный бой. Порядок проверок
+         и есть порядок срочности. */
+      let h=hub;
+      if(!h){
+        const s=_cnLastStatus;
+        h = !_cnLive ? 'wait'
+          : (s&&s.naked) ? 'naked'
+          : (s&&s.halted) ? 'halt'
+          : (s&&s.armed) ? 'armed'
+          : (cls||'wait');
+      }
+      /* classList, а не className: пульс hub-beat ставится отдельно, из опроса
+         статуса, и перезапись строкой стирала бы его каждую секунду — дыхание
+         не начиналось бы никогда. */
+      blk.classList.add('hub');
+      ['wait','on','armed','halt','naked'].forEach(x=>blk.classList.toggle('hub-'+x, h===x));
+      if(!h)blk.classList.add('hub-wait');
+    }
     if(st)st.textContent=state;
     if(inf&&info!=null)inf.innerHTML=info;
     if(a)a.disabled=!_cnLive;
@@ -4354,6 +4724,85 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       const m=await r.json();
       _cnLive=true;
       _cnLastStatus=m;
+      /* ═══ ДЫШИТ ТОЛЬКО ЖИВОЙ ПОТОК ═══
+       * Класс hub-beat включает анимацию окантовки. Условие ровно одно:
+       * счётчик сообщений биржи ВЫРОС с прошлого опроса. Анимация, идущая по
+       * таймеру, выглядела бы одинаково при работающем движке и при
+       * оборвавшейся ленте — то есть успокаивала бы ровно тогда, когда нужна
+       * тревога. Это тот же класс ошибки, что подпись «тренажёр» при
+       * включённом бое: украшение, притворяющееся показанием прибора.
+       *
+       * Заодно это делает окантовку САМЫМ БЫСТРЫМ индикатором обрыва: цифры
+       * в панели ещё старые, а дыхание уже остановилось. */
+      try{
+        const t=+m.ticks||0, blk=document.getElementById('cnBlock');
+        if(blk){
+          const жив = t>_cnTicksWas;
+          blk.classList.toggle('hub-beat', жив);
+          _cnTicksWas=t;
+        }
+      }catch(e){}
+      /* ═══ ИЗДЕРЖКИ БЕРЁМ У ДВИЖКА, А НЕ ИЗ ПАМЯТИ СТРАНИЦЫ ═══
+       * AP_TAKER_BPS хранился в localStorage и был выставлен 8.01 по замеру на
+       * ETH. При переезде на SOL он остался бы прежним и врал бы в обратную
+       * сторону: модель штрафовала бы сделки, которые на самом деле бесплатны,
+       * и молча выбраковывала рабочие входы. Ставка привязана к КОНТРАКТУ, и
+       * знает её тот, кто знает контракт, — движок. Он читает её из фактических
+       * списаний (КОМИССИЯ.json). Пока движка нет — остаётся сохранённое
+       * значение: оно строже нуля, и это правильная сторона ошибки. */
+      try{
+        if(m.fee&&m.fee.measured&&isFinite(+m.fee.taker)){
+          const tk=+m.fee.taker*1e4, mk=+m.fee.maker*1e4;
+          if(tk>=0&&tk!==AP_TAKER_BPS){
+            AP_TAKER_BPS=tk;
+            try{localStorage.setItem('msa_ap_taker_v1',String(tk));}catch(e){}
+            if(typeof _proc==='function')_proc('издержки от движка: мейкер '+mk.toFixed(2)+' б.п. / тейкер '+tk.toFixed(2)+' б.п. ('+escapeHtml(m.symbol||'')+')');
+          }
+          _feeMakerBps=mk;
+        }
+      }catch(e){}
+      try{ _apFitToEngine(); }catch(e){}
+      /* Позиции биржи — в хаб и на график, на КАЖДОМ опросе. Это и есть
+         «вести позицию динамично»: число обновляется там же, где трейдер
+         смотрит, а не в консоли, которую надо развернуть. */
+      try{ _livePosFromStatus(m); }catch(e){}
+      try{ _dozorFromStatus(m); }catch(e){}
+      /* ═══ ПРОСТОЙ ВИДЕН ТАМ, КУДА СМОТРЯТ ═══
+       * 02.09 движок 7.3 часа отклонял КАЖДУЮ заявку и при этом выглядел
+       * работающим: связь есть, счётчики тикают. Заметили утром по журналу.
+       * Число минут без единой заявки — единственный показатель, который
+       * отличает «рынок спокойный» от «мы не торгуем». */
+      try{
+        const im=+m.простойМин||0, ip=m.простойПричина;
+        const el=document.getElementById('cnInfo');
+        if(el&&im>=20&&ip){
+          el.innerHTML='<span class="neg">'+im+' мин ни одной заявки не ушло.</span><br>'+
+            'причина: '+String(ip).replace(/[<>&]/g,'')+'<br>'+
+            '<span class="gs-note">Боевой режим включён и связь есть — значит это ограничение, а не рынок.</span>';
+        }
+      }catch(e){}
+      /* Расхождение инструмента показываем ДО всего остального: движок такие
+       * намерения отвергает, и без объяснения это выглядит как «робот молчит». */
+      try{
+        /* ═══ СРАВНИВАЕМ БАЗОВУЮ ВАЛЮТУ, А НЕ НАПИСАНИЕ ═══
+         * Терминал зовёт солану SOL/USDT, Lighter — просто SOL: контрактов
+         * там нет, котируется всё в USDC. Буквальное сравнение объявляло
+         * одну и ту же монету «разными инструментами» и глушило боевой режим
+         * при полностью верной настройке — защита срабатывала на себя.
+         * Отрезаем валюту котировки; ETH от SOL это по-прежнему отличает,
+         * а именно ради этого проверка и существует: цена с чужого графика
+         * даёт заявку, синтаксически верную и не туда.
+         * Та же функция живёт в Trade.js (symKey) — правим ОБЕ или ни одной. */
+        const _norm=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'')
+                        .replace(/(USDT|USDC|USD|PERP)$/,'');
+        const _my=_norm((typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'');
+        const _his=_norm(m.symbol);
+        _cnSymMismatch=(_my&&_his&&_my!==_his)?{mine:_my,his:m.symbol}:null;
+      }catch(e){_cnSymMismatch=null;}
+      /* Четвёртым аргументом — состояние ОКАНТОВКИ. Оно подробнее, чем точка:
+         остановка торговли и позиция без стопа приходили одним классом
+         «armed», хотя у них разная срочность. Порядок проверок = порядок
+         срочности: происшествие, потом остановка, потом режим. */
       cnSet(m.naked?'ПОЗИЦИЯ БЕЗ СТОПА':(m.armed?'БОЕВОЙ РЕЖИМ':'сухой ход'),
         m.naked?'armed':(m.armed?'armed':'on'),
         /* ═══ ПОЗИЦИЯ БЕЗ ЗАЩИТЫ — ПЕРВОЙ СТРОКОЙ И КРУПНО ═══
@@ -4364,7 +4813,22 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
          * туда. Поэтому тревога идёт ПЕРЕД всем остальным. */
         (m.naked ? '<span class="neg"><b>⛔ НА БИРЖЕ ПОЗИЦИЯ БЕЗ СТОПА.</b> Движок остановлен и заявки сняты.'+
                    '<br>Закрой позицию или поставь стоп в приложении MEXC — сам он этого не сделает.</span><br>' : '')+
-        'символ <b>'+escapeHtml(m.symbol||'')+'</b> · зон в движке <b>'+m.zones+'</b>'+
+        /* ═══ ТЕРМИНАЛ И ДВИЖОК НА РАЗНЫХ ИНСТРУМЕНТАХ ═══
+         * Молчаливого варианта здесь быть не может: движок отвергнет и план, и
+         * каждое намерение, а снаружи это выглядит как «робот перестал
+         * работать». Говорим прямо и называем обе стороны. */
+        (_cnSymMismatch
+          ? '<span class="neg"><b>⛔ РАЗНЫЕ ИНСТРУМЕНТЫ.</b> Терминал на '+escapeHtml(_cnSymMismatch.mine)+
+            ', движок на '+escapeHtml(_cnSymMismatch.his)+'. План и намерения отвергаются.'+
+            '<br>Переключи тикер вверху страницы или перезапусти движок на нужном символе.</span><br>'
+          : '')+
+        'символ <b>'+escapeHtml(m.symbol||'')+'</b>'+
+        /* Издержки — рядом с символом. Число, стоившее половины депозита,
+         * должно быть видно без заглядывания в файлы. */
+        (m.fee?(' · издержки '+(m.fee.measured
+          ? ('круг <b>'+(+m.fee.roundTripBps||0).toFixed(2)+' б.п.</b>'+((+m.fee.roundTripBps||0)===0?' <span class="pos">(ноль)</span>':''))
+          : '<span class="neg">НЕ ЗАМЕРЕНЫ — бой не включится</span>')):'')+
+        ' · зон в движке <b>'+m.zones+'</b>'+
         (m.done?' (исполнено '+m.done+')':'')+
         '<br>поток биржи: '+(m.feed?'идёт':'<span class="neg">НЕТ ДАННЫХ</span>')+
         (m.feedErrors?' · обрывов '+m.feedErrors:'')+
@@ -4390,7 +4854,24 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
               (p.stop?' · стоп <b class="pos">'+p.stop+'</b>'+
                        (p.stopVol&&p.stopVol<p.vol?' <span class="neg">(только на '+p.stopVol+' из '+p.vol+')</span>':'')
                      :' · <b class="neg">СТОПА НЕТ</b>')).join('')
-          : '<br>на бирже позиций нет')+
+          : (m['сверкаБыла']
+              ? '<br>на бирже позиций нет'
+              /* ═══ «НЕ СМОТРЕЛ» ≠ «ПУСТО» ═══
+               * 03.09.2026 панель полдня писала «на бирже позиций нет» при
+               * открытых $1120: сверка запускалась только в боевом режиме, а
+               * в сухом ходу список позиций оставался нетронутым пустым
+               * массивом. Трейдер читал молчание как подтверждение. */
+              : '<br><span class="neg">позиции ЕЩЁ НЕ СВЕРЕНЫ</span>'
+                +'<span class="gs-note"> — движок не спрашивал биржу; это НЕ «позиций нет»</span>'))+
+        /* ═══ СЧЁТ НАЗЫВАЕТСЯ ВСЛУХ, РЯДОМ С «ПОЗИЦИЙ НЕТ» ═══
+         * 03.09.2026 час ушёл на спор, видит ли движок позицию трейдера:
+         * панель писала «позиций нет», в приложении Lighter висела позиция
+         * 11.137 SOL, а баланс движка сходился с балансом приложения до
+         * копеек. Одно из двух обязано было быть неправдой, но проверить было
+         * нечем — индекс счёта не показывался нигде.
+         * «Позиций нет» без имени счёта — это утверждение без подлежащего. */
+        (m.account?'<span class="gs-note"> (счёт '+escapeHtml(String(m.account))+')</span>':
+                   '<span class="gs-note"> (счёт не назван — движок старой сборки)</span>')+
         /* ЭКСПОЗИЦИЯ ИЗ СВЕРКИ, А НЕ ИЗ СЧЁТЧИКА. Раньше движок накапливал её
          * сам и никогда не уменьшал; теперь берёт с биржи. Показываем вместе с
          * лимитом — число без порога ни о чём не говорит. */
@@ -4432,6 +4913,10 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
    * В localStorage состояние не сохраняется: перезапуск всегда начинается с
    * выключенного. */
   let _armPrev=null, _cnLastStatus=null;
+  /* Инструмент терминала против инструмента движка, и мейкерская ставка,
+   * пришедшая от движка. Объявлены здесь, потому что опрос статуса выше по
+   * файлу их пишет, а панель ниже читает. */
+  let _cnSymMismatch=null, _feeMakerBps=null;
   function _cnArmSync(m){
     const row=document.getElementById('cnLiveRow'), box=document.getElementById('cnArm'),
           lbl=document.getElementById('cnArmLbl'), sub=document.getElementById('cnArmSub'),
@@ -4458,7 +4943,18 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
        * проявляется отказом на КАЖДОМ входе — и выглядит как поломка связи,
        * а не как «поставь размер поменьше». */
       const want=(typeof _apNotional==='function')?_apNotional():0;
-      const cap=+m.maxNotional||0;
+      /* ═══ ПОТОЛОК ВХОДА — ТОТ ЖЕ, ЧТО У ДВИЖКА ═══
+       * Здесь стоял один maxNotionalPerOrder, и страница не знала про решение
+       * 70/30: вход берёт 70% бюджета, 30% лежат резервом на усреднение. Из-за
+       * этого числа на экране остались прежними, и выглядело так, будто резерв
+       * не применился — хотя движок уже считал по нему.
+       *
+       * Потолок входа = МЕНЬШЕЕ из двух: лимит на одну заявку (от счёта и
+       * плеча) и потолок первого входа (доля бюджета). Оба приходят от движка;
+       * своей формулы у страницы нет и быть не должно — она разошлась бы. */
+      const capOrd=+m.maxNotional||0;
+      const capEnt=+m.entryCap||0;
+      const cap=(capOrd>0&&capEnt>0)?Math.min(capOrd,capEnt):(capOrd||capEnt||0);
       const over=(want>0&&cap>0&&want>cap);
       /* ═══ МАРЖА ПРОТИВ СВОБОДНЫХ СРЕДСТВ ═══
        * Номинал влезает в лимит движка — и всё равно не открывается, если на
@@ -4479,6 +4975,24 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
          * знаками, всегда. */
         (want>0?'<br>номинал <b>$'+(+want).toFixed(2)+'</b> (маржа $'+needM.toFixed(2)+' × '+lev+'x) · лимит движка <b>$'+(+cap).toFixed(2)+'</b>'
                +(free>0?' · свободно <b>$'+free.toFixed(2)+'</b>':''):'')+
+        /* ═══ РЕЗЕРВ НАЗЫВАЕТСЯ ВСЛУХ ═══
+         * Решение трейдера: 70% на вход, 30% в резерв на усреднение, и потолок
+         * при этом НЕ растёт — он и есть 100% позиции. Не показать резерв
+         * значит оставить трейдера с числом, которое меньше ожидаемого, без
+         * объяснения куда делась разница. */
+        ((+m.entryFrac>0&&+m.entryFrac<1&&+m.reserve>0)
+          ? '<br><span class="gs-note">вход до <b>$'+(+m.entryCap).toFixed(2)+'</b> ('+
+            Math.round(+m.entryFrac*100)+'% бюджета) · резерв <b>$'+(+m.reserve).toFixed(2)+
+            '</b> на усреднение при вкате'+(+m.rescueBps>0?' глубже '+m.rescueBps+' б.п.':'')+
+            '. Потолок не растёт: резерв ВНУТРИ бюджета.</span>'
+          : '')+
+        /* Плечо на странице и в движке обязано быть одним числом: лимит движка
+         * считается как счёт × доля × плечо, и расхождение выглядит как
+         * «номинал больше лимита» на каждом входе. */
+        ((+m.lev>0&&lev>0&&+m.lev!==lev)
+          ? '<br><span class="neg">Плечо разошлось:</span> в приложении '+lev+'x, у движка '+
+            m.lev+'x. Отправь план — движок возьмёт плечо из него.'
+          : '')+
         (over?'<br><span class="neg">Номинал больше лимита — движок отклонит каждый вход.</span>'+
               ' Поставь маржу так, чтобы маржа × плечо ≤ $'+cap+'.':'')+
         (tight&&!over?'<br><span class="neg">Маржи впритык.</span> Нужно $'+needM.toFixed(2)+
@@ -4506,7 +5020,11 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     try{
       const m=_cnLastStatus; if(!m)return;
       const lev=(typeof AP_LEV!=='undefined'&&AP_LEV>0)?AP_LEV:1;
-      const cap=+m.maxNotional||0;
+      /* Тот же потолок, что показан выше: меньшее из лимита заявки и потолка
+       * первого входа. Иначе кнопка подгоняла бы под число, которого движок
+       * не примет, — и отказ пришёл бы уже на бирже. */
+      const capOrd=+m.maxNotional||0, capEnt=+m.entryCap||0;
+      const cap=(capOrd>0&&capEnt>0)?Math.min(capOrd,capEnt):(capOrd||capEnt||0);
       const free=+m.free||0;
       let margin=cap/lev;                              // потолок по лимиту движка
       if(free>0)margin=Math.min(margin,free*0.95);     // потолок по свободным средствам
@@ -4719,8 +5237,10 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         (!(_riskMoney>0)?'<br>Размер не из чего посчитать: заполни депозит и риск% — или задай маржу и плечо у автопилота.':'');
       return; }
     try{
+      /* Символ едет с планом по той же причине, что и с намерением: зоны
+       * несут ЦЕНЫ, а цены с чужого инструмента выглядят исправными. */
       const r=await fetch('/api/zones',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({zones:out})});
+        body:JSON.stringify({sym:(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):null,zones:out})});
       const j=await r.json();
       /* Движок может ОТКАЗАТЬ, сохранив прежний план: отправка, в которой все
        * зоны оказались браком, больше не обнуляет рабочий список (иначе
@@ -6809,7 +7329,10 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         ctx.fillText(gl,W-LBL-15,y+4);});
     }
     // demo position lines (вход / стоп / тейк) — для всех позиций текущего тикера
-    if(typeof positions!=='undefined'&&positions.length){
+    /* Условие было «есть виртуальные позиции» — и боевая позиция не рисовалась
+       вовсе, если трейдер не завёл ни одной учебной. */
+    if((typeof positions!=='undefined'&&positions.length)||
+       (typeof livePositions!=='undefined'&&livePositions.length)){
       const posLine=(price,col,lbl)=>{
         price=+price; if(!isFinite(price)||price<minP||price>maxP)return;
         const y=toY(price);
@@ -6818,7 +7341,11 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         ctx.fillStyle=col;ctx.font='bold 9.5px \'JetBrains Mono\',ui-monospace,SFMono-Regular,\'SF Mono\',Menlo,Consolas,\'Liberation Mono\',monospace';
         ctx.fillText(lbl,4,y-2);
       };
-      const _mine=positions.filter(p=>(p.ticker||'BTC/USDT').toUpperCase()===_tkKey());
+      /* Настоящие позиции идут ТЕМ ЖЕ путём, что виртуальные: вход, стоп,
+         тейк и «тень риска» рисуются одним кодом. Отдельный рисовальщик для
+         боевых позиций разошёлся бы с этим при первой же правке. */
+      const _live=(typeof livePositions!=='undefined'?livePositions:[]);
+      const _mine=positions.concat(_live).filter(p=>(p.ticker||'BTC/USDT').toUpperCase()===_tkKey());
       // ── Trailing Shadow: живая зона риска заливкой от входа в сторону стопа.
       // Стоп переведён в безубыток (SL==вход) → тени нет: риска больше нет, остаётся только линия.
       _mine.forEach(p=>{
@@ -9986,13 +10513,116 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   // $ = bps/10000 × объём. Меняется кликом, хранится локально.
   // Размер считается КАК НА БИРЖЕ: маржа на ордер × плечо = номинал позиции.
   // От номинала считается результат в долларах, от маржи — риск на ордер.
+  /* ═══ РАЗМЕР САМ ПОДСТРАИВАЕТСЯ ПОД ЛИМИТ ДВИЖКА ═══
+   * Настройка приезжала из прошлой площадки: маржа $80 × 33 = номинал $2668
+   * при лимите движка $25. Каждый вход отклонялся бы, и выглядело бы это как
+   * поломка, а не как несовпадение настроек. Кнопка «подогнать» была, но
+   * требовать нажать её — значит перекладывать на трейдера то, что система
+   * знает сама.
+   *
+   * Поэтому: если сохранённая маржа не влезает в лимит движка, ужимаем её при
+   * загрузке. Только ВНИЗ и только до лимита — расширять риск молча нельзя,
+   * это ровно то запасное поведение, которое уже стоило денег. */
   let AP_MARGIN=100; try{const _m=localStorage.getItem('msa_ap_margin_v1'); if(_m!=null&&isFinite(+_m)&&+_m>0)AP_MARGIN=+_m;}catch(e){}
+  /* ═══ РАЗМЕР: ЧИСЛО ТРЕЙДЕРА — НАМЕРЕНИЕ, А НЕ ПОЖЕЛАНИЕ ═══
+   * ЧТО БЫЛО СЛОМАНО. Эта функция МОЛЧА ужимала маржу под лимит движка:
+   * трейдер ставил $30, лимит был $25 при плече 25x, и маржа становилась
+   * ровно $1. Робот торговал на доллар вместо тридцати, а объяснение было
+   * одной строкой в процессинге, которую при живой сессии никто не читает.
+   *
+   * Направление подгонки было безопасным — вниз, — и поэтому ошибку не
+   * заметили сразу. Но сужение до размера, при котором торговля теряет
+   * смысл, это ОТКАЗ, замаскированный под работу. Отказ должен выглядеть
+   * как отказ и говорить, где его снять.
+   *
+   * КАК ТЕПЕРЬ. Страница ПРОСИТ движок принять размер трейдера. Движок либо
+   * принимает (в пределах потолка, заданного человеком в РИСК.json), либо
+   * отвечает причиной. Ужимаем только если движок отказал — и тогда пишем об
+   * этом крупно, в панели КОННЕКТОР, а не строкой в ленте.
+   *
+   * Потолок остаётся вторым замком: страница не может стать опаснее того,
+   * что человек уже разрешил файлом. */
+  let _apBudgetWhy='', _apBudgetAsked=0, _apBudgetLast=0;
+  /* Тронул ли ЧЕЛОВЕК размер в этой сессии. Пока нет — правит движок. */
+  let _apBudgetDirty=false;
+  /* ═══ ИТОГ СУТОК — ЗДЕСЬ, А НЕ В КОНСОЛИ ═══
+   * Считает движок тем же кодом, что и консольный скрипт: одна реализация,
+   * два способа показать. Отдельный расчёт для страницы разошёлся бы с
+   * консольным, и заметили бы это по расхождению цифр в самый неподходящий
+   * момент. */
+  async function cnReport(){
+    try{
+      const r=await fetch('/api/report?h=24');
+      const txt=await r.text();
+      if(typeof _proc==='function')_proc('<pre style="white-space:pre-wrap;font-size:11px;line-height:1.45;margin:6px 0">'+
+        txt.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))+'</pre>');
+    }catch(e){
+      if(typeof _proc==='function')_proc('итог не собрался: '+e.message);
+    }
+  }
+  function _apFitToEngine(){
+    try{
+      const st=_cnLastStatus; if(!st||!(+st.maxNotional>0))return false;
+      const lev=(typeof AP_LEV!=='undefined'&&AP_LEV>0)?AP_LEV:1;
+      const want=AP_MARGIN*lev;
+      if(Math.abs(want-(+st.maxNotional))<0.01){ _apBudgetWhy=''; return false; }
+      /* ═══ ФАЙЛ ДВИЖКА ГЛАВНЕЕ, ПОКА ЧЕЛОВЕК НЕ СКАЗАЛ ИНАЧЕ ═══
+       * Я сам сделал страницу главной — и получил обратную беду. Пороги в
+       * РИСК.json меняли на $200, движок их перечитывал, а через секунду
+       * страница присылала свои $750 из localStorage и затирала правку:
+       * «ПОРОГИ ПЕРЕЧИТАНЫ 750→200», следом «бюджет робота: 750 (было 200)».
+       * Два хозяина у одного числа — это не выбор, а качели.
+       *
+       * Правильный порядок: файл — состояние системы, страница — НАМЕРЕНИЕ
+       * ЧЕЛОВЕКА. Намерение существует, только когда человек его выразил;
+       * значение, лежащее в браузере с прошлой недели, намерением не является.
+       * Поэтому пока трейдер не тронул поле маржи, страница ПОДСТРАИВАЕТСЯ
+       * под движок, а не наоборот. */
+      if(!_apBudgetDirty){
+        const fit=Math.round((+st.maxNotional/lev)*100)/100;
+        if(fit>0&&Math.abs(fit-AP_MARGIN)>0.005){
+          AP_MARGIN=fit;
+          try{localStorage.setItem('msa_ap_margin_v1',String(fit));}catch(e){}
+          if(typeof _proc==='function')_proc('маржа взята из настроек движка: $'+fit+
+            ' × '+lev+'x = $'+(+st.maxNotional).toFixed(2)+' (в приложении её не меняли)');
+          if(typeof _apCfgRender==='function')_apCfgRender();
+        }
+        return false;
+      }
+      /* Не долбим движок: просим не чаще раза в 4 с и только когда число
+         действительно изменилось. Повтор той же просьбы ничего не меняет,
+         зато засоряет журнал и мешает увидеть настоящие события. */
+      const now=Date.now();
+      if(want===_apBudgetLast && now-_apBudgetAsked<4000) return false;
+      _apBudgetLast=want; _apBudgetAsked=now;
+      fetch('/api/budget',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({marginUsd:AP_MARGIN,leverage:lev})})
+        .then(r=>r.json().then(j=>({code:r.status,j})))
+        .then(({code,j})=>{
+          if(code===200&&j&&j.ok){
+            _apBudgetWhy='';
+            if(typeof _proc==='function')_proc('бюджет принят движком: маржа $'+
+              AP_MARGIN+' × '+lev+'x = номинал $'+(+j.notional).toFixed(2));
+          }else{
+            /* ОТКАЗ ВИДЕН КРУПНО. Раньше здесь молча менялось число. */
+            _apBudgetWhy=(j&&j.why)?j.why:'движок не принял размер';
+            if(typeof _proc==='function')_proc('бюджет НЕ принят: '+_apBudgetWhy);
+          }
+          if(typeof _apCfgRender==='function')_apCfgRender();
+          if(typeof cnRefresh==='function')try{cnRefresh();}catch(e){}
+        }).catch(()=>{ _apBudgetWhy='движок не ответил на просьбу о бюджете'; });
+      return true;
+    }catch(e){ return false; }
+  }
   let AP_LEV=10;     try{const _l=localStorage.getItem('msa_ap_lev_v1');    if(_l!=null&&isFinite(+_l)&&+_l>0)AP_LEV=+_l;}catch(e){}
   function _apNotional(){ return AP_MARGIN*AP_LEV; }
   function _apSetMargin(){
     const v=prompt('Маржа на один ордер, USDT.\nНоминал позиции = маржа × плечо.',String(AP_MARGIN));
     if(v==null)return; const n=(typeof _pf==='function')?_pf(v):parseFloat(v);
     if(!isFinite(n)||n<=0)return; AP_MARGIN=n;
+    /* Человек выразил намерение — теперь оно главнее файла, и страница его
+       отправит движку. До этой строки правит РИСК.json. */
+    _apBudgetDirty=true;
     try{localStorage.setItem('msa_ap_margin_v1',String(n));}catch(e){}
     if(typeof _proc==='function')_proc('маржа на ордер: <b>$'+n+'</b> · номинал $'+_apNotional().toFixed(2));
   }
@@ -11037,9 +11667,30 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       if(typeof _cnLocal==='function'&&!_cnLocal())return;   // страница не с движка
       if(!_cnLive)return;                                     // движок не отвечает
       if(!_armPrev)return;                                    // боевой режим выключен
+      /* ИНСТРУМЕНТ ЕДЕТ ВМЕСТЕ С НАМЕРЕНИЕМ.
+       * Терминал переключается выпадающим списком, движок получает символ
+       * аргументом запуска, и до сих пор эти два факта не сверялись. Цены с
+       * графика SOL (около 98) ушли бы в заявку по ETH (около 2475): стоп
+       * ниже входа в двадцать пять раз, объём во столько же больше. Числа
+       * валидные — отказать было бы не за что. Движок отвергает намерение с
+       * чужим символом; здесь мы обязаны его назвать. */
+      /* ═══ НОМИНАЛ ОТСЮДА БОЛЬШЕ НЕ УХОДИТ ═══
+       * Здесь стояло notional:_apNotional() — маржа × плечо, посчитанные
+       * страницей. Маржу же страница и подгоняла под лимит движка делением на
+       * плечо, от СВОБОДНЫХ средств, съеденных открытой позицией. Круговой
+       * пересчёт выродился в «$0.19 × 25x = $4.75»: 0.0477 монеты при минимуме
+       * биржи 0.100, и Lighter отклонял каждую заявку. Бумажная модель при
+       * этом закрывала свою позицию и писала сделку — отсюда 187 «сделок» в
+       * приложении против 328 ордеров движка и третьего числа на бирже.
+       *
+       * Решение о входе принимают двое (зоны и автопилот), РАЗМЕР считает
+       * один — движок, той же функцией, что для зон. Своей формулы у страницы
+       * нет: она уже разошлась, и повторять это не за чем.
+       *
+       * Плечо шлём: это НЕ размер, а свойство позиции, и задаёт его трейдер. */
       const body=Object.assign({
         id:'i'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
-        notional:(typeof _apNotional==='function')?_apNotional():0,
+        sym:(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):null,
         lev:(typeof AP_LEV!=='undefined')?AP_LEV:0
       },x);
       fetch('/api/intent',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -11142,13 +11793,47 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       // В отличие от сжатия цели (которое поднимает WR и убивает матожидание), здесь растут ОБА показателя.
       if(prog>=0.25){
         const bps=((m.px-p.entry)/p.entry*1e4)*dir;
-        p.realBps=(p.realBps||0)+bps*0.35; p.qty=0.65; p.part=true; p.stop=p.entry;   // BU: дальше хуже нуля не станет
+        /* ═══ p.stop=p.entry УБРАНО — ЭТО БЫЛ ВТОРОЙ ЗАКРЫВАЮЩИЙ ═══
+         * Строкой ниже по коду страница проверяет `m.px<=p.stop` и при
+         * срабатывании шлёт движку op:'close'. То есть перенос бумажного стопа
+         * во вход был НЕ бумажным: он закрывал ЖИВУЮ позицию по касанию входа.
+         * Отправку op:'stop' на биржу отсюда убрали, а этот путь остался —
+         * правка была сделана наполовину.
+         *
+         * Что это стоило: 01–02.09 все минусы легли в полосу −0.2…−0.66 б.п.
+         * Ни один не дошёл до стопа стратегии. Механика: середина книги
+         * возвращается ко входу, встречная сторона стоит на полспреда хуже, и
+         * «выход в безубыток» оказывается выходом в минус — ПО ПОСТРОЕНИЮ.
+         *
+         * Безубыток теперь ведёт движок, и он единственный, кто может это
+         * делать честно: у него живая книга, поэтому его пол стоит на
+         * вход + стоимость выхода, а не на входе. Страница остаётся при своей
+         * бумажной бухгалтерии со СВОИМ стопом стратегии — она про долю
+         * объёма, а не про границу убытка. */
+        p.realBps=(p.realBps||0)+bps*0.35; p.qty=0.65; p.part=true;
         /* То же самое — на биржу. Сперва снять долю, затем увести стоп во
          * вход. Обе операции идут через движок: доли считаются от реального
          * объёма на бирже, а не от того, что помнит страница. */
         _apIntent({op:'reduce',frac:0.35,reason:'разгрузка на четверти пути'});
-        _apIntent({op:'stop',stopPx:p.entry,reason:'стоп в безубыток'});
-        if(typeof _proc==='function')_proc('разгрузка 30%: <b>'+p.proto+'</b> @ '+m.px.toFixed(_dlDec)+' · '+_usd(bps)+' зафиксировано · стоп в безубыток','pr-up');
+        /* ═══ СТОП СТРАНИЦА БОЛЬШЕ НЕ ДВИГАЕТ ═══
+         * Здесь стояло _apIntent({op:'stop', stopPx:p.entry}) — перенос стопа
+         * во вход. В живой сессии 01.09 он срабатывал через 12 СЕКУНД после
+         * входа, и вот почему: порог — четверть пути до цели, цель — 1R от
+         * тактического стопа, а тактический стоп около 5 б.п. Четверть пути
+         * это 1.2 б.п. прибыли, то есть шум. Трейдер увидел это как «сразу
+         * кроешь БУ, позиции дают больше» — и был прав.
+         *
+         * ВТОРАЯ, БОЛЕЕ ВАЖНАЯ ПРИЧИНА УБРАТЬ. Стопом теперь управляет
+         * ДВИЖОК: трейлинг включается от прибыли и держит стоп не ниже входа,
+         * фарм безубытка уступает трейлингу. Две механики на одном стопе —
+         * это два экземпляра правды, и какая победит, зависело бы от порядка
+         * сообщений по мосту. Тот же класс поломки, что уже стоил шага
+         * размера SOL и имени кеша признаков.
+         *
+         * Разделение слоёв в проекте объявлено давно: позицией владеет
+         * Execution Plane. Страница остаётся при своей бумажной бухгалтерии
+         * (p.stop ниже) — это её план, а не команда бирже. */
+        if(typeof _proc==='function')_proc('разгрузка 30%: <b>'+p.proto+'</b> @ '+m.px.toFixed(_dlDec)+' · '+_usd(bps)+' зафиксировано · стоп и безубыток дальше ведёт движок (пол — вход плюс стоимость выхода)','pr-up');
       }
     }
     if(reason)_apClose(m.px,reason);
@@ -11187,10 +11872,35 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     // fit и fee пишем в запись: без них журнал нельзя честно разбирать задним числом
     // (фит не логировался вообще → порог подбирать было не на чем; издержки менялись → старые bps несравнимы с новыми)
     const rec={t:Date.now(),proto:p.proto,side:p.side,entry:+p.entry.toFixed(6),exit:+px.toFixed(6),bps,netReal,costBps,spreadIn:sIn,spreadOut:sOut,takerExit,seg:p.seg,reason,hold:Math.round((Date.now()-p.t0)/1e3),part:!!p.part,conf:p.conf||[],against:p.against||[],fit:p.fit!=null?p.fit:null,fee:AP_FEE,feeReal,feeTaker};
-    /* Закрытие уходит на биржу ПЕРВЫМ делом — раньше журналов и отрисовки.
-     * Разница в сотню миллисекунд на выходе стоит дороже, чем аккуратность
-     * порядка записей; журнал подождёт, позиция — нет. */
-    _apIntent({op:'close',reason,px:+px.toFixed(8),proto:p.proto,side:p.side});
+    /* ═══════════════════════════════════════════════════════════════════
+     * ВЫХОДОМ ВЛАДЕЕТ ДВИЖОК. СТРАНИЦА ЗАКРЫВАЕТ ТОЛЬКО ТО, ЧЕГО ОН НЕ ЗНАЕТ
+     * ═══════════════════════════════════════════════════════════════════
+     * Раньше отсюда уходило закрытие по ЛЮБОЙ причине. Но stop и tp — это те
+     * же самые уровни, которые страница УЖЕ отдала движку при открытии
+     * (stopPx и tpPx): он ставит по ним тактический стоп и цель. То есть на
+     * одну позицию приходилось два стопа с одинаковой ценой и разными
+     * владельцами, и кто сработает первым — зависело от порядка сообщений по
+     * мосту. Побеждала страница, потому что она считает по СЕРЕДИНЕ книги и
+     * без стоимости выхода: отсюда полоса минусов −0.2…−0.66 б.п. 01–02.09.
+     *
+     * У движка та же цена, но ещё и живая книга, трейлинг, фарм безубытка и
+     * настоящий объём позиции. Значит выход — его.
+     *
+     * Остаются две причины, которых движок знать не может:
+     *   cancel — тезис стратегии умер (это решение автопилота, не стоп);
+     *   manual — трейдер нажал кнопку.
+     * Всё остальное страница закрывает ТОЛЬКО у себя на бумаге: счётчики и
+     * обучение продолжают работать, а живой позицией распоряжается движок.
+     * Следующий вход страницы движок отклонит тихо («бюджет уже в рынке»),
+     * пока настоящая позиция не закрылась — и это правильный отказ. */
+    const ЕГО=(reason==='stop'||reason==='tp'||reason==='time');
+    if(!ЕГО){
+      /* Закрытие уходит на биржу ПЕРВЫМ делом — раньше журналов и отрисовки.
+       * Разница в сотню миллисекунд на выходе стоит дороже, чем аккуратность
+       * порядка записей; журнал подождёт, позиция — нет. */
+      _apIntent({op:'close',reason,px:+px.toFixed(8),proto:p.proto,side:p.side});
+    }
+    rec.paperOnly=ЕГО;   // без этой пометки бумажный выход не отличить от боевого
     _apArchive(rec);                                   // полная копия в IDB — окно ниже обрезается, архив нет
     _apToJournal(rec,'autopilot');                     // и в общий журнал, сегмент «autopilot»
     _ap.log.push(rec); if(_ap.log.length>300)_ap.log=_ap.log.slice(-300);
@@ -11235,7 +11945,17 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     const seen=new Set(), out=[];
     [...arch,...(_ap.log||[])].forEach(r=>{ const k=r.t+'|'+r.proto+'|'+(r.entry||0)+'|'+(r.bps||0);
       if(seen.has(k))return; seen.add(k); out.push(r); });
-    return out.sort((a,b)=>(a.t||0)-(b.t||0));
+    /* ═══ ГРАНИЦА ПЕРИОДА ═══
+     * 26 августа торговля переехала на SOL с нулевой комиссией. Записи теста
+     * на ETH, где круг стоил 14 б.п., в ту же статистику складывать нельзя: у
+     * одной и той же сделки там и тут разная цена, и средний результат
+     * получится ни про что.
+     * Границу задаёт движок (ПЕРИОД.json) — тот же, по которому он принимает
+     * записи. Если движка нет, окно не сужаем: показать лишнее честнее, чем
+     * молча спрятать данные и не сказать об этом. */
+    const _per=(_cnLastStatus&&+_cnLastStatus.periodStart)||0;
+    const win=_per>0?out.filter(r=>!(+r.t>0&&+r.t<_per)):out;
+    return win.sort((a,b)=>(a.t||0)-(b.t||0));
   }
   // выгрузка полного журнала — чтобы отдать на разбор целиком, а не обрезок
   async function _apExport(){
@@ -11435,7 +12155,20 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       +' · пауза <b class="ap-fee">'+Math.round(AP_COOLDOWN/1000)+'с</b>'
       +' <span class="gs-note">(меняется в блоке «Параметры ордера» выше)</span>'
       +'<br>'+posHtml
-      +'<br>сегодня: <b>'+_ap.today.n+'</b> сд · WR '+(wr==null?'—':wr+'%')+expHtml+' · <b class="'+cls(_ap.today.sum)+'">'+_usd(_ap.today.sum)+'</b>'+beTxt+(last?' · последние, USDT: '+last:'')
+      /* ═══ ДВА ЧИСЛА, И ОНИ НЕ ОБЯЗАНЫ СОВПАДАТЬ ═══
+       * «Сегодня 187 сд» — это МОДЕЛЬ страницы: она закрывает свою бумажную
+       * позицию по своим уровням, в том числе когда заявка на биржу не ушла
+       * вовсе. Сделка на бирже — закрытая позиция, и знает о них только
+       * движок, который сверяется с биржей.
+       * Пока эти числа стояли под одной подписью, расхождение читалось как
+       * поломка. Оно и есть поломка — но не учёта, а того, что решение и
+       * исполнение жили в разных местах. Числа разведены и НАЗВАНЫ. */
+      +'<br>модель: <b>'+_ap.today.n+'</b> сд · WR '+(wr==null?'—':wr+'%')+expHtml+' · <b class="'+cls(_ap.today.sum)+'">'+_usd(_ap.today.sum)+'</b>'+beTxt+(last?' · последние, USDT: '+last:'')
+      +(()=>{ const st=_cnLastStatus;
+          if(!st||st['сделокЗакрыто']==null)return '<br><span class="gs-note">на бирже: движок не отвечает — числа сделок нет</span>';
+          return '<br>НА БИРЖЕ: <b>'+st['сделокЗакрыто']+'</b> закрытых сделок за сессию'
+            +'<span class="gs-note"> · заявок '+((st.risk&&String(st.risk).match(/ордеров (\d+)/)||[])[1]||'—')
+            +' (одна сделка это минимум две заявки) · расхождение с моделью — норма: модель закрывается и там, где заявка не ушла</span>'; })()
       /* ═══ ПОДПИСЬ ОБЯЗАНА ЗНАТЬ ПРО БОЕВОЙ РЕЖИМ ═══
        * Строка «тренажёр — реальные ордера не открывает» стояла всегда, в том
        * числе при включённом бое. Это худший вид неверной подписи: она не
