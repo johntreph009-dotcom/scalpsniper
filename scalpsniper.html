@@ -406,7 +406,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
      биржи перестаёт расти (см. cnPoll). Свечение, идущее при мёртвом потоке,
      успокаивало бы ровно тогда, когда нужна тревога. */
   .hub{position:relative;isolation:isolate;transition:border-color .3s ease}
-  .hub::after{content:'';position:absolute;inset:-1px;border-radius:9px;pointer-events:none;
+  /* inset:0, а не -1px: выступающий на пиксель псевдоэлемент делал блок на 2px
+     шире своей коробки, и аудит вёрстки честно считал это переполнением.
+     Свечение и так рисуется тенью наружу — вылезать самому элементу незачем. */
+  .hub::after{content:'';position:absolute;inset:0;border-radius:8px;pointer-events:none;
     z-index:-1;opacity:0;transition:opacity .4s ease}
   .hub-wait{border-color:var(--line)}
   .hub-wait::after{opacity:0}
@@ -586,9 +589,93 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
        смене 0.85 на 1.20. Прыжки лечатся моноширинностью цифр, а не обрезкой;
      · overflow:visible на значении — страховка на случай, если ширину снова
        кто-то ограничит: пусть лучше вылезет, чем соврёт. */
-.day-ctx .dc-chip{flex:0 1 auto;min-width:96px;width:auto}
+/* Равная ширина И отсутствие обрезки — это не выбор из двух, а вопрос числа.
+   Самое длинное значение в ряду («+0.0048%», «продавцы -21%») занимает 62px,
+   метка — 34px, отступы — 16px. Значит нижняя граница чипа 132px, и при пяти
+   чипах в колонке ~880px они спокойно равны и никого не режут. Прежние 88px
+   были меньше содержимого — отсюда и «+0.». */
+/* ═══ РАЗМЕР ЧИПА ИДЁТ ЗА СОДЕРЖИМЫМ, А НЕ НАОБОРОТ ═══
+   Равная ширина 155px давала «BTC ↔» в коробке, где текст занимал пятую часть:
+   рамка есть, наполнения нет. Но и ширина строго по тексту оставляла ряд
+   рваным с пустотой справа.
+   Верно третье: flex-basis по СОДЕРЖИМОМУ (auto) плюс равная доля остатка
+   (grow 1). Чип с длинным значением шире, чип с коротким уже, а свободное
+   место делится поровну — ряд заполнен от края до края, и ни одна коробка не
+   стоит полупустой. */
+.day-ctx{gap:8px;align-items:stretch}
+.day-ctx .dc-chip{
+  flex:1 1 auto; min-width:0; box-sizing:border-box;
+  padding:6px 12px; min-height:32px;
+  justify-content:center; text-align:center; gap:8px;
+  background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.01));
+  transition:border-color .3s ease,box-shadow .3s ease,opacity .3s ease;
+}
+/* ТИПОГРАФИКА: значение — главное, метка — служебное. Раньше они отличались на
+   два пикселя, и глаз читал их как равные. Теперь значение крупнее и плотнее,
+   метка тише; чип наполняется текстом, а не отступами. */
+.day-ctx .dc-chip b{font-size:14px;line-height:1.15;letter-spacing:.2px}
+.day-ctx .dc-chip .dc-k{font-size:9.5px;opacity:.75;letter-spacing:.12em}
 .day-ctx .dc-chip b{overflow:visible;text-overflow:clip;font-variant-numeric:tabular-nums}
 .day-ctx .dc-chip .dc-k{flex-shrink:0}
+/* На телефоне чипы идут по два в ряд, и там значения СРАВНИВАЮТ ПО ВЕРТИКАЛИ —
+   для этого они должны начинаться с одного места. Центрирование это ломает,
+   поэтому оно действует только в широком ряду. */
+@media(max-width:560px){
+  .day-ctx .dc-chip{justify-content:flex-start;text-align:left;min-width:0}
+}
+
+/* ═══ ВЫВОД РЯДА — СТРОКА, А НЕ ОСТАТОК СПРАВА ═══
+   «перевес продавцов» стоял на margin-left:auto и висел у правого края с
+   пустотой в полполосы: читалось как незаконченная вёрстка. Это ВЫВОД из пяти
+   чипов над ним, и место у него отдельное — своей строкой во всю ширину. */
+.day-ctx .dc-note{
+  margin-left:0; flex:1 1 100%;
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  border:1px solid var(--line-soft); border-radius:6px;
+  /* Полоса была высокой и пустой: 11px текста в коробке на 30px. Высоту режем
+     до строки, шрифт поднимаем — наполнение даёт текст, а не воздух. */
+  padding:4px 12px; min-height:26px; line-height:1.2;
+  font-size:12px; letter-spacing:.3px;
+  background:rgba(255,255,255,.025);
+}
+/* Вывод — итог ряда, поэтому он тянется на всю ширину линиями по бокам:
+   глаз видит, что это подпись под пятью чипами, а не шестой чип. */
+.day-ctx .dc-note::before,.day-ctx .dc-note::after{
+  content:'';flex:1 1 auto;height:1px;
+  background:linear-gradient(90deg,transparent,var(--line),transparent);opacity:.7;
+}
+.day-ctx .dc-note.dc-warn{border-color:rgba(230,166,53,.45);background:rgba(230,166,53,.06)}
+
+/* ═══ ТРЕНД ДНЯ: ЛЕВО — ЧТО, ЦЕНТР — ВЕРДИКТ, ПРАВО — СКОЛЬКО ═══
+   Было: метка слева, процент у дальнего края, посередине пустота. Три части
+   разносим по местам и делаем их симметричными относительно строки, а не
+   прижатыми к краям. */
+/* ═══ ТРЕНД ДНЯ: ПУСТОТУ ЗАПОЛНЯЕТ ЛИНИЯ, А НЕ ВОЗДУХ ═══
+   Между вердиктом по центру и процентом справа зияла треть полосы. Заполнять
+   её выдуманным виджетом нельзя — данных под него нет. Заполняем тем, что
+   ничего не утверждает: тонкими направляющими от метки к вердикту и от
+   вердикта к числу. Они связывают три части в одну строку и не претендуют
+   быть показанием прибора.
+   Заодно вердикт крупнее: это главное слово строки, а читался он вровень с
+   меткой. */
+.day-trend{display:flex;align-items:center;gap:10px;min-height:36px;
+  transition:border-color .3s ease,box-shadow .3s ease}
+.day-trend .dt-lbl{flex:0 0 auto}
+.day-trend .dt-dir{flex:0 0 auto;padding:0 4px;font-size:16px;letter-spacing:.6px}
+.day-trend .dt-sub{flex:0 0 auto;margin-left:0;font-size:13px;font-variant-numeric:tabular-nums}
+.day-trend::before,.day-trend::after{content:'';flex:1 1 auto;height:1px;
+  background:linear-gradient(90deg,transparent,var(--line),transparent);opacity:.8}
+/* Порядок в потоке: метка · линия · вердикт · линия · процент. */
+.day-trend::before{order:1}
+.day-trend .dt-lbl{order:0}
+.day-trend .dt-dir{order:2}
+.day-trend::after{order:3}
+.day-trend .dt-sub{order:4}
+.day-trend.dt-up{box-shadow:inset 0 0 14px rgba(63,185,80,.08),0 0 12px rgba(63,185,80,.10)}
+.day-trend.dt-down{box-shadow:inset 0 0 14px rgba(240,69,74,.08),0 0 12px rgba(240,69,74,.10)}
+/* Рейндж — состояние покоя, и выглядеть оно обязано спокойно: без свечения.
+   Светящийся рейндж сделал бы подсветку украшением, а не показанием. */
+.day-trend.dt-range{box-shadow:none}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    ОКАНТОВКА ЧИПА = «ЗДЕСЬ ЕСТЬ ЧТО СМОТРЕТЬ», А НЕ УКРАШЕНИЕ
@@ -1960,6 +2047,43 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .dc-chip b{ font-size:13px; font-weight:700; }
 .day-trend{ font-size:14px; font-weight:700; }
 .gs-note,.rs-note,.zl-note{ font-size:10px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ПРАВИЛО НА ВЕСЬ ПРОЕКТ: ОБРЕЗАННОЕ ЧИСЛО — ЭТО ДРУГОЕ ЧИСЛО
+   ═══════════════════════════════════════════════════════════════════════════
+   03.09.2026 прогон по всей странице (scrollWidth против clientWidth у всего,
+   что с overflow:hidden) нашёл 12 обрезанных мест, 11 из них с цифрами.
+   Главный случай — сценарий зоны: «отбой ask-стены 513K · если стену съедят…»,
+   и дальше шло ТО, ЧТО ДЕЛАТЬ. Половина плана не показывалась.
+
+   Многоточие уместно для названия файла. Для показания прибора и для плана
+   действий оно недопустимо: «+0.» вместо «+0.0045%» читается как ноль, а
+   обрезанный сценарий читается как законченная мысль. И то и другое — не
+   «мелкий дефект вёрстки», а неверное показание.
+
+   ПОЭТОМУ: текст, несущий смысл, ПЕРЕНОСИТСЯ, а не режется. Место под вторую
+   строку есть всегда — высота строки дешевле потерянного смысла.
+
+   Проверка живёт не в глазах: скрипт-аудит гоняется по всему документу и
+   считает элементы, у которых содержимое шире коробки. Это тот же принцип,
+   что «симметрию проверять каскадом, а не глазами». */
+.zl-note{
+  white-space:normal; overflow:visible; text-overflow:clip;
+  line-height:1.35; word-break:break-word;
+}
+/* Числа НИГДЕ не режутся многоточием и везде моноширинны по цифрам: значение
+   не должно дёргать соседей при смене 0.85 на 1.20 — прыжки лечатся шириной
+   цифры, а не обрезкой. */
+.dc-chip b,.zl-m,.zl-dist,.zone-delta,.dt-sub,.dl-price-now,.dl-price-chg{
+  font-variant-numeric:tabular-nums;
+}
+.zl-m,.zl-dist,.zone-delta,.dt-sub{text-overflow:clip}
+
+/* Полоса таймфреймов шире своей коробки (1042 против 886): кнопки за краем
+   были недостижимы вовсе. Даём прокрутку — скрывать орган управления нельзя. */
+.mini-chart-hdr{overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+.mini-chart-hdr::-webkit-scrollbar{height:4px}
+.mini-chart-hdr::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px}
 .proc-feed,.proc-row{ font-size:11px; }
 .zone-note{ font-size:11px; }
 .badge{ font-size:11px; font-weight:700; }
@@ -6077,7 +6201,18 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   }
   // ── Mini chart module ──
   let _klines=[],_klSym='',_klTf='',_chartTimer=null,_zoneHitAreas=[],_chartClickBound=false;
-  let _chartLayers=(()=>{try{return Object.assign({trend:true,vol:true,cvd:true,piv:true,liq:true,trades:true,depth:true,tape:true},JSON.parse(localStorage.getItem('msa_chart_layers_v1')||'{}'));}catch(e){return {trend:true,vol:true,cvd:true,piv:true,liq:true};}})();
+  /* ═══ ПОЛОСА ГЛУБИНЫ И ЛЕНТА — ПО УМОЛЧАНИЮ ВЫКЛЮЧЕНЫ (03.09.2026) ═══
+   * Решение трейдера: «эту плашку спрячь, выглядит не красиво». Речь о правой
+   * колонке графика — силуэте книги и ленте сделок. Она съедала 68px ширины
+   * из 886 и ту же информацию даёт СТАКАН, который открыт вкладкой ниже и
+   * читается точнее: там уровни с числами, а не силуэт.
+   *
+   * Не удаляем, а выключаем: слой остаётся в меню «слои» и включается одним
+   * щелчком. Удалить значило бы потерять возможность посмотреть; оставить
+   * включённым — держать на экране то, чем не пользуются. Выбор трейдера
+   * сохраняется в localStorage и переживает перезагрузку, поэтому умолчание
+   * действует ровно один раз — при первом открытии на этой машине. */
+  let _chartLayers=(()=>{try{return Object.assign({trend:true,vol:true,cvd:true,piv:true,liq:true,trades:true,depth:false,tape:false},JSON.parse(localStorage.getItem('msa_chart_layers_v1')||'{}'));}catch(e){return {trend:true,vol:true,cvd:true,piv:true,liq:true};}})();
   function _saveChartLayers(){try{localStorage.setItem('msa_chart_layers_v1',JSON.stringify(_chartLayers));}catch(e){}}
   function _markLayers(){document.querySelectorAll('.mc-lyr').forEach(b=>b.classList.toggle('active',!!_chartLayers[b.dataset.lyr]));}
   function toggleLayer(k){_chartLayers[k]=!_chartLayers[k];_saveChartLayers();_markLayers();if(typeof _chartRedraw==='function')_chartRedraw();}
@@ -7686,10 +7821,34 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
    * что тренд и контекст: «что сейчас с рынком и чего делать не стоит».
    * Переносим сам УЗЕЛ, а не копируем содержимое: код, который его наполняет,
    * ищет элементы по id и о переезде не узнает. */
+  /* ═══ ПРАВКА 03.09.2026: БАЙАС ЕХАЛ НЕ ТУДА ═══
+   * Эта функция переносила #sessionCtx в #dayHeadBody — и была права по
+   * замыслу. Но тренд и контекст к тому моменту УЖЕ уезжали дальше, в
+   * #livePhase наверх страницы, и байас оставался один в опустевшей панели
+   * внизу боковой колонки: замер показал разрыв в 3970 пикселей между ними.
+   *
+   * Снаружи это выглядело как «блок контекста дня почему-то внизу» — трейдер
+   * так и сказал. На деле блок был разорван на две половины, и каждая жила
+   * там, куда её отправила своя строка кода.
+   *
+   * Ставим байас РЯДОМ С КОНТЕКСТОМ, где бы тот ни оказался: три ряда
+   * отвечают на один вопрос — «что сейчас с рынком и чего делать не стоит», —
+   * и читаются они вместе или никак. Якорь один (#dayCtx), поэтому второго
+   * места назначения быть не может: разъезжаться нечему. */
   function _dayHeadAdopt(){
-    const body=document.getElementById('dayHeadBody');
     const ctx=document.getElementById('sessionCtx');
-    if(body&&ctx&&ctx.parentElement!==body)body.appendChild(ctx);
+    if(!ctx)return;
+    const anchor=document.getElementById('dayCtx')||document.getElementById('dayTrend');
+    if(anchor&&anchor.parentElement){
+      if(ctx.previousElementSibling!==anchor||ctx.parentElement!==anchor.parentElement){
+        anchor.parentElement.insertBefore(ctx,anchor.nextSibling);
+      }
+      return;
+    }
+    /* Якоря ещё нет (инструмент без данных) — тогда прежнее поведение:
+     * панель внизу лучше, чем узел, потерянный в никуда. */
+    const body=document.getElementById('dayHeadBody');
+    if(body&&ctx.parentElement!==body)body.appendChild(ctx);
   }
 
   /* Свёрнутая панель обязана оставлять сводку — иначе сворачивание превращает
