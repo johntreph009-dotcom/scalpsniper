@@ -1115,6 +1115,29 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .hub-pane .proc-feed{border:0;padding:0;margin:0;max-height:260px}
   .hub-pane .whale-panel{border:0;padding:0;margin:0}
   .hub-pane .gs-panel{border:0;padding:0;margin:0}
+  /* ── ЕДИНОРОГИ: таблица наблюдений ──
+   * Шапка и строки делят ОДИН шаблон колонок, поэтому число всегда стоит под
+   * своим заголовком: при отдельной вёрстке шапки они разъезжаются на первом же
+   * длинном названии монеты, и значение читается под чужим именем.
+   * tabular-nums — цифры одной ширины, значения не дёргают соседей при
+   * обновлении. Текст ПЕРЕНОСИТСЯ, а не режется: обрезанное число это неверное
+   * показание прибора, а не косметика (правило проекта от 03.09). */
+  .uni-tbl{display:grid;grid-template-columns:minmax(74px,1.4fr) 62px 62px 62px 58px 56px 84px;
+    gap:1px 8px;font-size:10.5px;font-variant-numeric:tabular-nums;align-items:baseline}
+  .uni-tbl .uh{font-size:9px;letter-spacing:.05em;color:var(--text-dim);text-transform:uppercase;
+    padding-bottom:3px;border-bottom:1px solid var(--line-soft);overflow-wrap:anywhere}
+  .uni-tbl .uc{padding:3px 0;overflow-wrap:anywhere}
+  .uni-tbl .um{font-weight:700;color:var(--accent);letter-spacing:.03em}
+  .uni-note{margin:7px 0;padding:7px 10px;border-radius:7px;border:1px dashed var(--line-soft);
+    font-size:10px;line-height:1.65;overflow-wrap:anywhere;color:var(--text-dim)}
+  @media (max-width:560px){
+    /* Узкий экран: колонки сжимать нельзя — число станет обрезанным. Даём
+       прокрутку, как уже сделано полосе таймфреймов: орган чтения скрывать
+       нельзя, а строка дешевле потерянного смысла. */
+    .uni-tbl{grid-template-columns:minmax(74px,1.4fr) 62px 62px 62px 58px 56px 84px;
+      min-width:520px}
+    .uni-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  }
   .hub-pane .dl-canvas-lbl{margin:0 0 6px}
   /* ── ПАНЕЛЬ АВТОПИЛОТА: пульс сканирования и карточка позиции ── */
   .ap-scan{display:flex;align-items:center;gap:7px;color:var(--text-faint);font-size:10px}
@@ -2634,6 +2657,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         <button type="button" class="hub-tab" data-hub="pass">🧬 Паспорт</button>
         <button type="button" class="hub-tab" data-hub="whale">🐋 Киты<span class="hub-dot" id="hubDotW"></span></button>
         <button type="button" class="hub-tab" data-hub="liq">💥 Ликвидации<span class="hub-dot" id="hubDotL"></span></button>
+        <button type="button" class="hub-tab" data-hub="uni">🦄 Единороги<span class="hub-dot" id="hubDotU"></span></button>
       </div>
       <div class="vibe-strip">
         <span class="vibe-name" id="vibeState" data-v="calm">ДЫХАНИЕ</span>
@@ -2650,6 +2674,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         <div class="hub-pane" id="hubPass"></div>
         <div class="hub-pane" id="hubWhale"></div>
         <div class="hub-pane" id="hubLiq"></div>
+        <div class="hub-pane" id="hubUni"><span class="gs-note">нажми «Обойти вселенную» — проверю ~2000 монет по паттерну «Единорог»</span></div>
       </div>
     </div>
     <div class="dl-canvas-lbl" style="margin-top:8px">РАЗБОР АВТОПИЛОТА <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Матожидание (среднее bps на сделку) по протоколам, сегментам рынка и причинам выхода. Считается по журналу движка при ТЕКУЩИХ издержках — старые записи пересчитываются к ним же. Матожидание важнее WR: высокий процент побед при отрицательном среднем — убыточная машина.</span></span></div>
@@ -5014,7 +5039,52 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
                 ' → нужен винрейт <b class="'+(плох?'neg':'pos')+'">'+(c['нуженВинрейт']==null?'—':c['нуженВинрейт']+'%')+'</b>'+
                 (плох?' — НЕ ДОСТИГНУТ':'')+
                 ' · до трейлинга дошли '+c['доляТрейлинга']+'%'+
-                (c['выброс']?' · отброшено по правдоподобию '+c['выброс']:'')+'</span>';})()
+                (c['выброс']?' · отброшено по правдоподобию '+c['выброс']:'')+
+                /* ═══ РАБОТАЕТ ЛИ ОЖИДАНИЕ ВЫХОДА ═══
+                 * Пауза перед выходом по безубытку (07.09.2026) — ГИПОТЕЗА:
+                 * замер сказал, что после выхода цена шла дальше в нашу
+                 * сторону (+2.9 б.п. за минуту, 77% случаев), но сработает ли
+                 * пауза именно у нас, знает только журнал. Пока число не на
+                 * виду, «стало лучше» останется ощущением.
+                 * Показываем ОБА: сколько касаний оказались фитилём и сколько
+                 * безубытков всё же взято. Одно без другого ничего не значит —
+                 * ноль фитилей может означать и что пауза не нужна, и что она
+                 * не работает. */
+                /* ═══ ПОЧЕМУ СДЕЛКИ ЗАКРЫЛИСЬ И КТО ИХ ОТКРЫЛ ═══
+                 * Числа считались давно (свод отдаёт `выходы`, `кто`,
+                 * `стопБпМедиана`, `итогUSD`), но в панель не попадали — их
+                 * приходилось спрашивать отдельным запуском. Трейдер каждый раз
+                 * просил разобрать сделки вручную; разбор, который надо
+                 * запускать, не запускают.
+                 *
+                 * Причина выхода — первое, что объясняет результат: «дошли до
+                 * цели» и «выбило стопом» дают одну и ту же цифру PnL и
+                 * совершенно разные выводы. Автор входа отвечает на второй
+                 * вопрос: план это был или робот.
+                 *
+                 * Показываем ТОЛЬКО если есть что показать: пустой заголовок
+                 * «выходы:» без чисел занимает строку и не говорит ничего. */
+                ((()=>{ const c2=m['разбор']['сутки']||{};
+                  const пар=o=>Object.entries(o||{}).sort((a,b)=>b[1]-a[1])
+                    .map(([k,v])=>escapeHtml(String(k))+' <b>'+v+'</b>').join(' · ');
+                  const в=пар(c2['выходы']), к=пар(c2['кто']);
+                  if(!в&&!к) return '';
+                  return '<br><span class="gs-note">'+
+                    (в?'выходы: '+в:'')+
+                    (в&&к?'<br>':'')+
+                    (к?'вход: '+к:'')+
+                    (c2['стопБпМедиана']!=null?' · тактический стоп медианой '+c2['стопБпМедиана']+' б.п.':'')+
+                    (c2['итогUSD']!=null?' · итог <b class="'+(c2['итогUSD']>=0?'pos':'neg')+'">'+
+                      (c2['итогUSD']>=0?'+':'')+c2['итогUSD']+'</b>':'')+
+                    '</span>';})())+
+                ((m['разбор']['фитилей']!=null)
+                  ? '<br><span class="gs-note">ожидание выхода: отброшено фитилей <b>'+
+                    m['разбор']['фитилей']+'</b>, безубытков взято <b>'+
+                    (m['разбор']['безубытковВзято']||0)+'</b>'+
+                    (m['разбор']['фитилей']===0&&(m['разбор']['безубытковВзято']||0)===0
+                      ? ' — выборки ещё нет'
+                      : '')+'</span>'
+                  : '')+'</span>';})()
           : (m['разборПочему']
               ? '<br><span class="neg">'+escapeHtml(String(m['разборПочему']))+'</span>'
               : ''))+
@@ -7547,9 +7617,60 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         _zBadges=_zBadges.slice().sort((a,b)=>Math.abs(a.y-cy)-Math.abs(b.y-cy))
                          .slice(0,fit).sort((a,b)=>a.y-b.y);
       }
-      let prevB=-99;
-      _zBadges.forEach(b=>{
-        const by=Math.max(9,Math.min(ph-9,Math.max(b.y,prevB+17))); prevB=by;
+      /* ═══════════════════════════════════════════════════════════════════════
+       * РАЗВЕДЕНИЕ КОЛЛИЗИЙ — МЕСТНОЕ, А НЕ КАСКАДОМ ВНИЗ
+       * ═══════════════════════════════════════════════════════════════════════
+       * ЖАЛОБА ТРЕЙДЕРА 07.09.2026: «зоны сбиваются конкретно у меня, на других
+       * устройствах правильно». Замер в его браузере: dpr 1, зума нет,
+       * подложки холстов сходятся с CSS до пикселя — геометрия ни при чём.
+       *
+       * Дело было здесь. Стояло `Math.max(b.y, prevB+17)`: каждая следующая
+       * метка отталкивается ТОЛЬКО ВНИЗ от предыдущей. Пока зоны редкие, это
+       * незаметно. Но стоит наверху образоваться тесной группе (у него 105.25,
+       * 105.2, 105.15 — шаг в пять центов), и сдвиг НАКАПЛИВАЕТСЯ: он
+       * передаётся всем меткам ниже, даже там, где места вокруг сколько угодно.
+       * Лестница целиком перестаёт соответствовать полосам на графике.
+       *
+       * Упёршись в низ, `Math.min(ph-9, …)` кладёт остаток НА ОДНО МЕСТО —
+       * отсюда подписи одна на другой (104.96 поверх 104.95).
+       *
+       * Почему «только у него»: каскад запускается первой же коллизией, а она
+       * зависит от высоты графика. На экране повыше группа наверху расходится
+       * сама, первой коллизии нет, и всё стоит по своим ценам.
+       *
+       * Чиним как это делают ценовые шкалы: метки собираются в ГРУППЫ по
+       * фактическому пересечению, и каждая группа раздвигается ВОКРУГ СВОЕГО
+       * ЦЕНТРА. Тогда сдвиг остаётся внутри группы и не выходит за её пределы:
+       * метка, у которой соседей нет, стоит ровно на своей цене. Выноска к
+       * истинному уровню рисуется по-прежнему — сдвинутая подпись обязана
+       * показывать, откуда она.
+       *
+       * Клампим группу целиком, а не каждую метку: поштучный кламп и есть то,
+       * что складывало их в стопку у края. */
+      const ШАГ=17, ВЕРХ=9, НИЗ=ph-9;
+      const места=(()=>{
+        const src=_zBadges.map(b=>b.y);
+        const out=new Array(src.length);
+        let i=0;
+        while(i<src.length){
+          /* Группа: пока следующая метка не помещается за предыдущей. */
+          let j=i, need=src[i];
+          while(j+1<src.length && src[j+1] < need+ШАГ){ j++; need=Math.max(src[j], need+ШАГ); }
+          const n=j-i+1;
+          if(n===1){ out[i]=Math.max(ВЕРХ,Math.min(НИЗ,src[i])); i++; continue; }
+          /* Центр группы — среднее ИСТИННЫХ позиций: так суммарный сдвиг
+           * наименьший, и никто не уезжает дальше, чем обязан. */
+          let c=0; for(let k=i;k<=j;k++) c+=src[k]; c/=n;
+          let top=c-(n-1)*ШАГ/2;
+          if(top<ВЕРХ) top=ВЕРХ;
+          if(top+(n-1)*ШАГ>НИЗ) top=Math.max(ВЕРХ,НИЗ-(n-1)*ШАГ);
+          for(let k=0;k<n;k++) out[i+k]=top+k*ШАГ;
+          i=j+1;
+        }
+        return out;
+      })();
+      _zBadges.forEach((b,bi)=>{
+        const by=места[bi];
         /* Выноска идёт от истинной цены к сдвинутой подписи и заканчивается
          * у КРАЯ ШКАЛЫ, а не у края всей полосы: иначе линия перечёркивала
          * стакан. */
@@ -11401,7 +11522,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   function _hubGo(k){
     _hubCur=k;
     document.querySelectorAll('.hub-tab').forEach(b=>b.classList.toggle('on',b.getAttribute('data-hub')===k));
-    const map={book:'hubBook',auto:'hubAuto',proc:'hubProc',audit:'hubAudit',pass:'hubPass',whale:'hubWhale',liq:'hubLiq'};
+    const map={book:'hubBook',auto:'hubAuto',proc:'hubProc',audit:'hubAudit',pass:'hubPass',whale:'hubWhale',liq:'hubLiq',uni:'hubUni'};
     Object.entries(map).forEach(([n,id])=>{const p=document.getElementById(id); if(p)p.classList.toggle('on',n===k);});
     // ПОТОКИ НЕ ЗАВИСЯТ ОТ ВКЛАДКИ. Переключение — это только смена того, что ты СМОТРИШЬ.
     // Ленты питают не только свою панель (маркеры на графике сессии, будущий «Аквариум»),
@@ -11429,6 +11550,9 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       : (k==='pass') ? '<button type="button" class="zf-refresh" onclick="_cpRender(true)">↻ Прогнать историю</button>'
       : (k==='whale') ? '<button type="button" class="zf-refresh'+(whOn?' on':'')+'" onclick="_whToggle()">'+(whOn?'⏹ Остановить ленту':'▶ Включить ленту')+'</button> <span class="gs-note">работает и на других вкладках</span>'
       : (k==='liq') ? '<button type="button" class="zf-refresh'+(lqOn?' on':'')+'" onclick="_liqToggle()">'+(lqOn?'⏹ Остановить фид':'▶ Включить фид')+'</button> <span class="gs-note">работает и на других вкладках</span>'
+      : (k==='uni') ? '<button type="button" class="zf-refresh" onclick="_uniScan()">▶ Обойти вселенную</button> '
+          +'<button type="button" class="zf-refresh" onclick="_uniRender()">↻ Показать находки</button> '
+          +'<span class="gs-note">аналитика · входы руками · ожидание НЕ ЗАМЕРЕНО</span>'
       : (k==='book') ? '<span class="gs-note">клик по уровню копирует цену · у стен показан сценарий: отскок / пробой / разъедают</span>'
       : (k==='auto') ? '<span class="gs-note">движок-диспетчер: сетка в рейндже, направленные в тренде · '
           +(_armPrev?'<b class="neg">направленные уходят на биржу; СЕТКА — нет, она остаётся моделью</b>'
@@ -11440,6 +11564,12 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     const dw=document.getElementById('hubDotW'), dl=document.getElementById('hubDotL');
     if(dw)dw.classList.toggle('live',typeof _whWorker!=='undefined'&&!!_whWorker);
     if(dl)dl.classList.toggle('live',typeof _liqWs!=='undefined'&&!!_liqWs);
+    /* Огонёк единорогов означает «обход ИДЁТ», и состояние берётся у движка, а
+     * не у страницы: перезагрузи вкладку во время обхода — он всё равно идёт,
+     * потому что это отдельный процесс. Огонёк от локального флага после
+     * перезагрузки потух бы при живом обходе. */
+    const du=document.getElementById('hubDotU');
+    if(du)du.classList.toggle('live',!!_uniScanOn);
   }
   function _whToggle(){
     try{ if(_whWorker){_whStop();} else {_whStart(_symFromTicker(_tkKey()));} }catch(e){}
@@ -11448,6 +11578,155 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   function _liqToggle(){
     try{ if(typeof _liqWs!=='undefined'&&_liqWs){_liqStop();} else {_liqStart();} }catch(e){}
     _hubDots(); _hubGo(_hubCur);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+   * ЕДИНОРОГИ — ПАНЕЛЬ НАБЛЮДЕНИЯ
+   * ═══════════════════════════════════════════════════════════════════════
+   * Паттерн трейдера: упала на 85–98% от ATH, капитализация $10–100M, лежит в
+   * двукратном диапазоне не меньше двух месяцев, и дневная свеча закрылась с
+   * объёмом ≥×3 к средней за 60 дней.
+   *
+   * ЭТА ПАНЕЛЬ НИЧЕГО НЕ СЧИТАЕТ. Она читает data/ЕДИНОРОГИ.json, который
+   * собрал СКАН-ЕДИНОРОГОВ.js по определению из Единорог.js. Своей формулы у
+   * страницы быть не должно: она уже имела свою — размера позиции — и та
+   * выродилась в «$0.19 × 25x = $4.75», после чего биржа отклоняла каждую
+   * заявку. Здесь то же правило, только про паттерн.
+   *
+   * ЧЕГО ЗДЕСЬ НЕТ И НЕ БУДЕТ: цен входа, стопа и цели; зелёного «покупай»;
+   * кнопки, ведущей к ордеру. Решение трейдера 15.09: только смотреть и входить
+   * руками. Ожидание паттерна НЕ ЗАМЕРЕНО, и в каждой строке про это сказано
+   * словами — пустая графа читалась бы как ноль, а ноль это утверждение.
+   *
+   * ЭКРАНИРОВАНИЕ ОБЯЗАТЕЛЬНО. Названия монет приходят от CoinGecko, то есть
+   * это ЧУЖОЙ ТЕКСТ. Терминал живёт на том же адресе, что торговый API, и XSS
+   * здесь равен вызову /api/zones — подмене плана зон. Монета с именем-скриптом
+   * стоит ноль и попадает в фильтр «дешёвых» первой. */
+  let _uniScanOn=false, _uniTimer=null;
+  function _uniEsc(s){
+    return String(s==null?'':s).replace(/[&<>"']/g,c=>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function _uniM(v){ const n=+v||0; return n>=1e6?(n/1e6).toFixed(1)+'M':Math.round(n/1e3)+'K'; }
+
+  function _uniСтрока(x){
+    return '<div class="uc um">'+_uniEsc(x.символ)+'</div>'
+      +'<div class="uc">$'+_uniM(x.кап)+'</div>'
+      +'<div class="uc">'+(+x.отATHпроц||0).toFixed(0)+'%</div>'
+      +'<div class="uc">+'+(+x.отATLпроц||0).toFixed(0)+'%</div>'
+      +'<div class="uc">'+(+x.днейБазы||0)+' дн</div>'
+      +'<div class="uc">×'+(+x.кратностьОбъёма||0).toFixed(1)+'</div>'
+      +'<div class="uc">'+_uniEsc(x.датаЗахода||'—')+'</div>';
+  }
+  function _uniТаблица(список){
+    if(!список||!список.length)return '';
+    return '<div class="uni-wrap"><div class="uni-tbl">'
+      +'<div class="uh">монета</div><div class="uh">кап</div><div class="uh">от ATH</div>'
+      +'<div class="uh">от мин</div><div class="uh">база</div><div class="uh">объём</div>'
+      +'<div class="uh">закрытие</div>'
+      +список.map(_uniСтрока).join('')+'</div></div>';
+  }
+
+  async function _uniRender(){
+    const el=document.getElementById('hubUni'); if(!el)return;
+    let d=null;
+    try{
+      const r=await fetch('/api/unicorns',{cache:'no-store'});
+      d=await r.json();
+    }catch(e){
+      /* ОТКАЗ ЧТЕНИЯ — НЕ «НАХОДОК НЕТ». Пустой список здесь был бы ровно той
+       * ошибкой, которая трижды в этом проекте давала не симптом, а спокойствие. */
+      el.innerHTML='<span class="gs-note neg">движок не ответил: '+_uniEsc(e&&e.message||e)
+        +' — это ОТКАЗ чтения, а не «единорогов нет».</span>';
+      return;
+    }
+    _uniScanOn=!!(d&&d.скан&&d.скан.идёт);
+    _hubDots();
+
+    const ш=[];
+    if(_uniScanOn){
+      ш.push('<div class="uni-note"><b>обход идёт</b> — '+(+(d.скан.секундИдёт)||0)+' с · '
+        +_uniEsc(d.скан.строка||'…')+'<br>Он ходит в два чужих API с паузами под их лимиты, '
+        +'поэтому занимает минуты. Движок при этом торгует как обычно: обход — отдельный процесс.</div>');
+    }else if(d&&d.скан&&d.скан.итог){
+      ш.push('<div class="uni-note">последний обход: '+_uniEsc(d.скан.итог)+'</div>');
+    }
+
+    if(!d||d.сканировано===false){
+      el.innerHTML=ш.join('')+'<span class="gs-note">'+_uniEsc((d&&d.почему)||'находок ещё нет')
+        +'<br>Нажми «Обойти вселенную». Это НЕ «единорогов нет» — это «ещё не смотрели».</span>';
+      return;
+    }
+
+    const н=d.находки||[], п=d.почтиПодошли||[], отк=d.отклонены||[], см=d.просмотрено||{};
+
+    /* Число просмотренного стоит РЯДОМ с находками, а не в логе. Две тысячи
+     * взглядов в день рождают находки сами собой: находка без знания о числе
+     * взглядов — не находка. Так же сделано в ЗАМЕР-ПРОБОЯ («срезов посмотрено»). */
+    ш.push('<div class="uni-note">'
+      +'<b>ОЖИДАНИЕ НЕ ЗАМЕРЕНО.</b> Сколько такие находки приносили — не проверено. '
+      +'Это наблюдение, а не сигнал: уровни входа, стопа и цели здесь не показываются, '
+      +'потому что это решение трейдера.<br>'
+      +'просмотрено монет: <b>'+(+см.монет||0)+'</b> · прошли условие 1: <b>'+(+см.прошлиУсловие1||0)
+      +'</b> · свечей взято: <b>'+(+см.свечиВзяты||0)+'</b><br>'
+      +'источники: ATH и капитализация — CoinGecko, свечи — Binance (1 день). '
+      +'обновлено: '+_uniEsc(String(d.обновлено||'—').slice(0,16).replace('T',' '))+'</div>');
+
+    if(d.полно===false){
+      ш.push('<div class="uni-note neg"><b>⚠ ОБХОД НЕПОЛНЫЙ.</b> '
+        +'Найденное верно, но найдено НЕ ВСЁ — пропущенное неотличимо от отсутствующего. '
+        +'жалоб: '+((d.жалобы||[]).length)+'. Стоит повторить обход.</div>');
+    }
+
+    let h=ш.join('');
+    h+='<div class="dl-canvas-lbl" style="margin-top:4px">НАХОДКИ — все три условия ('+н.length+')</div>';
+    h+= н.length ? _uniТаблица(н)
+      : '<span class="gs-note">ни одна монета не прошла все три условия. '
+        +'Это нормальный результат: конъюнкция узкая, и в спокойные недели находок нет вовсе.</span>';
+
+    /* ГРУППА Б живёт на виду нарочно. Без неё вопрос «выросли ли находки»
+     * отвечает на другой вопрос — «отскакивают ли убитые малые капы». Сравнение
+     * с этой группой и есть проверка того, что третье условие вообще что-то
+     * добавляет; пока замера нет, трейдер видит хотя бы саму базу. */
+    h+='<div class="dl-canvas-lbl" style="margin-top:9px">ПОЧТИ — база есть, захода не было ('+п.length+')</div>';
+    h+= п.length ? _uniТаблица(п.slice(0,40))
+      : '<span class="gs-note">пусто</span>';
+
+    if(отк.length){
+      h+='<div class="dl-canvas-lbl" style="margin-top:9px">СВЯЗКА НЕ СОШЛАСЬ ('+отк.length+')</div>';
+      h+='<div class="uni-note">Эти монеты прошли условие 1, но историю к ним приклеить нельзя: '
+        +'тикер носят несколько монет, пары нет на Binance, либо цены двух источников разошлись. '
+        +'Показаны, а не выброшены: выброшенное молча хуже названного подозрительного.<br>'
+        +отк.slice(0,12).map(x=>'· <b>'+_uniEsc(x.символ)+'</b> — '+_uniEsc(x.причина)).join('<br>')
+        +(отк.length>12?'<br>…и ещё '+(отк.length-12):'')+'</div>';
+    }
+    el.innerHTML=h;
+  }
+
+  async function _uniScan(){
+    const el=document.getElementById('hubUni'); if(!el)return;
+    try{
+      const r=await fetch('/api/unicorns/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      const j=await r.json();
+      if(!j||!j.запущен){
+        el.innerHTML='<span class="gs-note neg">обход не запущен: '+_uniEsc((j&&j.почему)||'движок отказал')+'</span>';
+        return;
+      }
+      _uniScanOn=true; _hubDots();
+    }catch(e){
+      el.innerHTML='<span class="gs-note neg">движок не ответил: '+_uniEsc(e&&e.message||e)+'</span>';
+      return;
+    }
+    /* Опрос, пока обход идёт. Признак жизни — СТРОКА ОБХОДА, а не таймер:
+     * анимация по таймеру выглядела бы одинаково при живом и мёртвом процессе,
+     * то есть успокаивала бы ровно тогда, когда нужна тревога (то же правило,
+     * по которому пульс окантовки привязан к счётчику сообщений биржи). */
+    if(_uniTimer)clearInterval(_uniTimer);
+    _uniTimer=setInterval(()=>{
+      if(!_uniScanOn){ clearInterval(_uniTimer); _uniTimer=null; return; }
+      _uniRender();
+    },3000);
+    _uniRender();
   }
   setInterval(()=>{ if(_hubReady)_hubDots(); },3000);   // индикаторы живут своей жизнью — поток мог упасть сам
   async function _cpRender(force){
@@ -13003,6 +13282,44 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       h.forEach(x=>full.push('  +'+x[1]+'px  ширина '+x[3]+'px  '+x[2]+(x[4]?'   «'+x[4]+'»':''))); full.push(''); }
     if(t.length){ full.push('МЕЛКИЕ КНОПКИ ('+t.length+'):');
       t.forEach(x=>full.push('  '+x[1]+'px  '+x[0])); }
+    /* ═══════════════════════════════════════════════════════════════════════
+     * ХОЛСТЫ: СОВПАДАЕТ ЛИ ПОДЛОЖКА С ТЕМ, ЧТО ПОКАЗЫВАЕТ CSS
+     * ═══════════════════════════════════════════════════════════════════════
+     * ЖАЛОБА ТРЕЙДЕРА 07.09.2026: «зоны сбиваются конкретно у меня в браузере,
+     * на других устройствах правильно». Метки зон рисуются НА ХОЛСТЕ, значит
+     * съехать они могут только вместе с его геометрией.
+     *
+     * Холст имеет ДВА размера: подложку в пикселях (cv.width) и размер на
+     * экране (CSS). Код задаёт подложку как W×dpr и растягивает её обратно
+     * стилем. Пока dpr целый, всё сходится. При масштабе браузера 110% или
+     * 125% dpr становится дробным, округление подложки даёт остаток, и всё
+     * нарисованное на холсте едет относительно того, что задумано, — тем
+     * сильнее, чем дальше от начала координат. Именно так «съезжают» метки
+     * справа, оставаясь на месте слева.
+     *
+     * Меряем расхождение, а не рассуждаем о нём: для каждого холста сравниваем
+     * подложку с тем, что даёт CSS-ширина, умноженная на dpr. Расхождение
+     * больше пикселя — это уже видимый сдвиг на краю.
+     *
+     * Печатаем и dpr: у трейдера и на «других устройствах» он разный по
+     * определению, и первое, что надо сравнить, — именно его. */
+    try{
+      const хол=[...document.querySelectorAll('canvas')].map(cv=>{
+        const r=cv.getBoundingClientRect();
+        if(!(r.width>0)) return null;
+        const d=window.devicePixelRatio||1;
+        const надо=Math.round(r.width*d), есть=cv.width;
+        const дрейф=есть-надо;
+        return Math.abs(дрейф)>1 ? {id:cv.id||cv.className||'canvas',
+          css:+r.width.toFixed(1), подложка:есть, надо, дрейф} : null;
+      }).filter(Boolean);
+      full.push('');
+      full.push('ХОЛСТЫ: dpr '+(window.devicePixelRatio||1)+
+        ' · масштаб браузера меняет dpr, поэтому сравнивай его с другим устройством');
+      if(!хол.length) full.push('  подложка сходится с CSS у всех холстов — сдвига отсюда нет');
+      else хол.forEach(x=>full.push('  РАСХОЖДЕНИЕ '+(x.дрейф>0?'+':'')+x.дрейф+'px: '+x.id+
+        ' — CSS '+x.css+'px, подложка '+x.подложка+', надо '+x.надо));
+    }catch(e){ full.push('ХОЛСТЫ: замер не прошёл — '+e.message); }
     if(!h.length&&!t.length) full.push('чисто: обрезки нет, тап-таргеты в норме');
     _ovLastReport=full.join('\n');
     try{localStorage.setItem('msa_ovreport_v1',_ovLastReport);}catch(e){}
@@ -13149,7 +13466,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   }
   try{ _hdrStickInit(); }catch(e){ console.warn('[scalpsniper] hdr-stick:',e&&e.message); }
   // Сворачиваемые панели хаба — по одному вызову на блок, добавить новый тривиально
-  try{ [['book','hubBook'],['auto','hubAuto'],['proc','hubProc'],['pass','hubPass'],['whale','hubWhale'],['liq','hubLiq']]
+  try{ [['book','hubBook'],['auto','hubAuto'],['proc','hubProc'],['pass','hubPass'],['whale','hubWhale'],['liq','hubLiq'],['uni','hubUni']]
     .forEach(([k,id])=>_foldMount('hub_'+k,document.getElementById(id))); }catch(e){}
 
   // ═══════════ ВТОРАЯ ВКЛАДКА (AUDIT) ═══════════
