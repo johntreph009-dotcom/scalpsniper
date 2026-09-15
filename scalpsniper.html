@@ -2674,7 +2674,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         <div class="hub-pane" id="hubPass"></div>
         <div class="hub-pane" id="hubWhale"></div>
         <div class="hub-pane" id="hubLiq"></div>
-        <div class="hub-pane" id="hubUni"><span class="gs-note">нажми «Обойти вселенную» — проверю ~2000 монет по паттерну «Единорог»</span></div>
+        <div class="hub-pane" id="hubUni"><div id="uniBody"><span class="gs-note">нажми «Обойти вселенную» — проверю ~2000 монет по паттерну «Единорог»</span></div></div>
       </div>
     </div>
     <div class="dl-canvas-lbl" style="margin-top:8px">РАЗБОР АВТОПИЛОТА <span class="hint-wrap"><i class="hint-ico">?</i><span class="hint-tip">Матожидание (среднее bps на сделку) по протоколам, сегментам рынка и причинам выхода. Считается по журналу движка при ТЕКУЩИХ издержках — старые записи пересчитываются к ним же. Матожидание важнее WR: высокий процент побед при отрицательном среднем — убыточная машина.</span></span></div>
@@ -11603,6 +11603,18 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
    * здесь равен вызову /api/zones — подмене плана зон. Монета с именем-скриптом
    * стоит ноль и попадает в фильтр «дешёвых» первой. */
   let _uniScanOn=false, _uniTimer=null;
+  /* ═══ ПИШЕМ В ДОЧЕРНИЙ КОНТЕЙНЕР, А НЕ В САМУ ПАНЕЛЬ ═══
+   * Найдено стендом DOM перед запуском. `_foldMount` вставляет кнопку
+   * сворачивания ВНУТРЬ панели хаба первым ребёнком, а первая же отрисовка
+   * через `hubUni.innerHTML = …` эту кнопку стирала: у всех соседних панелей
+   * она оставалась, у моей пропадала. Орган управления, исчезающий после
+   * первого обновления данных, — это то же «скрытая кнопка», что уже было с
+   * полосой таймфреймов, только исчезающая не за краем, а во времени.
+   * У соседей содержимое живёт в ДОЧЕРНИХ узлах (их переносят в панель
+   * целиком), поэтому кнопка и цела. Делаем так же. */
+  function _uniБокс(){
+    return document.getElementById('uniBody') || document.getElementById('hubUni');
+  }
   function _uniEsc(s){
     return String(s==null?'':s).replace(/[&<>"']/g,c=>
       ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -11628,7 +11640,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   }
 
   async function _uniRender(){
-    const el=document.getElementById('hubUni'); if(!el)return;
+    const el=_uniБокс(); if(!el)return;
     let d=null;
     try{
       const r=await fetch('/api/unicorns',{cache:'no-store'});
@@ -11704,7 +11716,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   }
 
   async function _uniScan(){
-    const el=document.getElementById('hubUni'); if(!el)return;
+    const el=_uniБокс(); if(!el)return;
     try{
       const r=await fetch('/api/unicorns/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
       const j=await r.json();
