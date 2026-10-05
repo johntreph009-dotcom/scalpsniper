@@ -2471,6 +2471,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         <span class="mc-hdr-gap"></span>
         <button type="button" class="mc-act" id="mcZonesBtn" onclick="_mcZonesRefresh()" title="Пересобрать зоны из стакана под текущий таймфрейм. Ручные зоны и вставка из разбора не пострадают.">↻ зоны</button>
         <button type="button" class="mc-act" id="mcLyrBtn" onclick="_mcLayersToggle()" title="Слои графика">◈ слои</button>
+        <span class="mc-sess" id="mcEma" title="Порядок EMA 20/50/200 и закрытие последней ЗАКРЫТОЙ свечи относительно EMA20/50 (для открытой позиции). Подсказка, не правило: удержание по EMA замерено отрицательным (Г-05.10-1)."></span>
         <span class="mc-sess" id="mcSess" title="Торговые сессии по местному времени городов: Токио 09–18, Лондон 08–17, Нью-Йорк 08–17 (летнее время учтено). Отметка времени, не сигнал."></span>
         <span class="mc-status" id="mcStatus">загрузка…</span>
         <button type="button" class="mc-tfbtn" id="mcTallBtn" onclick="_mcToggleTall()" title="Развернуть/свернуть график по высоте">⤢</button>
@@ -6804,6 +6805,13 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   }
   // ── сводная карта ликвидности в Сессии: агрегация книг (перп WS + спот) в ДОЛЯХ — единицы и бренды бирж не смешиваются и не светятся ──
   let _swLast=0,_swBusy=false;
+  /* Книги одного инструмента: середина каждой не дальше 2% от опоры (книга REST текущего символа, нет — живая цена). Чистая. */
+  function _книгиСвоего(books,lp){
+    const сер=b=>(b.asks.length&&b.bids.length)?(+b.asks[0][0]+ +b.bids[0][0])/2:0;
+    const оп=books.find(b=>b.опора), реф=оп?сер(оп):(isFinite(lp)&&lp>0?lp:0);
+    if(!(реф>0))return books.slice();
+    return books.filter(b=>{ const m=сер(b); return m>0&&Math.abs(m/реф-1)<=0.02; });
+  }
   async function _sessWallsTick(){
     if(phase!=='live'||_swBusy)return;
     const now=Date.now(); if(now-_swLast<10000)return; _swLast=now; _swBusy=true;
@@ -6833,8 +6841,12 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       try{
         const sym=(typeof _symFromTicker==='function')?_symFromTicker(_tkKey()):'BTCUSDT';
         const d=await fetch('https://api.binance.com/api/v3/depth?symbol='+sym+'&limit=20',{cache:'no-store'}).then(r=>r.json());
-        if(d&&d.asks&&d.asks.length)books.push({asks:d.asks.map(x=>[+x[0],+x[1]]),bids:d.bids.map(x=>[+x[0],+x[1]])});
+        if(d&&d.asks&&d.asks.length)books.push({asks:d.asks.map(x=>[+x[0],+x[1]]),bids:d.bids.map(x=>[+x[0],+x[1]]),опора:true});
       }catch(e){}
+      /* ЧУЖАЯ КНИГА НЕ СМЕШИВАЕТСЯ (05.10.2026): после смены тикера снимок воркера ещё секунды несёт прежний инструмент
+         (на скрине «⛰↓ 86014 (−99.72%)» — книга BTC в карте SOL). Книга, чья середина дальше 2% от опоры (книга REST по
+         текущему символу, нет её — живая цена), отбрасывается. */
+      { const lp=parseFloat((document.getElementById('livePrice')||{}).value); const св=_книгиСвоего(books,lp); books.length=0; books.push(...св); }
       if(el&&books.length){
         const f=v=>typeof _rpx==='function'?_rpx(v):v;
         // каждая книга → доли своей стороны, затем среднее по общей ценовой сетке
@@ -7074,7 +7086,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     } }catch(e){}
     const cur=hh[n-1], first=hh[0], pct=first?((cur-first)/first*100):0;
     if(now)now.textContent=fmt(cur);
-    if(chg){ chg.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%'; chg.className='dl-price-chg '+(pct>=0?'up':'dn'); }
+    if(chg){ chg.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%'+(_klTf?' за '+n+'×'+_klTf:''); chg.title='изменение от первой точки мини-графика: '+n+' свечей '+(_klTf||''); chg.className='dl-price-chg '+(pct>=0?'up':'dn'); }
   }
   // ── палитра canvas под тему (день/ночь) ──
   const _PALS={
@@ -7146,6 +7158,64 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     const порядок=(e20!=null&&e50!=null&&e200!=null)?(e20>e50&&e50>e200?'вверх':e20<e50&&e50<e200?'вниз':'смешан'):null;
     const за=(e)=>e==null?null:(side==='long'?c<e:side==='short'?c>e:null);
     return {c,e20,e50,e200,порядок,выход20:за(e20),выход50:за(e50)};
+  }
+  /* ═══ ОТОБРАЖЕНИЕ ГРАФИКА — КАЛИБРОВКА (05.10.2026, трейдер: «проверь график, найди ошибки отображения») ═══
+     Найдено на скриншоте 4h: (1) метки времени «03:00 · 07:00 · 11:00» без даты на окне в 80+ дней — одинаковые часы
+     разных суток; (2) подсказка OHLC тоже без даты; (3) шкала цены — 5 «случайных» чисел (101.94, 93.49), большая часть под
+     бейджами зон; (4) 13 зон в 2 б.п. разъезжались лестницей до цены ~107 — бейдж «FADE 120» стоял на уровне чужой цены;
+     (5) мини-график «цена · live» смешивал 500 закрытий 4h с живыми тиками, а «+55.89%» считался от закрытия 83 дня назад. */
+  const _ТФ_МС={'1m':6e4,'3m':18e4,'5m':3e5,'15m':9e5,'30m':18e5,'1h':36e5,'2h':72e5,'4h':144e5,'6h':216e5,'12h':432e5,'1d':864e5};
+  /* Метка времени свечи: внутри суток — ЧЧ:ММ; окно длиннее 20 ч или ТФ от часа — с датой ДД.ММ; дневки — только дата. Чистая. */
+  function _меткаВремени(t,tf,охватМс){
+    const d=new Date(t), дд=String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0');
+    const чм=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    if(/^(1d|3d|1w|1M)$/.test(tf||''))return дд;
+    if((_ТФ_МС[tf]||0)>=36e5||охватМс>20*36e5)return дд+' '+чм;
+    return чм;
+  }
+  /* Ровные деления шкалы: шаг 1/2/2.5/5×10^k, около n штук внутри [lo, hi]. Чистая. */
+  function _ровныеДеления(lo,hi,n){
+    if(!(hi>lo))return [];
+    const сырой=(hi-lo)/Math.max(1,n), к=Math.pow(10,Math.floor(Math.log10(сырой)));
+    // шаг из ряда 1/2/2.5/5/10×10^k — тот, при котором делений ближе всего к n (при равенстве — больше делений)
+    let шаг=к, лучше=Infinity; for(const m of [1,2,2.5,5,10]){ const ш=m*к, сколько=Math.floor(hi/ш)-Math.ceil(lo/ш)+1, d=Math.abs(сколько-n)+(сколько<n?0.1:0); if(d<лучше){лучше=d;шаг=ш;} }
+    const out=[];
+    for(let v=Math.ceil(lo/шаг)*шаг;v<=hi+шаг*1e-9;v+=шаг)out.push(+v.toPrecision(12));
+    return out;
+  }
+  /* Тесные зоны: группы, где соседние уровни ближе порога (px). Возвращает {группы:[{y0,y1,n}], члены:Set(зон)}. Чистая. */
+  function _тесныеЗоны(список,порог){
+    const s=список.slice().sort((a,b)=>a.y-b.y), группы=[], члены=new Set();
+    let i=0;
+    while(i<s.length){ let j=i; while(j+1<s.length&&s[j+1].y-s[j].y<порог)j++;
+      if(j>i){ группы.push({y0:s[i].y,y1:s[j].y,n:j-i+1}); for(let k=i;k<=j;k++)члены.add(s[k].z); }
+      i=j+1; }
+    return {группы,члены};
+  }
+  /* Стиль зоны на графике (05.10.2026, второй скриншот 4h: «что это за полосы?» — вверху стопка лент, риск-конвертов и
+     пунктиров стопов зон 122.85/124.2/124.95: стоп скальпа в 0.7% на 4h лежит в 5 px от уровня). Зоны — план скальпа; на
+     ТФ старше часа они справочные: тонкая линия, без ленты, конверта и пунктира стопа. Тесная группа — так же. Чистая. */
+  function _стильЗоны(тфМс,прим,вГруппе){
+    if(!прим)return {вид:'засечка',конверт:false,стоп:false};
+    if((тфМс||0)>36e5)return {вид:'линия',конверт:false,стоп:false};
+    if(вГруппе)return {вид:'линия',конверт:false,стоп:true};
+    return {вид:'лента',конверт:true,стоп:true};
+  }
+  /* Бейджи зон: три и больше в пределах шага — один бейдж «FADE ×N lo–hi» на их середине. Две — остаются отдельными. Чистая. */
+  function _слитьБейджи(бейджи,шаг){
+    const s=бейджи.slice().sort((a,b)=>a.y-b.y), out=[];
+    let i=0;
+    while(i<s.length){
+      let j=i; while(j+1<s.length&&s[j+1].y-s[i].y<шаг)j++;
+      const гр=s.slice(i,j+1);
+      if(гр.length>=3){
+        const виды=[...new Set(гр.map(b=>b.kind))], цены=гр.map(b=>+b.px).filter(isFinite);
+        const lo=Math.min(...цены), hi=Math.max(...цены);
+        out.push({y:гр.reduce((a,b)=>a+b.y,0)/гр.length,rgb:гр[0].rgb,txt:(виды.length===1?виды[0]:'ЗОН')+' ×'+гр.length+' от '+lo,диапазон:lo+'–'+hi,группа:гр.length});
+      }else out.push(...гр);
+      i=j+1;
+    }
+    return out;
   }
   function _drawChart(candles,currentPrice){
     const P=_pal();
@@ -7229,8 +7299,8 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     // ценовая сетка с подписями — полноценная шкала справа
     const _fmtP=v=>String(typeof _rpx==='function'?_rpx(v):v);
     ctx.font='10px \'JetBrains Mono\',ui-monospace,SFMono-Regular,\'SF Mono\',Menlo,Consolas,\'Liberation Mono\',monospace';
-    for(let gi=0;gi<=4;gi++){
-      const gy=ph-ph*gi/4, gp=minP+(maxP-minP)*gi/4;
+    for(const gp of _ровныеДеления(minP,maxP,Math.max(4,Math.floor(ph/55)))){   // ровные цены, а не «101.94»
+      const gy=toY(gp);
       ctx.strokeStyle=P.grid;ctx.lineWidth=.5;ctx.setLineDash([2,5]);   // пунктир — сетка держит структуру, но не спорит со свечами
       ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(W-LBL,gy);ctx.stroke();
       ctx.setLineDash([]);
@@ -7312,7 +7382,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         }
       }
     }
-    const _zBadges=[]; // бейджи зон на шкале — рисуются после свечей с разрешением коллизий
+    let _zBadges=[]; // бейджи зон на шкале — рисуются после свечей с разрешением коллизий
     // ═══ ИЕРАРХИЯ ЗОН НА ГРАФИКЕ ═══
     // Замер по кадру: 23 зоны в видимом окне рисовали 23 ленты во всю ширину.
     // Свечей за ними не видно — график перестаёт показывать цену и показывает
@@ -7333,8 +7403,15 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       };
       return new Set(inR.slice().sort((a,b)=>score(b)-score(a)).slice(0,CAPZ));
     })();
+    /* ТЕСНЫЕ ЗОНЫ НА КРУПНОМ МАСШТАБЕ (05.10.2026, скриншот трейдера: «что это за полосы?»). На 4h зоны скальпа стоят в
+       нескольких пикселях друг от друга: у каждой своя лента ±5 px, линия и риск-конверт — вместе выходила толстая
+       светящаяся полоса через весь график. Зоны ближе 6 px друг к другу рисуются тонкой линией без ленты и конверта, а
+       группа — ОДНОЙ общей подсветкой; бейдж у неё тоже один (_слитьБейджи). */
+    const _тесно=_тесныеЗоны(activeZ.filter(z=>_prim.has(z)&&+z.px>=minP&&+z.px<=maxP).map(z=>({z,y:toY(+z.px)})),6);
+    const _тфМс=_ТФ_МС[_klTf]||0;
+    if(_тфМс<=36e5)_тесно.группы.forEach(г=>{ ctx.fillStyle='rgba(255,176,32,.10)'; ctx.fillRect(0,г.y0-4,plotW,г.y1-г.y0+8); });
     activeZ.forEach(z=>{
-      const _isPrim=_prim.has(z);
+      const _isPrim=_prim.has(z), _вГруппе=_тесно.члены.has(z), _ст=_стильЗоны(_тфМс,_isPrim,_вГруппе);
       const col=_MC_KIND[z.kind]||_MC_KIND.watch;
       const px=+z.px;
       const stars=Math.max(1,Math.min(3,z.stars||2));
@@ -7345,7 +7422,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         // Под лентой зоны, чтобы линия уровня оставалась чёткой. Сильнее ★ — заметнее конверт.
         // риск-конверт — только у значимых: это самая «заливочная» деталь,
         // на 23 зонах она и превращала график в сплошное красно-зелёное поле
-        if(z.stop&&_isPrim){
+        if(z.stop&&_ст.конверт){
           const sp0=+z.stop;
           if(isFinite(sp0)&&sp0!==px){
             const sy=toY(Math.max(minP,Math.min(maxP,sp0)));
@@ -7368,7 +7445,10 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         const bh=5;                       // лента ПОСТОЯННОЙ высоты — кластеры зон больше не сливаются
         const a=0.05+stars*0.04;          // сила ★ = яркость, не толщина
         _zoneHitAreas.push({idx:zones.indexOf(z),yCenter:y,bh:9});
-        if(_isPrim){
+        if(_ст.вид==='линия'){
+          ctx.strokeStyle='rgba('+col.rgb+',.55)'; ctx.lineWidth=1; ctx.setLineDash([]);
+          ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(plotW,y);ctx.stroke();
+        }else if(_ст.вид==='лента'){
           ctx.fillStyle='rgba('+col.rgb+','+a.toFixed(3)+')';
           ctx.fillRect(0,y-bh,plotW,bh*2);
           ctx.strokeStyle='rgba('+col.rgb+','+(0.5+stars*0.16).toFixed(2)+')';
@@ -7382,8 +7462,8 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
           ctx.lineWidth=1;ctx.setLineDash([]);
           ctx.beginPath();ctx.moveTo(plotW-tickW,y);ctx.lineTo(plotW,y);ctx.stroke();
         }
-        _zBadges.push({y:y,rgb:col.rgb,txt:(z.kind||'').toUpperCase().slice(0,5)+' '+z.px});
-        if(z.stop){
+        _zBadges.push({y:y,rgb:col.rgb,txt:(z.kind||'').toUpperCase().slice(0,5)+' '+z.px,kind:(z.kind||'').toUpperCase().slice(0,5),px:+z.px});
+        if(z.stop&&_ст.стоп){
           const sp=+z.stop;
           if(sp>=minP&&sp<=maxP){
             const sy=toY(sp);
@@ -7793,9 +7873,9 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     if(candles.length>5&&candles[0].t){
       ctx.font='9.5px \'JetBrains Mono\',ui-monospace,SFMono-Regular,\'SF Mono\',Menlo,Consolas,\'Liberation Mono\',monospace';ctx.fillStyle=P.axisDim;
       [0,Math.floor(candles.length/3),Math.floor(candles.length*2/3),candles.length-1].forEach(ti=>{
-        const d=new Date(candles[ti].t);
-        const s=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
-        ctx.fillText(s,Math.min(plotW-30,Math.max(2,pad+ti*cw+cw/2-14)),ph-4);
+        const s=_меткаВремени(candles[ti].t,_klTf,candles[candles.length-1].t-candles[0].t);
+        const tw=ctx.measureText(s).width;
+        ctx.fillText(s,Math.min(plotW-tw-2,Math.max(2,pad+ti*cw+cw/2-tw/2)),ph-4);
       });
     }
     // СВЁРНУТЫЕ ЗОНЫ — одной строкой, чтобы «скрыто» не читалось как «нет».
@@ -7807,6 +7887,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     }
     // бейджи зон на шкале — поверх, с разрешением коллизий и коннекторами
     if(_zBadges.length){
+      _zBadges=_слитьБейджи(_zBadges,17);   // тесная группа зон — одним бейджем с диапазоном, а не лестницей до чужих цен
       _zBadges.sort((a,b)=>a.y-b.y);
       // ПОТОЛОК БЕЙДЖЕЙ. Разведение коллизий сдвигало каждый следующий на 17px,
       // но при десятке зон стопка упиралась в край и клампилась — подписи
@@ -7881,10 +7962,12 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         ctx.fillStyle=P.badgeBg;ctx.fillRect(SCX+1,by-8,bwd,16);
         ctx.fillStyle='rgba('+b.rgb+',.2)';ctx.fillRect(SCX+1,by-8,bwd,16);
         ctx.fillStyle='rgba('+b.rgb+',1)';ctx.font='bold 10px \'JetBrains Mono\',ui-monospace,SFMono-Regular,\'SF Mono\',Menlo,Consolas,\'Liberation Mono\',monospace';
+        if(b.группа)ctx.font='bold 9px \'JetBrains Mono\',ui-monospace,monospace';   // групповой бейдж длиннее — мельче, чтобы влез
         ctx.fillText(b.txt,SCX+4,by+3.5);
       });
     }
     // ── EMA 20/50/200 по всем загруженным свечам, рисуются видимые (сопоставление по времени свечи) ──
+    if(!L.ema){ const эл=document.getElementById('mcEma'); if(эл)эл.textContent=''; }
     if(L.ema&&candles.length>2&&_klines.length>=22){
       const cl=_klines.map(c=>+c.c), поT=new Map(_klines.map((c,i)=>[c.t,i]));
       [[20,'255,214,10'],[50,'90,170,255'],[200,'200,120,255']].forEach(([p,цв])=>{
@@ -7896,16 +7979,21 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       });
       const поз=(typeof _ap!=='undefined'&&_ap.pos)?_ap.pos.side:((typeof positions!=='undefined'&&positions.length)?positions[0].side:null);
       const св=_emaСводка(_klines,поз);
-      if(св){ const т='EMA 20/50/200 · порядок '+(св.порядок||'—')+(поз?(' · '+(поз==='long'?'лонг':'шорт')+': закрытие '+(св.выход20?'ЗА EMA20':'по ту же сторону EMA20')+(св.выход50?' и ЗА EMA50':'')):'');
-        ctx.font='10px \'JetBrains Mono\',ui-monospace,monospace'; ctx.fillStyle=св.выход50?'rgba(255,90,95,.95)':св.выход20?'rgba(255,176,32,.95)':'rgba(200,200,200,.85)'; ctx.textAlign='left'; ctx.fillText(т,pad+4,40); }
+      /* Сводка EMA — строкой в шапке графика, а не на холсте: на холсте она спорила с подписями зон за верхний левый угол. */
+      { const эл=document.getElementById('mcEma'); if(эл){ if(св){ const т='EMA 20/50/200: порядок '+(св.порядок||'—')+(поз?(' · '+(поз==='long'?'лонг':'шорт')+': закрытие '+(св.выход20?'ЗА EMA20':'по ту же сторону EMA20')+(св.выход50?' и ЗА EMA50':'')):'');
+          эл.textContent=т; эл.style.color=св.выход50?'rgb(255,90,95)':св.выход20?'rgb(255,176,32)':''; } else эл.textContent=''; } }
     }
     // ── сессии: три тонкие полосы над свечами (Азия / Лондон / Нью-Йорк) — только внутри дня ──
-    if(L.sess&&candles.length&&_klTf&&!/^(1d|3d|1w|1M)$/.test(_klTf)){
-      const кэш=_drawChart._сес||(_drawChart._сес=new Map());
+    /* Полосы сессий — только до часового ТФ (на 4h свеча захватывает две сессии и полоса читалась как пунктир-помеха),
+       внизу ценового поля над метками времени и с подписью слева: А — Азия, Л — Лондон, Н — Нью-Йорк. */
+    if(L.sess&&candles.length&&_klTf&&(_ТФ_МС[_klTf]||0)>0&&(_ТФ_МС[_klTf]||0)<=36e5){
+      const кэш=_drawChart._сес||(_drawChart._сес=new Map()), низ=ph-30;
       for(let i=0;i<candles.length;i++){
         const t=candles[i].t; let ст=кэш.get(t); if(!ст){ ст=_сессии(t).открыты.map(x=>x.к); кэш.set(t,ст); if(кэш.size>5000)кэш.clear(); }
-        _СЕССИИ.forEach((с,r)=>{ if(ст.indexOf(с.к)<0)return; ctx.fillStyle='rgba('+с.цв+',.55)'; ctx.fillRect(pad+i*cw,18+r*3,Math.max(1,cw),2); });
+        _СЕССИИ.forEach((с,r)=>{ if(ст.indexOf(с.к)<0)return; ctx.fillStyle='rgba('+с.цв+',.6)'; ctx.fillRect(pad+i*cw,низ+r*4,Math.max(1,cw),3); });
       }
+      ctx.font='8px \'JetBrains Mono\',ui-monospace,monospace'; ctx.textAlign='left';
+      _СЕССИИ.forEach((с,r)=>{ ctx.fillStyle='rgba('+с.цв+',.95)'; ctx.fillText(с.имя[0],1,низ+r*4+3); });
     }
     // ── ТРЕНД: MA-лента, цвет по тренду дня + стрелка направления ──
     if(L.trend&&candles.length>10){
@@ -8110,7 +8198,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     if(idx>=0&&idx<g.candles.length){
       const c=g.candles[idx];
       let t='O'+_fp(c.o)+' H'+_fp(c.h)+' L'+_fp(c.l)+' C'+_fp(c.c);
-      if(c.t){const d=new Date(c.t);t=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' · '+t;}
+      if(c.t){t=_меткаВремени(c.t,_klTf,(g.candles[g.candles.length-1].t-g.candles[0].t)||0)+' · '+t;}
       ctx.font='11px \'JetBrains Mono\',ui-monospace,SFMono-Regular,\'SF Mono\',Menlo,Consolas,\'Liberation Mono\',monospace'; const tw=ctx.measureText(t).width;
       ctx.fillStyle=PC.crossTip;ctx.fillRect(4,4,tw+8,15);
       ctx.fillStyle=c.c>=c.o?PC.candleUp:PC.candleDn;ctx.fillText(t,8,15);
@@ -8411,7 +8499,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
        * границы времени принадлежали ДРУГИМ данным. Без сброса после
        * переключения можно оказаться в окне, которого в новом наборе нет. */
       if(_klSym!==sym||_klTf!==tf)_mcView={t0:null,t1:null};
-      _klines=data;_klSym=sym;_klTf=tf;if(st)st.textContent='live';_sessHist=data.map(c=>c.c);if(typeof _sessDrawPrice==='function')_sessDrawPrice();}
+      _klines=data;_klSym=sym;_klTf=tf;if(st)st.textContent='live';_sessHist=data.slice(-140).map(c=>c.c);_sessHistT=data.length?data[data.length-1].t:0;if(typeof _sessDrawPrice==='function')_sessDrawPrice();}
     else{if(st)st.textContent='нет данных';}
     _chartRedraw();
   }
@@ -9307,7 +9395,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     const sessEl=document.getElementById('livePrice');
     if(document.activeElement!==sessEl){sessEl.value=px;updateLive();}
     _setLiveInd('● LIVE','var(--green)');
-    if(phase==='live'){ const _p=parseFloat(px); if(isFinite(_p)){ if(_sessHist.length){const _lv=_sessHist[_sessHist.length-1]; if(_lv>0&&(_p/_lv>5||_p/_lv<0.2))_sessHist.length=0;} /* аномальный скачок = смена инструмента/глитч → сброс истории */ if(!_sessHist.length||_sessHist[_sessHist.length-1]!==_p){ _sessHist.push(_p); if(_sessHist.length>140)_sessHist.shift(); } if(typeof _sessDrawPrice==='function')_sessDrawPrice(); } _chartRedraw(); if(typeof _sessWallsTick==='function')_sessWallsTick(); }
+    if(phase==='live'){ const _p=parseFloat(px); if(isFinite(_p)){ if(_sessHist.length){const _lv=_sessHist[_sessHist.length-1]; if(_lv>0&&(_p/_lv>5||_p/_lv<0.2))_sessHist.length=0;} /* аномальный скачок = смена инструмента/глитч → сброс истории */ { /* ряд = закрытия свечей текущего ТФ: тик обновляет ПОСЛЕДНЮЮ точку, новая точка — только с новой свечой (05.10: тики не смешиваются с 4h) */ const _шм=(typeof _ТФ_МС!=='undefined'&&_ТФ_МС[_klTf])||0, _т=_шм?Math.floor(Date.now()/_шм)*_шм:0; if(_sessHist.length&&_шм&&_т===_sessHistT)_sessHist[_sessHist.length-1]=_p; else { _sessHist.push(_p); _sessHistT=_т; if(_sessHist.length>140)_sessHist.shift(); } } if(typeof _sessDrawPrice==='function')_sessDrawPrice(); } _chartRedraw(); if(typeof _sessWallsTick==='function')_sessWallsTick(); }
   }
   // ── Композитная цена: медиана спот-цен нескольких бирж с отсечкой выбросов ──
   // Не сигнал и не директива — консенсусный ориентир по нескольким книгам. Решение за трейдером.
@@ -9798,7 +9886,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     _gsHist.push(px);
     if(_gsHist.length>_GSH_CAP)_gsHist.shift();
   }
-  let _sessHist=[],_sessPCtx=null,_sessPW=0,_sessPH=0;
+  let _sessHist=[],_sessHistT=0,_sessPCtx=null,_sessPW=0,_sessPH=0;   // _sessHistT — открытие последней свечи ряда (ряд = закрытия свечей ТФ)
   const DLJ_KEY='msa_demo_journal_v1';
   // знаки после запятой по реальному шагу цены инструмента (из стакана) — корректно для любой монеты
   function _dlComputeDec(aP,bP,n,mid){
