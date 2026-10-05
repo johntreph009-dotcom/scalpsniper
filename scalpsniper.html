@@ -916,6 +916,17 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
      дефект — гаснет к правому краю, чтобы было видно, что ряд едет. */
   @media(max-width:560px){.mc-tfs{-webkit-mask-image:linear-gradient(90deg,#000 86%,transparent);mask-image:linear-gradient(90deg,#000 86%,transparent);padding-right:18px}}
   .ema-tf{white-space:nowrap}
+  .srch-breadth{margin:4px 0 10px}
+  .br-row{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px}
+  .br-row>b{width:26px;flex:0 0 auto}
+  .br-bar{flex:1;display:flex;height:10px;border-radius:3px;overflow:hidden;background:rgba(255,255,255,.06);min-width:80px}
+  .br-num{flex:0 0 auto;font-size:11px;color:var(--text-dim);white-space:nowrap}
+  .br-sum{flex-wrap:wrap;color:var(--text-dim)}
+  .br-det{font-size:11px;color:var(--text-dim);margin-top:2px}
+  .br-det summary{cursor:pointer;min-height:26px;display:flex;align-items:center}
+  .sf-q input{width:150px;max-width:44vw;background:var(--panel-2,#15130f);border:1px solid var(--line);border-radius:5px;color:var(--text);padding:6px 9px;font:inherit;font-size:12px;min-height:30px}
+  .sf-q input:focus{outline:none;border-color:var(--accent-dim,#a85a1a)}
+  .sf-q{white-space:nowrap}
   .mc-tfbtn.active{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
   .mc-layers{display:flex;flex-wrap:wrap;gap:4px;padding:5px 10px;background:rgba(0,0,0,.22);border-bottom:1px solid rgba(255,255,255,.04)}
   .mc-lyr{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;font-size:11px;letter-spacing:.3px;padding:2px 9px;background:transparent;border:1px solid var(--line);border-radius:10px;color:var(--text-faint);cursor:pointer;transition:color .12s,border-color .12s,background .12s}
@@ -2487,6 +2498,8 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       <div class="mc-layers" id="mcLayers">
         <button class="mc-lyr" data-lyr="trend" onclick="toggleLayer('trend')" title="Тренд: MA-лента, цвет по тренду дня">тренд</button>
         <button class="mc-lyr" data-lyr="ema" onclick="toggleLayer('ema')" title="EMA 20 / 50 / 200 по закрытиям текущего ТФ. Слева вверху — порядок EMA и, если есть позиция, закрылась ли свеча за EMA20/EMA50. Замер 05.10 (SOL, история): вход по откату к EMA20 1м в порядке EMA и удержание до EMA20 5м/15м ХУЖЕ выхода через 5 мин (проверка июнь–сентябрь: 15м −6.1 б.п., 5 мин −0.3). Это подсказка, не правило.">EMA</button>
+        <button class="mc-lyr" data-lyr="fvg" onclick="toggleLayer('fvg')" title="FVG — незакрытые разрывы по трём свечам текущего ТФ. Закрашена незакрытая часть, контур — исходный разрыв; сжалась до ≤25% — «тонкая» (ярче). 6 ближайших к цене. Отображение, не сигнал: замер схемы BEAM (Г-05.10-5/6).">FVG</button>
+        <button class="mc-lyr" data-lyr="ret" onclick="toggleLayer('ret')" title="Ретест EMA20 после провала к EMA50 (схема BEAM, ваши определения): плашка R над свечой (красная) — к шорту, под свечой (зелёная) — к лонгу; залита — отбой тенью, контур — несколько касаний без закрытия за EMA20. Отображение, не сигнал (Г-05.10-6).">ретест</button>
         <button class="mc-lyr" data-lyr="sess" onclick="toggleLayer('sess')" title="Полоса сессий над свечами: Азия (Токио 09–18), Лондон (08–17), Нью-Йорк (08–17) по местному времени городов, летнее время учтено.">сессии</button>
         <button class="mc-lyr" data-lyr="vol" onclick="toggleLayer('vol')" title="Объём в свечах + метки аномальных всплесков">объём</button>
         <button class="mc-lyr" data-lyr="cvd" onclick="toggleLayer('cvd')" title="CVD-полоса снизу: поток покупок/продаж">CVD</button>
@@ -2790,6 +2803,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
                ниже — прежние списки теми же отрисовщиками, без изменений. -->
           <!-- КЕЙСЫ (02.10.2026, просьба трейдера: «информация сливается — выделять перспективные, структурировать в кейсы»):
                карточки пар, которые видит больше одного сканера или видят самым сильным сигналом. Ниже — подробные списки. -->
+          <div id="srchBreadth" class="srch-breadth"><span class="gs-note">ширина рынка посчитается при открытии Поиска (≈ 1 мин)</span></div>
           <div id="srchFilter" class="srch-filter"></div>
           <div id="srchCases" class="srch-cases"><span class="gs-note">кейсы соберутся, когда придут данные сканеров</span></div>
           <div id="srchSummary" class="srch-sum"><span class="gs-note">сводка «единорог → ретест» появится после обхода единорогов</span></div>
@@ -6577,7 +6591,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
    * включённым — держать на экране то, чем не пользуются. Выбор трейдера
    * сохраняется в localStorage и переживает перезагрузку, поэтому умолчание
    * действует ровно один раз — при первом открытии на этой машине. */
-  let _chartLayers=(()=>{try{return Object.assign({trend:true,vol:true,cvd:true,piv:true,liq:true,trades:true,depth:false,tape:false,ema:true,sess:true},JSON.parse(localStorage.getItem('msa_chart_layers_v1')||'{}'));}catch(e){return {trend:true,vol:true,cvd:true,piv:true,liq:true};}})();
+  let _chartLayers=(()=>{try{return Object.assign({trend:true,vol:true,cvd:true,piv:true,liq:true,trades:true,depth:false,tape:false,ema:true,sess:true,fvg:true,ret:true},JSON.parse(localStorage.getItem('msa_chart_layers_v1')||'{}'));}catch(e){return {trend:true,vol:true,cvd:true,piv:true,liq:true};}})();
   function _saveChartLayers(){try{localStorage.setItem('msa_chart_layers_v1',JSON.stringify(_chartLayers));}catch(e){}}
   function _markLayers(){document.querySelectorAll('.mc-lyr').forEach(b=>b.classList.toggle('active',!!_chartLayers[b.dataset.lyr]));}
   function toggleLayer(k){_chartLayers[k]=!_chartLayers[k];_saveChartLayers();_markLayers();if(typeof _chartRedraw==='function')_chartRedraw();}
@@ -7220,6 +7234,60 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         if(_emaТФ.sym!==sym)break; _emaТФ.когда[tf]=Date.now(); const с=_emaСостояниеТФ(св); if(с){ _emaТФ.д[tf]=с; было=true; } } }
     catch(e){} finally{ _emaТФ.идёт=false; }
     if(было&&typeof _chartRedraw==='function')_chartRedraw();
+  }
+  /* ═══ FVG И РЕТЕСТ EMA20 (05.10.2026, схема BEAM трейдера; Г-05.10-5/6) — ОДНА ПРАВДА для графика и замера ═══
+     connector/СХЕМА-BEAM.js берёт эти функции отсюда (в Node — через vm, в браузере — напрямую).
+     FVG по трём свечам: медвежья — high[j] < low[j−2] (разрыв вниз, низ = high[j], верх = low[j−2]); бычья — low[j] >
+     high[j−2]. «Тонкая» (трейдер: широкий разрыв постепенно сжимается до тонкой линии) — незакрытая часть ≤ 25% исходной
+     и > 0; медвежью заполняют снизу (цена поднимается в разрыв), бычью — сверху. Закрылась целиком — её больше нет. */
+  const _FVG_ТОНКАЯ=0.25;
+  function _fvgУ(св,j){
+    if(j<2||!св[j]||!св[j-2])return null;
+    if(св[j].h<св[j-2].l)return {зн:-1,j,верх:св[j-2].l,низ:св[j].h};
+    if(св[j].l>св[j-2].h)return {зн:1,j,верх:св[j].l,низ:св[j-2].h};
+    return null;
+  }
+  /* Состояние FVG по свечам j+1…до: {остаток, ширина, доля, закрыта, тонкая}. Чистая. */
+  function _fvgОстаток(f,св,до){
+    const ширина=f.верх-f.низ; let край=f.зн<0?f.низ:f.верх;
+    for(let m=f.j+1;m<=до&&m<св.length;m++){ if(f.зн<0)край=Math.max(край,св[m].h); else край=Math.min(край,св[m].l); }
+    const остаток=Math.max(0,f.зн<0?f.верх-край:край-f.низ), закрыта=остаток<=0;
+    return {остаток,ширина,доля:ширина>0?остаток/ширина:0,закрыта,тонкая:!закрыта&&ширина>0&&остаток<=_FVG_ТОНКАЯ*ширина};
+  }
+  /* Незакрытые FVG графика на последней свече: [{зн,j,верх,низ,остаток,тонкая}] — для слоя «FVG». Чистая. */
+  function _fvgОткрытые(св,сколько){
+    const out=[]; const n=св.length;
+    for(let j=Math.max(2,n-(сколько||150));j<n;j++){ const f=_fvgУ(св,j); if(!f)continue; const с=_fvgОстаток(f,св,n-1); if(с.закрыта)continue;
+      out.push(Object.assign(f,{остаток:с.остаток,доля:с.доля,тонкая:с.тонкая,верхОст:f.зн<0?f.верх:f.низ+с.остаток,низОст:f.зн<0?f.верх-с.остаток:f.низ})); }
+    return out;
+  }
+  /* Ретест EMA20 после провала к EMA50 (определения трейдера, 05.10): шорт — была EMA20 > EMA50 и закрытие над EMA20; в 12
+     свечах low дошёл до EMA50; затем, пока ни одна свеча не закрылась выше EMA20 (закрылась — отмена), в 24 свечах: «тень»
+     — первое касание (high ≥ EMA20) телом под EMA20 (лучший случай); иначе «касания» — второе касание. Лонг — зеркально.
+     Стоп-уровень схемы — крайняя тень касаний. [{зн,k0,a,r,тип,стоп}], причинно. Чистая. */
+  function _ретестыEMA20(св,e20,e50){
+    const out=[], занято=new Set();
+    for(let k0=1;k0<св.length;k0++){
+      if(e20[k0]==null||e50[k0]==null)continue;
+      for(const зн of [-1,1]){
+        const конт=зн<0?(e20[k0]>e50[k0]&&св[k0].c>e20[k0]):(e20[k0]<e50[k0]&&св[k0].c<e20[k0]); if(!конт)continue;
+        let a=-1; for(let q=k0+1;q<=k0+12&&q<св.length;q++) if(e50[q]!=null&&(зн<0?св[q].l<=e50[q]:св[q].h>=e50[q])){a=q;break;}
+        if(a<0)continue;
+        let касаний=0, стоп=зн<0?-Infinity:Infinity, r=-1, тип=null;
+        for(let q=a+1;q<=a+24&&q<св.length;q++){
+          const e=e20[q]; if(e==null)break;
+          if(зн<0?св[q].c>e:св[q].c<e)break;
+          if(!(зн<0?св[q].h>=e:св[q].l<=e))continue;
+          касаний++; стоп=зн<0?Math.max(стоп,св[q].h):Math.min(стоп,св[q].l);
+          const телоПод=зн<0?(св[q].o<e&&св[q].c<e):(св[q].o>e&&св[q].c>e);
+          if(касаний===1&&телоПод){r=q;тип='тень';break;}
+          if(касаний===2){r=q;тип='касания';break;}
+        }
+        if(r<0||занято.has(зн+'|'+r))continue;
+        занято.add(зн+'|'+r); out.push({зн,k0,a,r,тип,стоп});
+      }
+    }
+    return out.sort((x,y)=>x.r-y.r);
   }
   function _emaВыстроены(состояния){
     const и=состояния.map(с=>с&&с.итог); if(и.some(x=>!x))return null;
@@ -8101,6 +8169,38 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
           const табл=_emaТабличкаHTML(_ТФ_ТАБЛ.map(tf=>_emaТФ.sym===_klSym?_emaТФ.д[tf]:null));
           const поз_т=(св&&поз)?(' · '+(поз==='long'?'лонг':'шорт')+': закрытие '+(св.выход20?'<b style="color:rgb(255,176,32)">ЗА EMA20</b>':'по ту же сторону EMA20')+(св.выход50?' <b style="color:rgb(255,90,95)">и ЗА EMA50</b>':'')):'';
           эл.innerHTML=табл+поз_т; эл.style.color=''; } }
+    }
+    /* ── FVG и ретест EMA20 (05.10.2026, схема BEAM трейдера) — отображение, не сигнал: замеры Г-05.10-5/6 ──
+       FVG: незакрытые разрывы по трём свечам текущего ТФ; закрашена НЕЗАКРЫТАЯ часть, контур — исходный разрыв; сжалась
+       до ≤ 25% — «тонкая» (ярче, подпись). Показываются 6 ближайших к цене. Ретест: ▼R/▲R над/под свечой — тип «тень»
+       залит, «касания» — контур. Цен входа и стопа нет (правило панелей аналитики). */
+    if((L.fvg||L.ret)&&candles.length>2&&_klines.length>=60){
+      const поИ=new Map(candles.map((c,i)=>[c.t,i])), X=i=>pad+i*cw+cw/2;
+      if(L.fvg){
+        const св=_klines.map(k=>({t:k.t,o:+k.o,h:+k.h,l:+k.l,c:+k.c}));
+        const cp=(currentPrice&&isFinite(currentPrice))?currentPrice:св[св.length-1].c;
+        const fv=_fvgОткрытые(св,180).sort((a,b)=>Math.abs((a.верх+a.низ)/2-cp)-Math.abs((b.верх+b.низ)/2-cp)).slice(0,6);
+        fv.forEach(f=>{ const i0=поИ.get(св[f.j-2].t); const x0=i0==null?0:pad+i0*cw; if(f.низ>maxP||f.верх<minP)return;
+          const rgb=f.зн<0?'255,90,95':'46,224,138', yT=toY(Math.min(maxP,f.верх)), yB=toY(Math.max(minP,f.низ));
+          const yTo=toY(Math.min(maxP,f.верхОст)), yBo=toY(Math.max(minP,f.низОст));
+          ctx.save();
+          ctx.strokeStyle='rgba('+rgb+','+(f.тонкая?.75:.35)+')'; ctx.lineWidth=1; ctx.setLineDash(f.тонкая?[]:[3,3]); ctx.strokeRect(x0,yT,plotW-x0,Math.max(1,yB-yT));
+          ctx.setLineDash([]); ctx.fillStyle='rgba('+rgb+','+(f.тонкая?.32:.12)+')'; ctx.fillRect(x0,yTo,plotW-x0,Math.max(1,yBo-yTo));
+          ctx.font='9px \'JetBrains Mono\',ui-monospace,monospace'; ctx.fillStyle='rgba('+rgb+',.9)';
+          ctx.fillText((f.тонкая?'тонкая ':'')+'FVG'+(f.доля<1?' '+Math.round(f.доля*100)+'%':''),x0+3,Math.max(9,yTo-2));
+          ctx.restore(); });
+      }
+      if(L.ret){
+        const cl=_klines.map(k=>+k.c), св=_klines.map(k=>({t:k.t,o:+k.o,h:+k.h,l:+k.l,c:+k.c}));
+        _ретестыEMA20(св,_ema(cl,20),_ema(cl,50)).forEach(р=>{ const ii=поИ.get(св[р.r].t); if(ii==null)return;
+          /* Плашка «R», а не треугольник: треугольники уже заняты слоем «развороты» — две одинаковые отметки путались (05.10). */
+          const c=св[р.r], y=р.зн<0?toY(Math.min(maxP,c.h))-11:toY(Math.max(minP,c.l))+11, x=X(ii), rgb=р.зн<0?'255,90,95':'46,224,138';
+          ctx.save(); ctx.beginPath(); if(ctx.roundRect)ctx.roundRect(x-5.5,y-5.5,11,11,2.5); else ctx.rect(x-5.5,y-5.5,11,11);
+          if(р.тип==='тень'){ ctx.fillStyle='rgba('+rgb+',.95)'; ctx.fill(); ctx.fillStyle='#0b0a08'; }
+          else { ctx.fillStyle='rgba(10,9,7,.85)'; ctx.fill(); ctx.strokeStyle='rgba('+rgb+',.95)'; ctx.lineWidth=1.2; ctx.stroke(); ctx.fillStyle='rgba('+rgb+',1)'; }
+          ctx.font='bold 9px \'JetBrains Mono\',ui-monospace,monospace'; ctx.textAlign='center'; ctx.fillText('R',x,y+3.2);
+          ctx.restore(); });
+      }
     }
     // ── сессии: три тонкие полосы над свечами (Азия / Лондон / Нью-Йорк) — только внутри дня ──
     /* Полосы сессий — только до часового ТФ (на 4h свеча захватывает две сессии и полоса читалась как пунктир-помеха),
@@ -12031,7 +12131,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     document.querySelectorAll('.hub-tab').forEach(b=>b.classList.toggle('on',b.getAttribute('data-hub')===k));
     const map={book:'hubBook',auto:'hubAuto',proc:'hubProc',audit:'hubAudit',pass:'hubPass',whale:'hubWhale',liq:'hubLiq',uni:'hubUni',ready:'hubReady'};
     /* «Поиск» — одна вкладка на три части: сводка связки и единороги приходят одним ответом, ретест — своим. */
-    if(k==='uni'){ if(typeof _uniRender==='function')_uniRender(); if(typeof _retRender==='function')_retRender(); }
+    if(k==='uni'){ if(typeof _uniRender==='function')_uniRender(); if(typeof _retRender==='function')_retRender(); if(typeof _ширинаОбновить==='function')_ширинаОбновить(); }
     if(k==='ready'&&typeof _readyRender==='function')_readyRender();
     Object.entries(map).forEach(([n,id])=>{const p=document.getElementById(id); if(p)p.classList.toggle('on',n===k);});
     // ПОТОКИ НЕ ЗАВИСЯТ ОТ ВКЛАДКИ. Переключение — это только смена того, что ты СМОТРИШЬ.
@@ -12547,6 +12647,65 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     const ф=_об24.сдФьюч&&_об24.сдФьюч[п]; if(ф!=null)return ф;
     const с=_об24.сдСпот&&_об24.сдСпот[п]; return с!=null?с:null;
   }
+  /* Поиск монеты во вкладке «Поиск» (06.10.2026, трейдер: «искать монеты по списку актуального на сегодня»). Запрос «rlc»,
+     «RLC/USDT», «rlcusdt» — одно и то же; совпадение по началу тикера, а с 3 символов — и по вхождению. Пустой — всё. Чистая. */
+  let _поискМонеты='';
+  /* ═══ ШИРИНА РЫНКА (06.10.2026, трейдер: «схема BEAM — на весь рынок? комплексная аналитика») ═══
+     Состояние EMA 20/50/200 (_emaСостояниеТФ — та же функция, что табличка графика) по ЗАКРЫТОЙ свече 15м/1ч/4ч у каждой
+     ликвидной пары (спот Binance, оборот 24ч ≥ $5M, без стейблов/золота/плечевых/токенизированных акций — правило
+     BEAM-ВСЕЛЕННАЯ.json), открытые FVG 15м (_fvgОткрытые). Описание рынка, не сигнал: связь с исходом — гипотеза в очереди.
+     Непрочитанная пара — «не прочитано», а не «медвежья»: доли считаются от прочитанных, число называется. */
+  const _ИСКЛ_ВСЕЛЕННОЙ=/^(BTC|ETH|USDC|FDUSD|TUSD|USDP|DAI|EUR|EURI|USD1|BUSD|AEUR|XUSD|RLUSD|PAXG|XAUT)USDT$|(UP|DOWN|BULL|BEAR)USDT$|(SPCX|SNDK|MSTR|CRCL|NVDA)BUSDT$/;
+  const _ШИР_ТФ=['15m','1h','4h'];
+  /* Сводка ширины по списку [{пара, '15m':сост|null, '1h':…, '4h':…, fvg:{вверх,вниз,тонких}|null}]. Чистая. */
+  function _ширинаСвести(сп){
+    const out={n:сп.length,тф:{},вверх:[],вниз:[],fvg:{вверх:0,вниз:0,тонких:0,пар:0}};
+    for(const tf of _ШИР_ТФ){ const пр=сп.filter(x=>x[tf]&&x[tf].итог), к={'бычий':0,'переход↑':0,'переход↓':0,'медвежий':0};
+      пр.forEach(x=>к[x[tf].итог]++); const n=пр.length;
+      out.тф[tf]={прочитано:n,доли:Object.fromEntries(Object.entries(к).map(([и,v])=>[и,n?v/n:null])),счёт:к,индекс:n?(к['бычий']-к['медвежий'])/n:null}; }
+    сп.forEach(x=>{ const и=_ШИР_ТФ.map(tf=>x[tf]&&x[tf].итог);
+      if(и.every(v=>v==='бычий'))out.вверх.push(x.пара); else if(и.every(v=>v==='медвежий'))out.вниз.push(x.пара);
+      if(x.fvg){ out.fvg.пар++; out.fvg.вверх+=x.fvg.вверх; out.fvg.вниз+=x.fvg.вниз; out.fvg.тонких+=x.fvg.тонких; } });
+    return out;
+  }
+  function _ширинаHTML(с,когда){
+    if(!с)return '<span class="gs-note">ширина рынка ещё не посчитана</span>';
+    const ЦВ={'бычий':'46,224,138','переход↑':'150,210,120','переход↓':'255,150,110','медвежий':'255,90,95'}, ПД={'15m':'15м','1h':'1ч','4h':'4ч'};
+    const полоса=tf=>{ const т=с.тф[tf]; if(!т||!т.прочитано)return '<div class="br-row"><b>'+ПД[tf]+'</b> <span class="gs-note">не прочитано</span></div>';
+      const сег=Object.entries(т.доли).map(([и,д])=>'<span style="flex:'+(д||0)+';background:rgba('+ЦВ[и]+',.75)" title="'+и+': '+т.счёт[и]+'"></span>').join('');
+      return '<div class="br-row"><b>'+ПД[tf]+'</b><div class="br-bar">'+сег+'</div><span class="br-num">▲ '+Math.round(100*т.доли['бычий'])+'% · ▼ '+Math.round(100*т.доли['медвежий'])+'%'+(т.прочитано<с.n?' · из '+т.прочитано:'')+'</span></div>'; };
+    const сп=a=>a.length?a.slice(0,30).map(п=>_тк(п)).join(' '):'<span class="gs-note">нет</span>';
+    return '<div class="sc-head"><b>РЫНОК · '+с.n+' пар</b><span class="gs-note">EMA 20/50/200 по закрытой свече · ▲ все зелёные, ▼ все красные · описание, не сигнал'+(когда?' · '+new Date(когда).toLocaleTimeString().slice(0,5):'')+'</span></div>'
+      +_ШИР_ТФ.map(полоса).join('')
+      +'<div class="br-row br-sum">выстроены на 15м+1ч+4ч: <b style="color:rgb(46,224,138)">вверх '+с.вверх.length+'</b> · <b style="color:rgb(255,90,95)">вниз '+с.вниз.length+'</b>'
+      +(с.fvg.пар?' · FVG 15м открыто: ↑'+с.fvg.вверх+' ↓'+с.fvg.вниз+' (тонких '+с.fvg.тонких+')':'')+'</div>'
+      +'<details class="br-det"><summary>какие пары выстроены</summary><div>▲ '+сп(с.вверх)+'</div><div>▼ '+сп(с.вниз)+'</div></details>';
+  }
+  const _ширина={данные:null,когда:0,идёт:false};
+  async function _ширинаОбновить(сила){
+    const el=document.getElementById('srchBreadth'); if(!el||_ширина.идёт)return;
+    if(!сила&&_ширина.когда>Date.now()-15*60e3){ el.innerHTML=_ширинаHTML(_ширина.данные,_ширина.когда); return; }
+    _ширина.идёт=true; el.innerHTML=(_ширина.данные?_ширинаHTML(_ширина.данные,_ширина.когда):'')+'<div class="gs-note">ширина рынка считается…</div>';
+    try{
+      const r=await fetch('https://api.binance.com/api/v3/ticker/24hr',{cache:'no-store'}); if(!r.ok)throw new Error('оборот 24ч не прочитан ('+r.status+')');
+      const пары=(await r.json()).filter(x=>/^[A-Z0-9]+USDT$/.test(x.symbol)&&!_ИСКЛ_ВСЕЛЕННОЙ.test(x.symbol)&&+x.lastPrice>0&&+x.quoteVolume>=5e6).sort((a,b)=>+b.quoteVolume-+a.quoteVolume).slice(0,100).map(x=>x.symbol);
+      const сп=пары.map(п=>({пара:п})); let i=0;
+      const раб=async()=>{ while(i<сп.length){ const x=сп[i++];
+        for(const tf of _ШИР_ТФ){ try{ const св=await _fetchKlines(x.пара,tf); x[tf]=св?_emaСостояниеТФ(св):null; if(x[tf]&&x[tf].e200==null)x[tf]=null;   // нет 200 свечей (запасной источник) — не «переход», а «не прочитано»
+            if(tf==='15m'&&св&&св.length>60){ const f=_fvgОткрытые(св.slice(0,-1).map(k=>({t:k.t,o:+k.o,h:+k.h,l:+k.l,c:+k.c})),96); x.fvg={вверх:f.filter(q=>q.зн>0).length,вниз:f.filter(q=>q.зн<0).length,тонких:f.filter(q=>q.тонкая).length}; }
+          }catch(e){ x[tf]=null; } } } };
+      await Promise.all([раб(),раб(),раб(),раб()]);
+      _ширина.данные=_ширинаСвести(сп); _ширина.когда=Date.now();
+      el.innerHTML=_ширинаHTML(_ширина.данные,_ширина.когда);
+    }catch(e){ el.innerHTML='<span class="gs-note neg">ширина рынка не посчитана: '+_uniEsc(e.message||String(e))+' — это ОТКАЗ, а не «рынок такой»</span>'; }
+    finally{ _ширина.идёт=false; }
+  }
+  setInterval(()=>{ try{ if(typeof _hubCur!=='undefined'&&_hubCur==='uni'&&document.visibilityState==='visible')_ширинаОбновить(); }catch(e){} },60e3);   // раз в минуту проверка; пересчёт — раз в 15 мин
+  function _монетаСовпала(пара,q){
+    const н=x=>String(x||'').toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/USDT$/,'');
+    const з=н(q); if(!з)return true; const п=н(пара); if(!п)return false;
+    return п.startsWith(з)||(з.length>=3&&п.includes(з));
+  }
   function _ростПары(пара,базы,об24){
     const п=String(пара||'').toUpperCase().replace(/[\/\-_ ]?USDT$/,'')+'USDT';
     const бо=базы&&базы.об&&базы.об[п], vo=об24&&об24.спот&&об24.спот[п];
@@ -12565,7 +12724,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     const оп=(в,т)=>'<option value="'+в+'">'+т+'</option>';
     let h='<b>ФИЛЬТР</b> <label>рост оборота 24ч к базе <select data-sf="об">'+оп(0,'все')+оп(3,'от ×3')+оп(10,'от ×10')+оп(30,'от ×30')+'</select></label>'
       +'<label>сделок за 24ч <select data-sf="сд">'+оп(0,'все')+оп(50000,'от 50 000')+оп(100000,'от 100 000')+оп(300000,'от 300 000')+оп(1000000,'от 1 000 000')+'</select></label>'
-      +'<span class="gs-note" id="sfNote"></span>';
+      +'<span class="sf-q-wrap" id="sfQWrap"></span><span class="gs-note" id="sfNote"></span>';
     const акт=_фильтрРоста.об>0||_фильтрРоста.сд>0;
     const нужныБазы=_фильтрРоста.об>0;
     if(акт&&(!нужныБазы||_базыПоиска)&&(_об24.спот||_об24.фьюч)){
@@ -12576,6 +12735,13 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         :'<span class="gs-note">ни одна пара не проходит фильтр — это ответ, а не отсутствие данных</span>')+'</div>';
     }else if(акт)h+='<span class="gs-note">'+(нужныБазы&&!_базыПоиска?'базы оборота ещё не пришли (обход ретеста)':'оборот и сделки 24ч ещё не пришли')+'</span>';
     el.innerHTML=h;
+    /* Поле поиска — один и тот же узел: перерисовка фильтра его переносит, а не пересоздаёт (иначе ввод сбрасывался бы). */
+    if(!_фильтрРостаРисовать._q){ const lab=document.createElement('label'); lab.className='sf-q';
+      lab.innerHTML='монета <input type="search" id="sfQ" placeholder="тикер, напр. RLC" autocomplete="off" spellcheck="false" inputmode="search">';
+      const inp=lab.querySelector('input'); let _t=0;
+      inp.addEventListener('input',()=>{ _поискМонеты=inp.value; clearTimeout(_t); _t=setTimeout(()=>{ try{ _кейсыРисовать(true); _фильтрРостаПрименить(); }catch(e){} },120); });
+      _фильтрРостаРисовать._q=lab; }
+    const qw=el.querySelector('#sfQWrap'); if(qw)qw.appendChild(_фильтрРостаРисовать._q);
     el.querySelectorAll('select[data-sf]').forEach(s=>{ s.value=String(_фильтрРоста[s.dataset.sf]||0);
       s.onchange=()=>{ _фильтрРоста[s.dataset.sf]=+s.value||0; try{localStorage.setItem('msa_srch_filter_v2',JSON.stringify(_фильтрРоста));}catch(e){} _фильтрРостаРисовать(); _фильтрРостаПрименить(); }; });
   }
@@ -12585,33 +12751,50 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     let скрыто=0, безДанных=0; const конт=new Map();
     корень.querySelectorAll('.srch-tk[data-tk]').forEach(тк=>{
       if(тк.closest('#srchFilter'))return;
-      const к=тк.closest('.sc-card, .uni-note'); if(!к)return;
-      const р=_проходитРост(тк.dataset.tk,_фильтрРоста,_базыПоиска,_об24);
+      const к=тк.closest('.sc-card, .uni-note, .srch-row, .uni-tbl > .um'); if(!к)return;   // 06.10: строки списков (.srch-row) и таблицы единорогов (ячейка-тикер сетки) раньше не фильтровались
+      const р=_монетаСовпала(тк.dataset.tk,_поискМонеты)?_проходитРост(тк.dataset.tk,_фильтрРоста,_базыПоиска,_об24):false;
       const было=конт.get(к); конт.set(к,{ок:(было&&было.ок)||р===true, нет:((было&&было.нет)||0)+(р===null?1:0)});
     });
-    конт.forEach((v,к)=>{ const спрятать=!v.ок; к.classList.toggle('srch-скрыт',спрятать); if(спрятать){ скрыто++; if(v.нет)безДанных++; } });
+    конт.forEach((v,к)=>{ const спрятать=!v.ок; к.classList.toggle('srch-скрыт',спрятать);
+      if(к.classList.contains('um')){ let с=к.nextElementSibling; while(с&&!с.classList.contains('um')&&!с.classList.contains('uh')){ с.classList.toggle('srch-скрыт',спрятать); с=с.nextElementSibling; } }   // строка сетки — все её ячейки
+      if(спрятать){ скрыто++; if(v.нет)безДанных++; } });
     const n=document.getElementById('sfNote');
-    if(n)n.textContent=(_фильтрРоста.об>0||_фильтрРоста.сд>0)?' · скрыто '+скрыто+(безДанных?' (из них без данных '+безДанных+')':''):'';
+    if(n)n.textContent=(_фильтрРоста.об>0||_фильтрРоста.сд>0||_поискМонеты.trim())?' · скрыто '+скрыто+(безДанных?' (из них без данных '+безДанных+')':''):'';
   }
   { let _sfT=0; const _sfНаблюдать=()=>{ const к=document.getElementById('hubUni'); if(!к||typeof MutationObserver==='undefined')return;
       new MutationObserver(()=>{ clearTimeout(_sfT); _sfT=setTimeout(()=>{ try{ _фильтрРостаПрименить(); }catch(e){} },60); }).observe(к,{childList:true,subtree:true}); };
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',_sfНаблюдать); else _sfНаблюдать(); }
-  function _кейсыРисовать(){
+  function _кейсыРисовать(безФильтра){
     const el=document.getElementById('srchCases'); if(!el)return;
-    try{ _фильтрРостаРисовать(); }catch(e){}   // фильтр роста — над кейсами, даже когда кейсов нет
-    const сп=_кейсыСобрать(_поискДанные.uni,_поискДанные.ret,_об24.спот);
+    if(!безФильтра){ try{ _фильтрРостаРисовать(); }catch(e){} }   // фильтр роста — над кейсами, даже когда кейсов нет
+    const всеК=_кейсыСобрать(_поискДанные.uni,_поискДанные.ret,_об24.спот);
     if(!_поискДанные.uni&&!_поискДанные.ret)return;
+    const q=_поискМонеты.trim();
+    if(q){ const сп=всеК.filter(x=>_монетаСовпала(x.пара,q));
+      el.innerHTML='<div class="sc-head"><b>КЕЙСЫ · «'+_uniEsc(q.toUpperCase())+'» · '+сп.length+' из '+всеК.length+'</b><span class="gs-note">поиск по сегодняшним кейсам и спискам ниже</span></div>'+_поискМонетыВне(q,всеК)+(сп.length?'<div class="sc-grid">'+сп.map(_кейсКарточка).join('')+'</div>':'');
+      return; }
+    const сп=всеК;
     if(!сп.length){ el.innerHTML='<div class="sc-head"><b>КЕЙСЫ</b><span class="gs-note">сильных сигналов у сканеров сейчас нет — это ответ, а не отсутствие данных</span></div>'; return; }
     const ш=['<div class="sc-head"><b>КЕЙСЫ · '+сп.length+'</b><span class="gs-note">выше те, кого видят несколько сканеров · факты, не прогноз · цен входа нет</span></div><div class="sc-grid">'];
-    сп.slice(0,12).forEach(x=>{
-      const сим=x.пара.replace(/USDT$/,''), б=_об24.спот&&_об24.спот[x.пара], м_=_метрикиПоиска&&_метрикиПоиска[x.пара];
-      ш.push('<div class="sc-card '+(x.тонкий?'':x.жар>=2?'hot':x.жар>=1?'warm':'')+'"'+(x.тонкий?' style="opacity:.6"':'')+'><div class="sc-top"><span class="sc-tk">'+_тк(x.пара)+'</span><span class="sc-n">'+x.бейджи.length+' скан.</span></div>'
+    сп.slice(0,12).forEach(x=>ш.push(_кейсКарточка(x)));
+    ш.push('</div>'+(сп.length>12?'<div class="gs-note">ещё '+(сп.length-12)+' — найди тикер в поле «монета» или в подробных списках ниже</div>':''));
+    el.innerHTML=ш.join('');
+  }
+  function _кейсКарточка(x){
+      const б=_об24.спот&&_об24.спот[x.пара], м_=_метрикиПоиска&&_метрикиПоиска[x.пара];
+      return ('<div class="sc-card '+(x.тонкий?'':x.жар>=2?'hot':x.жар>=1?'warm':'')+'"'+(x.тонкий?' style="opacity:.6"':'')+'><div class="sc-top"><span class="sc-tk">'+_тк(x.пара)+'</span><span class="sc-n">'+x.бейджи.length+' скан.</span></div>'
         +'<div class="sc-badges">'+x.бейджи.map(b=>'<span class="sc-b '+(b.к||'')+'">'+_uniEsc(b.т)+'</span>').join('')+'</div>'
         +x.строки.map(t=>'<div class="sc-line">'+_uniEsc(t)+'</div>').join('')
         +'<div class="sc-m">'+(б!=null?'<span>24ч <b>$'+_млн(б)+'</b></span>':'')+(м_&&м_.natr!=null?'<span>N <b>'+(+м_.natr).toFixed(1)+'%</b></span>':'')+(м_&&м_.corr!=null?'<span>C <b>'+(+м_.corr).toFixed(2)+'</b></span>':'')+'</div></div>');
-    });
-    ш.push('</div>'+(сп.length>12?'<div class="gs-note">ещё '+(сп.length-12)+' — в подробных списках ниже</div>':''));
-    el.innerHTML=ш.join('');
+  }
+  /* Монета, которой нет среди кейсов: «сканеры её сегодня не видят» + факты рынка (оборот, сделки 24ч), если тикер известен. */
+  function _поискМонетыВне(q,кейсы){
+    const н=String(q).toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/USDT$/,''); if(!н)return '';
+    if(кейсы.some(x=>_монетаСовпала(x.пара,q)))return '';
+    const пары=Object.keys(Object.assign({},_об24.спот||{},_об24.сдФьюч||{})).filter(п=>/USDT$/.test(п)&&_монетаСовпала(п,q)).sort((a,b)=>(a===н+'USDT'?-1:b===н+'USDT'?1:a.localeCompare(b))).slice(0,6);
+    if(!пары.length)return '<div class="gs-note">«'+_uniEsc(н)+'» — нет ни в кейсах, ни среди пар с оборотом за 24ч (проверь тикер).</div>';
+    return '<div class="gs-note">в сегодняшних кейсах нет — сканеры её сейчас не выделяют. Факты рынка: '+пары.map(п=>{ const р=_ростПары(п,_базыПоиска,_об24), о=_об24.спот&&_об24.спот[п];
+      return _тк(п)+(о!=null?' · 24ч $'+_млн(о):'')+(р.сд!=null?' · '+_млн(р.сд)+' сд':'')+(р.об!=null?' · об ×'+р.об.toFixed(1):''); }).join(' · ')+'</div>';
   }
   function _объёмРисовать(н){
     const e=_uniEsc, м=_млн;
