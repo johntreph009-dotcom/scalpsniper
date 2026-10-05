@@ -134,8 +134,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
      приглушены и моноширинны — они справка, а не призыв. Отдельного «зелёного
      сигнала» здесь нет и быть не должно. */
   .dz-block{margin-top:10px;padding:9px 10px;border:1px solid rgba(255,122,24,.22);border-radius:6px;background:rgba(255,122,24,.04)}
+  #liveZoneCount:empty{display:none}  /* 05.10: до прихода данных — пустая капсула у тикера на телефоне */
   .dz-head{font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;color:var(--acc,#ff7a18);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .dz-sub{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;font-weight:400;letter-spacing:0;color:rgba(255,255,255,.4);white-space:nowrap}
+  .dz-sub{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;font-weight:400;letter-spacing:0;color:rgba(255,255,255,.4);white-space:normal;min-width:0;overflow-wrap:anywhere}  /* 05.10: nowrap вылезал на 120px за экран телефона 390px */
   .dz-list{margin-top:7px;display:flex;flex-direction:column;gap:6px}
   .dz-item{display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:4px;background:rgba(255,255,255,.03);border-left:2px solid rgba(255,122,24,.5)}
   .dz-name{font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:.5px;color:#e8e8e8;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
@@ -438,6 +439,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .cn-info{font:11px/1.5 JetBrains Mono,monospace;color:var(--text-dim);margin:6px 0}
   .cn-info code{background:rgba(255,255,255,.06);padding:1px 4px;border-radius:3px}
   .cn-acts{display:flex;gap:6px;margin-top:6px}
+  .gs-btn{min-height:34px;padding:7px 14px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--text-dim);font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:600;letter-spacing:.5px;cursor:pointer}  /* 05.10: стиля не было — браузерная кнопка 19px */
+  .gs-btn:hover{color:var(--accent);border-color:var(--accent-dim)}
   .cn-btn{flex:1;padding:9px 8px;border:1px solid var(--line);border-radius:6px;background:transparent;
     color:var(--text-dim);font:600 11px Rajdhani,sans-serif;letter-spacing:.06em;cursor:pointer}
   .cn-btn:disabled{opacity:.4;cursor:default}
@@ -909,6 +912,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .mc-tfs{display:flex;gap:3px;margin-left:4px}
   .mc-tfbtn{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;font-size:11px;letter-spacing:.3px;padding:2px 7px;background:transparent;border:1px solid var(--line);border-radius:3px;color:var(--text-dim);cursor:pointer;transition:color .12s,border-color .12s,background .12s;line-height:1.5}
   .mc-tfbtn:hover{color:var(--accent);border-color:var(--accent-dim)}
+  /* 05.10 (телефон): ряд ТФ — прокручиваемая лента с кнопками под палец (см. блок «4.» ниже); обрезанный край читался как
+     дефект — гаснет к правому краю, чтобы было видно, что ряд едет. */
+  @media(max-width:560px){.mc-tfs{-webkit-mask-image:linear-gradient(90deg,#000 86%,transparent);mask-image:linear-gradient(90deg,#000 86%,transparent);padding-right:18px}}
+  .ema-tf{white-space:nowrap}
   .mc-tfbtn.active{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
   .mc-layers{display:flex;flex-wrap:wrap;gap:4px;padding:5px 10px;background:rgba(0,0,0,.22);border-bottom:1px solid rgba(255,255,255,.04)}
   .mc-lyr{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;font-size:11px;letter-spacing:.3px;padding:2px 9px;background:transparent;border:1px solid var(--line);border-radius:10px;color:var(--text-faint);cursor:pointer;transition:color .12s,border-color .12s,background .12s}
@@ -918,7 +925,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   .pwa-install:hover{background:var(--accent);color:#16100a}
   .mc-status{font-size:11px;letter-spacing:.3px;color:var(--text-dim);margin-left:auto}
   .mc-sess{font-size:11px;letter-spacing:.2px;color:var(--text-dim);margin-left:8px;white-space:nowrap}
-  @media (max-width:560px){.mc-sess{display:none}}
+  @media (max-width:560px){.mc-sess{display:none} #mcEma{display:block;flex-basis:100%;margin-left:0;white-space:normal;order:9}}  /* табличка EMA нужна и на телефоне (05.10) */
   .ticker-input-wrap{position:relative}
   #ticker{padding-right:30px}
   .ticker-dd-toggle{position:absolute;right:1px;top:1px;bottom:1px;width:28px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;border-left:1px solid var(--line);color:var(--text-dim);cursor:pointer;font-size:12px;border-radius:0 3px 3px 0;transition:color .12s,transform .12s}
@@ -2425,7 +2432,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       <div class="cn-acts">
         <button class="cn-btn" id="cnSend" onclick="cnSendZones()" disabled>▲ отправить план</button>
         <button class="cn-btn cn-panic" id="cnPanic" onclick="cnPanic()" disabled>✕ снять всё</button>
-      <button class="btn" onclick="cnReport()" title="Итог за сутки: сделки, издержки, часы записи, остановки">▤ итог суток</button>
+      <button class="cn-btn" onclick="cnReport()" title="Итог за сутки: сделки, издержки, часы записи, остановки">▤ итог суток</button>
       </div>
       <!-- ═══ ТУМБЛЕР БОЕВОГО РЕЖИМА ═══
            Право торговать выдаёт ЗАПУСК движка (ключ --allow-arm) — действие у
@@ -2471,7 +2478,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         <span class="mc-hdr-gap"></span>
         <button type="button" class="mc-act" id="mcZonesBtn" onclick="_mcZonesRefresh()" title="Пересобрать зоны из стакана под текущий таймфрейм. Ручные зоны и вставка из разбора не пострадают.">↻ зоны</button>
         <button type="button" class="mc-act" id="mcLyrBtn" onclick="_mcLayersToggle()" title="Слои графика">◈ слои</button>
-        <span class="mc-sess" id="mcEma" title="Порядок EMA 20/50/200 и закрытие последней ЗАКРЫТОЙ свечи относительно EMA20/50 (для открытой позиции). Подсказка, не правило: удержание по EMA замерено отрицательным (Г-05.10-1)."></span>
+        <span class="mc-sess" id="mcEma" title="EMA 20/50/200 по закрытой свече на 5м/15м/1ч/4ч: ▲ все зелёные (20&gt;50&gt;200), ▼ все красные, ↗ пара 20/50 уже зелёная — верхняя 200 ещё красная, ↘ наоборот. «Выстроены» — все четыре ТФ в одном полном состоянии. Отображение, не сигнал: эффект перекраски — замер Г-05.10-3; удержание по EMA замерено отрицательным (Г-05.10-1)."></span>
         <span class="mc-sess" id="mcSess" title="Торговые сессии по местному времени городов: Токио 09–18, Лондон 08–17, Нью-Йорк 08–17 (летнее время учтено). Отметка времени, не сигнал."></span>
         <span class="mc-status" id="mcStatus">загрузка…</span>
         <button type="button" class="mc-tfbtn" id="mcTallBtn" onclick="_mcToggleTall()" title="Развернуть/свернуть график по высоте">⤢</button>
@@ -7159,6 +7166,65 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     const за=(e)=>e==null?null:(side==='long'?c<e:side==='short'?c>e:null);
     return {c,e20,e50,e200,порядок,выход20:за(e20),выход50:за(e50)};
   }
+  /* ═══ ПЕРЕКРАСКА EMA (05.10.2026, трейдер: «EMA меняют цвет при пересечении друг друга») ═══
+     Правило трейдера: шорт → лонг — все красные; нижняя (20) пересекла среднюю (50) — эти две зелёные, верхняя (200) ещё
+     красная; пара пересекла верхнюю — зелёные все. Формально: пара (EMA20, EMA50) — зелёная при 20 > 50; EMA200 — зелёная
+     при 50 > 200 (пара целиком выше). Все зелёные ⇔ 20 > 50 > 200 — тот же «порядок вверх», что в _emaСводка.
+     Итог точки: 'бычий' | 'медвежий' | 'переход↑' (пара зелёная, верхняя красная) | 'переход↓'. Чистая. */
+  function _emaЦвета(e20,e50,e200){
+    if(e20==null||e50==null)return null;
+    const пара=e20>e50?'up':'dn', верх=e200==null?null:(e50>e200?'up':'dn');
+    const итог=верх==null?(пара==='up'?'переход↑':'переход↓'):пара===верх?(пара==='up'?'бычий':'медвежий'):(пара==='up'?'переход↑':'переход↓');
+    return {пара,верх,итог};
+  }
+  /* Лента по закрытиям: EMA и цвет в каждой точке + перекраски (пара/верх) с индексом свечи. Чистая.
+     Последняя свеча ряда ещё формируется — её перекраска помечена «предв» (может отмениться до закрытия). */
+  function _emaЛента(cl){
+    const e20=_ema(cl,20), e50=_ema(cl,50), e200=_ema(cl,200), цв=new Array(cl.length).fill(null), события=[];
+    for(let i=0;i<cl.length;i++){
+      цв[i]=_emaЦвета(e20[i],e50[i],e200[i]);
+      const п=i>0?цв[i-1]:null, т=цв[i]; if(!п||!т)continue;
+      if(п.пара!==т.пара)события.push({i,что:'пара',к:т.пара,предв:i===cl.length-1});
+      if(п.верх&&т.верх&&п.верх!==т.верх)события.push({i,что:'верх',к:т.верх,предв:i===cl.length-1});
+    }
+    return {e20,e50,e200,цв,события};
+  }
+  /* Состояние ТФ по ЗАКРЫТОЙ свече (предпоследней) — для таблички 5м/15м/1ч/4ч. Чистая. */
+  function _emaСостояниеТФ(свечи){
+    if(!свечи||свечи.length<52)return null;
+    const cl=свечи.map(c=>+c.c), i=cl.length-2, л=_emaЛента(cl);
+    return л.цв[i]?Object.assign({e20:л.e20[i],e50:л.e50[i],e200:л.e200[i]},л.цв[i]):null;
+  }
+  /* Старший ТФ для засечек EMA на младшем графике: «после перекраски на 1м следующая цель — EMA 5м» (наблюдение трейдера,
+     замер Г-05.10-3). Чистая. */
+  function _тфСтарше(tf){ return {'1m':'5m','3m':'15m','5m':'15m','15m':'1h','30m':'1h','1h':'4h','2h':'4h'}[tf]||null; }
+  /* Табличка «выстроены»: все четыре ТФ в одном полном состоянии (все бычьи или все медвежьи). Чистая. */
+  const _ТФ_ТАБЛ=['5m','15m','1h','4h'], _ТФ_ПОДПИСЬ={'1m':'1м','3m':'3м','5m':'5м','15m':'15м','30m':'30м','1h':'1ч','2h':'2ч','4h':'4ч','1d':'1Д'};
+  /* Табличка ТФ в шапке графика: «EMA 5м ▲ 15м ↘ 1ч ▲ 4ч ▲ · не выстроены». ▲ все зелёные, ▼ все красные, ↗ пара уже
+     зелёная — верхняя ещё красная, ↘ наоборот; · — нет данных. Чистая. */
+  function _emaТабличкаHTML(сост){
+    const ЗН={'бычий':['▲','46,224,138'],'медвежий':['▼','255,90,95'],'переход↑':['↗','150,210,120'],'переход↓':['↘','255,150,110']};
+    const ячейки=_ТФ_ТАБЛ.map((tf,k)=>{ const с=сост[k], з=с&&ЗН[с.итог];
+      return '<span class="ema-tf" title="'+_ТФ_ПОДПИСЬ[tf]+': '+(с?с.итог:'нет данных')+'">'+_ТФ_ПОДПИСЬ[tf]+' <b style="color:rgb('+(з?з[1]:'150,150,150')+')">'+(з?з[0]:'·')+'</b></span>'; }).join(' ');
+    const в=_emaВыстроены(сост);
+    return 'EMA '+ячейки+' · '+(в==null?'<span style="opacity:.6">загрузка</span>':в?'<b style="color:rgb('+(в==='бычий'?'46,224,138':'255,90,95')+')">выстроены '+(в==='бычий'?'вверх':'вниз')+'</b>':'<span style="opacity:.75">не выстроены</span>');
+  }
+  /* Кеш состояний по ТФ для тикера графика: свечи тем же _fetchKlines, раз в минуту на ТФ, по одному запросу за раз. */
+  const _emaТФ={sym:'',д:{},когда:{},идёт:false};
+  async function _emaТФОбновить(){
+    if(_emaТФ.идёт||typeof _klSym==='undefined'||!_klSym)return;
+    if(_emaТФ.sym!==_klSym){ _emaТФ.sym=_klSym; _emaТФ.д={}; _emaТФ.когда={}; }
+    const сейчас=Date.now(), нужно=_ТФ_ТАБЛ.filter(tf=>!(_emaТФ.когда[tf]>сейчас-60e3)); if(!нужно.length)return;
+    _emaТФ.идёт=true; const sym=_klSym; let было=false;
+    try{ for(const tf of нужно){ const св=(tf===_klTf&&_klines&&_klines.length>52)?_klines:await _fetchKlines(sym,tf);
+        if(_emaТФ.sym!==sym)break; _emaТФ.когда[tf]=Date.now(); const с=_emaСостояниеТФ(св); if(с){ _emaТФ.д[tf]=с; было=true; } } }
+    catch(e){} finally{ _emaТФ.идёт=false; }
+    if(было&&typeof _chartRedraw==='function')_chartRedraw();
+  }
+  function _emaВыстроены(состояния){
+    const и=состояния.map(с=>с&&с.итог); if(и.some(x=>!x))return null;
+    return и.every(x=>x==='бычий')?'бычий':и.every(x=>x==='медвежий')?'медвежий':false;
+  }
   /* ═══ ОТОБРАЖЕНИЕ ГРАФИКА — КАЛИБРОВКА (05.10.2026, трейдер: «проверь график, найди ошибки отображения») ═══
      Найдено на скриншоте 4h: (1) метки времени «03:00 · 07:00 · 11:00» без даты на окне в 80+ дней — одинаковые часы
      разных суток; (2) подсказка OHLC тоже без даты; (3) шкала цены — 5 «случайных» чисел (101.94, 93.49), большая часть под
@@ -7200,6 +7266,42 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     if((тфМс||0)>36e5)return {вид:'линия',конверт:false,стоп:false};
     if(вГруппе)return {вид:'линия',конверт:false,стоп:true};
     return {вид:'лента',конверт:true,стоп:true};
+  }
+  /* Места меток шкалы: группы по пересечению раздвигаются вокруг своего центра, группа клампится целиком (см. разведение
+     коллизий 07.09). Чистая. src — истинные y по возрастанию. */
+  function _местаБейджей(src,ШАГ,ВЕРХ,НИЗ){
+    const out=new Array(src.length); let i=0;
+    while(i<src.length){
+      let j=i, need=src[i];
+      while(j+1<src.length && src[j+1] < need+ШАГ){ j++; need=Math.max(src[j], need+ШАГ); }
+      const n=j-i+1;
+      if(n===1){ out[i]=Math.max(ВЕРХ,Math.min(НИЗ,src[i])); i++; continue; }
+      let c=0; for(let k=i;k<=j;k++) c+=src[k]; c/=n;
+      let top=c-(n-1)*ШАГ/2;
+      if(top<ВЕРХ) top=ВЕРХ;
+      if(top+(n-1)*ШАГ>НИЗ) top=Math.max(ВЕРХ,НИЗ-(n-1)*ШАГ);
+      for(let k=0;k<n;k++) out[i+k]=top+k*ШАГ;
+      i=j+1;
+    }
+    return out;
+  }
+  /* Ценник «сейчас» — неподвижное препятствие (05.10.2026, телефон 390px: бейдж «BREAK 119.7» лёг на ценник 119.89).
+     Метки выше цены раскладываются в [ВЕРХ, cy−ШАГ], ниже — в [cy+ШАГ, НИЗ]. Нет цены — как раньше. Чистая. */
+  function _местаВокругЦены(src,ШАГ,ВЕРХ,НИЗ,cy){
+    if(!isFinite(cy)) return _местаБейджей(src,ШАГ,ВЕРХ,НИЗ);
+    const выше=[], ниже=[]; src.forEach((y,i)=>(y<cy?выше:ниже).push(i));
+    const out=new Array(src.length);
+    const в=_местаБейджей(выше.map(i=>src[i]),ШАГ,ВЕРХ,Math.max(ВЕРХ,cy-ШАГ)); выше.forEach((i,k)=>out[i]=в[k]);
+    const н=_местаБейджей(ниже.map(i=>src[i]),ШАГ,Math.min(НИЗ,cy+ШАГ),НИЗ); ниже.forEach((i,k)=>out[i]=н[k]);
+    return out;
+  }
+  /* Текст бейджа под ширину шкалы (телефон: 62 px, «BREAK 120.15» жирным 10px ~72 px — обрезался до «BREAK 120.»).
+     Полный → первая буква вида + цена → только цена. мерка(текст) — ширина в px. Чистая. */
+  function _текстБейджа(txt,kind,px,ширина,мерка,короче){   // короче — укоротить, даже если влезает (единый вид бейджей)
+    if(!короче&&мерка(txt)<=ширина) return txt;
+    const цена=String(px), к=(kind||'').slice(0,1);
+    if(к&&isFinite(px)&&мерка(к+' '+цена)<=ширина) return к+' '+цена;
+    return isFinite(px)?цена:txt;
   }
   /* Бейджи зон: три и больше в пределах шага — один бейдж «FADE ×N lo–hi» на их середине. Две — остаются отдельными. Чистая. */
   function _слитьБейджи(бейджи,шаг){
@@ -7305,7 +7407,10 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
       ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(W-LBL,gy);ctx.stroke();
       ctx.setLineDash([]);
       ctx.fillStyle=P.axis;
-      ctx.fillText(_fmtP(gp),SCX+4,Math.max(8,Math.min(ph-2,gy+3)));
+      /* 05.10 (телефон): деление под ценником «сейчас» или бейджем зоны выглядывало из-под них («120» над 119.82) — не пишем. */
+      const _подЦенником=(currentPrice&&isFinite(currentPrice)&&Math.abs(gy-toY(currentPrice))<14)||
+        activeZ.some(z=>{const p=+z.px;return p>=minP&&p<=maxP&&Math.abs(gy-toY(p))<11;});
+      if(!_подЦенником)ctx.fillText(_fmtP(gp),SCX+4,Math.max(8,Math.min(ph-2,gy+3)));
     }
     ctx.strokeStyle=P.scaleLine;ctx.beginPath();ctx.moveTo(W-LBL,0);ctx.lineTo(W-LBL,H);ctx.stroke();
     if(SCX>W-LBL+1){ ctx.strokeStyle='rgba(255,255,255,.06)';ctx.beginPath();
@@ -7930,27 +8035,12 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
        * Клампим группу целиком, а не каждую метку: поштучный кламп и есть то,
        * что складывало их в стопку у края. */
       const ШАГ=17, ВЕРХ=9, НИЗ=ph-9;
-      const места=(()=>{
-        const src=_zBadges.map(b=>b.y);
-        const out=new Array(src.length);
-        let i=0;
-        while(i<src.length){
-          /* Группа: пока следующая метка не помещается за предыдущей. */
-          let j=i, need=src[i];
-          while(j+1<src.length && src[j+1] < need+ШАГ){ j++; need=Math.max(src[j], need+ШАГ); }
-          const n=j-i+1;
-          if(n===1){ out[i]=Math.max(ВЕРХ,Math.min(НИЗ,src[i])); i++; continue; }
-          /* Центр группы — среднее ИСТИННЫХ позиций: так суммарный сдвиг
-           * наименьший, и никто не уезжает дальше, чем обязан. */
-          let c=0; for(let k=i;k<=j;k++) c+=src[k]; c/=n;
-          let top=c-(n-1)*ШАГ/2;
-          if(top<ВЕРХ) top=ВЕРХ;
-          if(top+(n-1)*ШАГ>НИЗ) top=Math.max(ВЕРХ,НИЗ-(n-1)*ШАГ);
-          for(let k=0;k<n;k++) out[i+k]=top+k*ШАГ;
-          i=j+1;
-        }
-        return out;
-      })();
+      const _cyЦ=(currentPrice&&isFinite(currentPrice))?toY(currentPrice):NaN;
+      const места=_местаВокругЦены(_zBadges.map(b=>b.y),ШАГ,ВЕРХ,НИЗ,(_cyЦ>=ВЕРХ&&_cyЦ<=НИЗ)?_cyЦ:NaN);
+      /* Укорачиваем — так все сразу (05.10, телефон): «F 117.45» рядом с «FADE 117» читалось как два разных вида. */
+      ctx.font='bold 10px \'JetBrains Mono\',ui-monospace,monospace';
+      const _ширБ=Math.max(20,(LBL-(DW||0)-TW)-2)-5, _мерБ=т=>ctx.measureText(т).width;
+      const _всеКороче=_zBadges.some(b=>!b.группа&&_мерБ(b.txt)>_ширБ);
       _zBadges.forEach((b,bi)=>{
         const by=места[bi];
         /* Выноска идёт от истинной цены к сдвинутой подписи и заканчивается
@@ -7963,25 +8053,54 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         ctx.fillStyle='rgba('+b.rgb+',.2)';ctx.fillRect(SCX+1,by-8,bwd,16);
         ctx.fillStyle='rgba('+b.rgb+',1)';ctx.font='bold 10px \'JetBrains Mono\',ui-monospace,SFMono-Regular,\'SF Mono\',Menlo,Consolas,\'Liberation Mono\',monospace';
         if(b.группа)ctx.font='bold 9px \'JetBrains Mono\',ui-monospace,monospace';   // групповой бейдж длиннее — мельче, чтобы влез
-        ctx.fillText(b.txt,SCX+4,by+3.5);
+        ctx.fillText(b.группа?b.txt:_текстБейджа(b.txt,b.kind,b.px,_ширБ,_мерБ,_всеКороче),SCX+4,by+3.5);
       });
     }
     // ── EMA 20/50/200 по всем загруженным свечам, рисуются видимые (сопоставление по времени свечи) ──
     if(!L.ema){ const эл=document.getElementById('mcEma'); if(эл)эл.textContent=''; }
     if(L.ema&&candles.length>2&&_klines.length>=22){
       const cl=_klines.map(c=>+c.c), поT=new Map(_klines.map((c,i)=>[c.t,i]));
-      [[20,'255,214,10'],[50,'90,170,255'],[200,'200,120,255']].forEach(([p,цв])=>{
-        const е=_ema(cl,p); ctx.save(); ctx.strokeStyle='rgba('+цв+',.9)'; ctx.lineWidth=p===200?1.6:1.2; ctx.setLineDash([]);
-        ctx.beginPath(); let нач=false;
-        for(let i=0;i<candles.length;i++){ const j=поT.get(candles[i].t); const v=j!=null?е[j]:null; if(v==null||v<minP||v>maxP){нач=false;continue;}
-          const x=pad+i*cw+cw/2, y=toY(v); нач?ctx.lineTo(x,y):(ctx.moveTo(x,y),нач=true); }
-        ctx.stroke(); ctx.restore();
+      /* Цвет по перекраске (05.10.2026): пара 20/50 — по 20×50, верхняя 200 — по 50×200 (_emaЛента). Различаются толщиной:
+         20 — тонкая, 50 — средняя, 200 — толстая. Отрезок красится цветом своей точки — смена цвета видна там, где был крест. */
+      const л=_emaЛента(cl), ЗЕЛ='46,224,138', КРАС='255,90,95';
+      [['e20',1.1,'пара',.95],['e50',1.6,'пара',.9],['e200',2.2,'верх',.85]].forEach(([к,ш,по,а])=>{
+        const е=л[к]; ctx.save(); ctx.lineWidth=ш; ctx.setLineDash([]); ctx.lineCap='round';
+        let px=null, py=null;
+        for(let i=0;i<candles.length;i++){ const j=поT.get(candles[i].t); const v=j!=null?е[j]:null, ц=(j!=null&&л.цв[j])?л.цв[j][по]:null;
+          if(v==null||v<minP||v>maxP||!ц){px=null;continue;}
+          const x=pad+i*cw+cw/2, y=toY(v);
+          if(px!=null){ ctx.strokeStyle='rgba('+(ц==='up'?ЗЕЛ:КРАС)+','+а+')'; ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(x,y); ctx.stroke(); }
+          px=x; py=y; }
+        ctx.restore();
       });
+      /* Отметки перекраски: кружок на EMA50 — пара сменила цвет; ромб на EMA200 — перекрасилась верхняя (выстроились все).
+         Пустая — на формирующейся свече: до закрытия может отмениться. */
+      { const поИ=new Map(candles.map((c,i)=>[c.t,i]));
+        л.события.forEach(с=>{ const ii=поИ.get(_klines[с.i].t); if(ii==null)return;
+          const v=с.что==='пара'?л.e50[с.i]:л.e200[с.i]; if(v==null||v<minP||v>maxP)return;
+          const x=pad+ii*cw+cw/2, y=toY(v), rgb=с.к==='up'?ЗЕЛ:КРАС, r=с.что==='пара'?2.6:3.6;
+          ctx.save(); ctx.beginPath();
+          if(с.что==='пара')ctx.arc(x,y,r,0,7); else { ctx.moveTo(x,y-r); ctx.lineTo(x+r,y); ctx.lineTo(x,y+r); ctx.lineTo(x-r,y); ctx.closePath(); }
+          if(с.предв){ ctx.strokeStyle='rgba('+rgb+',1)'; ctx.lineWidth=1.2; ctx.stroke(); } else { ctx.fillStyle='rgba('+rgb+',1)'; ctx.fill(); ctx.strokeStyle='rgba(0,0,0,.6)'; ctx.lineWidth=.8; ctx.stroke(); }
+          ctx.restore(); }); }
+      /* Засечки EMA старшего ТФ (на 1м — EMA 5м и т.д.): наблюдение трейдера «после перекраски на 1м цель — EMA 5м».
+         Это уровни индикатора, не цена входа/цели; подтверждение — замер Г-05.10-3. */
+      { const тс=_тфСтарше(_klTf), ст=тс&&_emaТФ.sym===_klSym?_emaТФ.д[тс]:null;
+        if(ст){ const x0=Math.round(plotW*0.80);
+          [['e20','20','пара'],['e50','50','пара'],['e200','200','верх']].forEach(([к,имя,по])=>{ const v=ст[к]; if(v==null||v<minP||v>maxP)return;
+            const y=toY(v), rgb=ст[по]==='up'?ЗЕЛ:КРАС;
+            ctx.save(); ctx.strokeStyle='rgba('+rgb+',.75)'; ctx.lineWidth=к==='e200'?1.6:1; ctx.setLineDash([3,3]);
+            ctx.beginPath(); ctx.moveTo(x0,y); ctx.lineTo(plotW,y); ctx.stroke(); ctx.setLineDash([]);
+            ctx.font='9px \'JetBrains Mono\',ui-monospace,monospace'; ctx.fillStyle='rgba('+rgb+',.9)';
+            ctx.fillText(_ТФ_ПОДПИСЬ[тс]+'·'+имя,x0-ctx.measureText(_ТФ_ПОДПИСЬ[тс]+'·'+имя).width-3,y+3); ctx.restore(); }); } }
+      _emaТФОбновить();
       const поз=(typeof _ap!=='undefined'&&_ap.pos)?_ap.pos.side:((typeof positions!=='undefined'&&positions.length)?positions[0].side:null);
       const св=_emaСводка(_klines,поз);
       /* Сводка EMA — строкой в шапке графика, а не на холсте: на холсте она спорила с подписями зон за верхний левый угол. */
-      { const эл=document.getElementById('mcEma'); if(эл){ if(св){ const т='EMA 20/50/200: порядок '+(св.порядок||'—')+(поз?(' · '+(поз==='long'?'лонг':'шорт')+': закрытие '+(св.выход20?'ЗА EMA20':'по ту же сторону EMA20')+(св.выход50?' и ЗА EMA50':'')):'');
-          эл.textContent=т; эл.style.color=св.выход50?'rgb(255,90,95)':св.выход20?'rgb(255,176,32)':''; } else эл.textContent=''; } }
+      { const эл=document.getElementById('mcEma'); if(эл){
+          const табл=_emaТабличкаHTML(_ТФ_ТАБЛ.map(tf=>_emaТФ.sym===_klSym?_emaТФ.д[tf]:null));
+          const поз_т=(св&&поз)?(' · '+(поз==='long'?'лонг':'шорт')+': закрытие '+(св.выход20?'<b style="color:rgb(255,176,32)">ЗА EMA20</b>':'по ту же сторону EMA20')+(св.выход50?' <b style="color:rgb(255,90,95)">и ЗА EMA50</b>':'')):'';
+          эл.innerHTML=табл+поз_т; эл.style.color=''; } }
     }
     // ── сессии: три тонкие полосы над свечами (Азия / Лондон / Нью-Йорк) — только внутри дня ──
     /* Полосы сессий — только до часового ТФ (на 4h свеча захватывает две сессии и полоса читалась как пунктир-помеха),
