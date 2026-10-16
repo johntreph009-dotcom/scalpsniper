@@ -1,0 +1,2 @@
+Unbounded и Manrope — SIL Open Font License 1.1 (https://openfontlicense.org). Файлы — из пакетов @fontsource/unbounded@5 и
+@fontsource/manrope@5 (подмножества cyrillic и latin). Лежат здесь, чтобы витрина не грузила ничего с чужих адресов (CSP font-src 'self').
