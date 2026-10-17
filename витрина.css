@@ -1,96 +1,179 @@
-/* Витрина ScalpSniper (16.10.2026). Спецификация — Документы/ВИТРИНА-UX.md §5. Шрифты свои (CSP font-src 'self'). */
-@font-face{font-family:Unbounded;font-weight:600;font-display:swap;src:url(шрифты/unbounded-cyrillic-600-normal.woff2) format("woff2");unicode-range:U+0400-045F,U+0490-0491}
-@font-face{font-family:Unbounded;font-weight:600;font-display:swap;src:url(шрифты/unbounded-latin-600-normal.woff2) format("woff2")}
-@font-face{font-family:Manrope;font-weight:400;font-display:swap;src:url(шрифты/manrope-cyrillic-400-normal.woff2) format("woff2");unicode-range:U+0400-045F,U+0490-0491}
-@font-face{font-family:Manrope;font-weight:400;font-display:swap;src:url(шрифты/manrope-latin-400-normal.woff2) format("woff2")}
-@font-face{font-family:Manrope;font-weight:600;font-display:swap;src:url(шрифты/manrope-cyrillic-600-normal.woff2) format("woff2");unicode-range:U+0400-045F,U+0490-0491}
-@font-face{font-family:Manrope;font-weight:600;font-display:swap;src:url(шрифты/manrope-latin-600-normal.woff2) format("woff2")}
-:root{--ночь:#0F1215;--сланец:#171C21;--линия:#262D34;--текст:#E9EDF0;--пыль:#8E979F;--прицел:#FF7A18;--выше:#3FD49A;--ниже:#FF5D6C;
+/* Витрина ScalpSniper. 16.10 — этап 9 (ВИТРИНА-UX.md); 17.10 — стиль ТЕРМИНАЛА (решение трейдера «не тот стиль»; холст
+   «ScalpSniper — единый терминал», доска Kit): JetBrains Mono — текст, Rajdhani 700 — тикеры и крупные числа, Space Grotesk —
+   заголовки; тёплое свечение, стекло, #ff7a18. Шрифты свои (CSP font-src 'self'), из @fontsource (OFL — шрифты/ЛИЦЕНЗИЯ.txt). */
+@font-face{font-family:"JetBrains Mono";font-weight:400;font-display:swap;src:url(шрифты/jetbrains-mono-cyrillic-400-normal.woff2) format("woff2");unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:"JetBrains Mono";font-weight:400;font-display:swap;src:url(шрифты/jetbrains-mono-latin-400-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"JetBrains Mono";font-weight:500;font-display:swap;src:url(шрифты/jetbrains-mono-cyrillic-500-normal.woff2) format("woff2");unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:"JetBrains Mono";font-weight:500;font-display:swap;src:url(шрифты/jetbrains-mono-latin-500-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"JetBrains Mono";font-weight:700;font-display:swap;src:url(шрифты/jetbrains-mono-cyrillic-700-normal.woff2) format("woff2");unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:"JetBrains Mono";font-weight:700;font-display:swap;src:url(шрифты/jetbrains-mono-latin-700-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Space Grotesk";font-weight:700;font-display:swap;src:url(шрифты/space-grotesk-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:Rajdhani;font-weight:600;font-display:swap;src:url(шрифты/rajdhani-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:Rajdhani;font-weight:700;font-display:swap;src:url(шрифты/rajdhani-latin-700-normal.woff2) format("woff2")}
+:root{--ночь:#0a0b0d;--стекло:rgba(255,255,255,.035);--стекло2:rgba(255,255,255,.06);--линия:rgba(255,255,255,.07);--линия2:rgba(255,255,255,.12);
+ --текст:#e3e7ea;--текст2:#bcc4cc;--пыль:#96a1aa;--тень:#5d6770;--прицел:#ff7a18;--прицел-м:rgba(255,122,24,.14);--выше:#3fb950;--ниже:#f0454a;
+ --моно:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--тик:Rajdhani,"Space Grotesk",sans-serif;--заг:"JetBrains Mono",ui-monospace,monospace;
  --fs1:13px;--fs2:15px;--fs3:17px;--fs4:22px;--fs5:34px}
 *{box-sizing:border-box;margin:0}
 html{background:var(--ночь)}
-body{background:var(--ночь);color:var(--текст);font:400 var(--fs2)/1.45 Manrope,system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;min-height:100vh}
+body{background:var(--ночь);background-image:radial-gradient(ellipse 70% 38% at 18% 0%,rgba(255,122,24,.09) 0%,transparent 62%),radial-gradient(circle at 50% -12%,#16110b 0%,var(--ночь) 58%);background-attachment:fixed;
+ color:var(--текст);font:400 var(--fs2)/1.5 var(--моно);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;min-height:100vh}
 button{font:inherit;color:inherit;cursor:pointer}
 a{color:inherit}
-.тикер{font-family:Unbounded,Manrope,sans-serif;font-weight:600;letter-spacing:.01em}
+.тикер{font-family:var(--тик);font-weight:700;letter-spacing:.01em}
 .шапка{display:flex;align-items:center;gap:12px;padding:14px 16px 10px}
-.знак{width:28px;height:28px;flex:none}
-.бренд{font-family:Unbounded,Manrope,sans-serif;font-weight:600;font-size:var(--fs3)}
+.знак{width:30px;height:30px;flex:none;filter:drop-shadow(0 0 6px rgba(255,122,24,.45))}
+.бренд{display:flex;flex-direction:column;line-height:1.05}
+.б-имя{font:700 var(--fs4) var(--тик);letter-spacing:.02em;text-transform:uppercase}.б-имя b{color:var(--прицел)}
+.б-под{font-size:var(--fs1);color:var(--пыль);letter-spacing:.04em}
 .жив{color:var(--пыль);font-size:var(--fs1);margin-left:auto;display:flex;align-items:center;gap:6px;white-space:nowrap}
-.жив::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--выше)}
-.жив.молчит::before{background:var(--ниже)}
+.жив::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--выше);box-shadow:0 0 8px var(--выше)}
+.жив.молчит::before{background:var(--ниже);box-shadow:0 0 8px var(--ниже)}
 .жив:empty{display:none}
-.тариф{font-size:var(--fs1);padding:3px 9px;border:1px solid var(--линия);border-radius:20px}
+.тариф{font-size:var(--fs1);font-weight:700;padding:3px 10px;border:1px solid var(--прицел);color:var(--прицел);border-radius:20px}
+.в-терминал{font-size:var(--fs1);color:var(--текст2);text-decoration:none;border:1px solid var(--линия2);border-radius:10px;padding:0 12px;min-height:36px;display:inline-flex;align-items:center}
+.в-терминал:hover{border-color:var(--прицел);color:var(--текст)}
 .чипы{display:flex;gap:8px;overflow-x:auto;padding:4px 16px 12px;scrollbar-width:none}
-.чип{white-space:nowrap;border:1px solid var(--линия);background:none;border-radius:22px;padding:9px 14px;min-height:44px;font-size:var(--fs1);color:var(--пыль)}
-.чип[aria-pressed="true"]{background:var(--текст);color:var(--ночь);border-color:var(--текст);font-weight:600}
-.раздел{font-size:var(--fs1);color:var(--пыль);padding:14px 16px 6px}
-.строка{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:13px 16px;border:0;border-bottom:1px solid var(--линия);min-height:68px;position:relative;width:100%;text-align:left;background:none}
-.строка:hover,.строка.выбр{background:var(--сланец)}
+.чип{white-space:nowrap;border:1px solid var(--линия2);background:var(--стекло);border-radius:22px;padding:9px 14px;min-height:44px;font-size:var(--fs1);color:var(--пыль)}
+.чип[aria-pressed="true"]{background:var(--прицел);color:#16100a;border-color:var(--прицел);font-weight:700}
+.раздел{font:700 var(--fs1) var(--моно);color:var(--пыль);padding:18px 16px 6px;text-transform:uppercase;letter-spacing:.06em}
+
+/* ── В прицеле ── */
+.герой{display:grid;grid-template-columns:112px 1fr;gap:16px;align-items:center;width:calc(100% - 32px);margin:2px 16px 14px;padding:18px;text-align:left;
+ border-radius:22px;background:var(--стекло);border:1px solid var(--линия);box-shadow:0 10px 40px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.07);position:relative;overflow:hidden}
+.герой::before{content:"";position:absolute;inset:-40% -10% auto auto;width:70%;height:120%;background:radial-gradient(circle,rgba(255,122,24,.13),transparent 62%);pointer-events:none}
+button.герой:hover{border-color:rgba(255,122,24,.45)}
+.знак-п{width:112px;height:112px;overflow:visible}
+.знак-п circle,.знак-п path{fill:none;stroke:var(--прицел);stroke-width:2.2}
+.знак-п circle,.знак-п path{transform-box:view-box;transform-origin:60px 60px}
+.знак-п .к2{stroke-width:1.2;stroke-dasharray:4 6;opacity:.7;transform-origin:60px 60px}
+.знак-п .точка{fill:var(--прицел);stroke:none;filter:drop-shadow(0 0 5px var(--прицел))}
+.герой.тихо .знак-п{opacity:.45}
+.г-текст{display:flex;flex-direction:column;gap:4px;min-width:0;position:relative}
+.г-метка{font-size:var(--fs1);color:var(--прицел);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.г-тикер{font-size:52px;line-height:.95;color:var(--текст);text-shadow:0 0 22px rgba(255,122,24,.25);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.г-тикер.скрыт{color:var(--тень);letter-spacing:.18em;text-shadow:none}
+.г-вид{font-size:var(--fs1);color:var(--текст2);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.г-путь{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;font-size:var(--fs1);color:var(--пыль)}
+.г-путь i{font-style:normal;display:inline-flex;align-items:center;gap:6px}
+.г-путь i::before{content:"";width:9px;height:9px;border-radius:50%;border:2px solid var(--прицел)}
+.г-путь i.есть::before{background:var(--прицел)}
+.герой .pro{color:var(--прицел);font-size:var(--fs1);font-weight:700}
+
+/* ── Мозаика ── */
+.мозаика{margin:0 16px 6px;padding:14px 14px 12px;border-radius:18px;background:var(--стекло);border:1px solid var(--линия);position:relative;overflow:hidden}
+.м-верх{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.м-верх b{font:700 var(--fs3) var(--тик);letter-spacing:.03em;text-transform:uppercase}
+.м-верх span{font-size:var(--fs1);color:var(--пыль)}
+.м-поле{display:grid;grid-template-columns:repeat(auto-fill,minmax(14px,1fr));gap:4px;position:relative}
+.м-поле i{aspect-ratio:1;border-radius:3px;background:#1d2125;cursor:pointer;transition:transform .15s,box-shadow .2s}
+.м-поле i:hover{transform:scale(1.35);z-index:1}
+.м-поле i.в1{background:rgba(63,185,80,.38)}.м-поле i.в2{background:rgba(63,185,80,.68)}.м-поле i.в3{background:#3fb950;box-shadow:0 0 8px rgba(63,185,80,.55)}
+.м-поле i.н1{background:rgba(240,69,74,.34)}.м-поле i.н2{background:rgba(240,69,74,.62)}.м-поле i.н3{background:#f0454a;box-shadow:0 0 8px rgba(240,69,74,.5)}
+.м-поле i.с{background:#262b30;box-shadow:inset 0 0 0 1px rgba(255,122,24,.55)}
+.м-поле i.гор{background:var(--прицел);box-shadow:0 0 10px rgba(255,122,24,.85)}
+.м-поле i.з{background:repeating-linear-gradient(45deg,#1d2125 0 3px,#262b30 3px 5px)}
+.м-поле i.выбр{outline:2px solid var(--текст);outline-offset:1px}
+.м-легенда{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:var(--fs1);color:var(--пыль)}
+.м-легенда span{display:inline-flex;align-items:center;gap:6px}
+.м-легенда span::before{content:"";width:10px;height:10px;border-radius:3px}
+.л-в::before{background:#3fb950}.л-н::before{background:#f0454a}.л-с::before{background:#262b30;box-shadow:inset 0 0 0 1px rgba(255,122,24,.55)}
+
+/* ── строки ── */
+.строка{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:13px 16px;border:0;border-bottom:1px solid var(--линия);min-height:68px;position:relative;width:100%;text-align:left;background:none;transition:background .2s}
+.строка:hover,.строка.выбр{background:var(--стекло2)}
+.строка.выбр{box-shadow:inset 3px 0 0 var(--прицел)}
 .строка .тикер{font-size:var(--fs4);line-height:1.15}
 .строка .время{color:var(--пыль);font-size:var(--fs1);text-align:right}
 .строка .вид{color:var(--пыль);font-size:var(--fs1);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.строка .итог{font-size:var(--fs2);text-align:right;font-weight:600}
-.сила{display:inline-flex;gap:3px}.сила b{width:6px;height:6px;border-radius:50%;background:var(--линия)}.сила b.да{background:var(--текст)}
-.выше{color:var(--выше)}.ниже{color:var(--ниже)}.ждёт{color:var(--пыль);font-weight:400!important}
-.закрыто .тикер{color:var(--линия);letter-spacing:.2em}
-.закрыто .pro{color:var(--прицел);font-size:var(--fs1);text-align:right;font-weight:600}
+.строка .итог{font:700 var(--fs3) var(--тик);text-align:right}
+.сила{display:inline-flex;gap:3px}.сила b{width:6px;height:12px;border-radius:2px;background:var(--линия2)}.сила b.да{background:var(--прицел)}
+.выше{color:var(--выше)}.ниже{color:var(--ниже)}.ждёт{color:var(--пыль);font-family:var(--моно)!important;font-size:var(--fs1)!important;font-weight:400!important}
+.закрыто .тикер{color:var(--тень);letter-spacing:.2em}
+.закрыто .pro{color:var(--прицел);font-size:var(--fs1);text-align:right;font-weight:700}
 .захват{box-shadow:inset 3px 0 0 var(--прицел)}
 .захват::before,.захват::after{content:"";position:absolute;background:var(--прицел);opacity:0;pointer-events:none}
 .захват::before{left:0;top:50%;height:1px;width:100%}.захват::after{top:0;left:22px;width:1px;height:100%}
-@media (prefers-reduced-motion:no-preference){.захват::before{animation:гор .22s ease-out both}.захват::after{animation:верт .22s ease-out both}}
-@keyframes гор{from{opacity:.9;transform:scaleX(1)}to{opacity:0;transform:scaleX(.02)}}
-@keyframes верт{from{opacity:.9;transform:scaleY(1)}to{opacity:0;transform:scaleY(.02)}}
 .пусто{padding:28px 16px;color:var(--пыль)}
 .пусто button{margin-top:12px}
+
+/* ── монета, итоги, профиль ── */
 .монета{padding:18px 16px 24px}
-.монета h1{font-size:var(--fs5);line-height:1}
+.монета h1{font-size:var(--fs5);line-height:1;text-shadow:0 0 22px rgba(255,122,24,.22)}
 .монета .пара{color:var(--пыль);font-size:var(--fs1);margin-top:6px}
-.блок{padding:14px 0;border-top:1px solid var(--линия);margin-top:14px}
-.блок h2{font-size:var(--fs2);font-weight:600;margin-bottom:8px}
+.блок{padding:16px;border:1px solid var(--линия);background:var(--стекло);border-radius:16px;margin-top:14px}
+.блок h2{font:700 var(--fs3) var(--заг);margin-bottom:10px}
 .факты{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
 .пыль{color:var(--пыль)}
 .полоса{display:flex;flex-wrap:wrap;gap:3px;margin:8px 0;max-width:560px}
-.полоса i{width:7px;height:7px;border-radius:50%;background:var(--ниже)}.полоса i.в{background:var(--выше)}
+.полоса i{width:8px;height:8px;border-radius:2px;background:var(--ниже)}.полоса i.в{background:var(--выше)}
 .подпись{color:var(--пыль);font-size:var(--fs1)}
-.вердикт{font-weight:600}
+.вердикт{font-weight:700}
 .кнопки{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center}
-.кн{min-height:44px;padding:0 18px;border-radius:8px;border:1px solid var(--линия);background:var(--сланец);font-weight:600;display:inline-flex;align-items:center;text-decoration:none}
-.кн.главная{background:var(--прицел);border-color:var(--прицел);color:#1a0d02}
+.кн{min-height:44px;padding:0 18px;border-radius:12px;border:1px solid var(--линия2);background:var(--стекло2);font-weight:700;display:inline-flex;align-items:center;text-decoration:none;font-size:var(--fs1)}
+.кн:hover{border-color:var(--прицел)}
+.кн.главная{background:var(--прицел);border-color:var(--прицел);color:#16100a;box-shadow:0 0 18px rgba(255,122,24,.35)}
 .уровни{display:flex;gap:10px;flex-wrap:wrap}
-.уровни span{border:1px solid var(--линия);border-radius:6px;padding:6px 10px}
+.уровни span{border:1px solid var(--линия2);border-radius:8px;padding:6px 10px}
 .итоги,.профиль,.вход{padding:6px 16px 24px}
-.итоги h1,.вход h1{font-size:var(--fs4);font-family:Unbounded,Manrope,sans-serif;font-weight:600;line-height:1.2}
+.итоги h1,.вход h1{font:700 var(--fs4)/1.2 var(--заг)}
 .итоги .под{color:var(--пыль);margin:6px 0 10px}
-.вид-итог{padding:16px 0;border-bottom:1px solid var(--линия)}
+.вид-итог{padding:16px;border:1px solid var(--линия);background:var(--стекло);border-radius:16px;margin-top:10px}
 .вид-итог .верх{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
-.вид-итог .имя{font-weight:600;font-size:var(--fs3)}
+.вид-итог .имя{font:700 var(--fs3) var(--тик);letter-spacing:.02em}
 details{margin-top:16px;color:var(--пыль)}summary{min-height:44px;display:flex;align-items:center;cursor:pointer;color:var(--текст)}
 .пункт{display:flex;justify-content:space-between;align-items:center;min-height:56px;border-bottom:1px solid var(--линия);gap:12px}
 .пункт .пыль{font-size:var(--fs1)}
-.тумблер{width:44px;height:26px;border-radius:13px;background:var(--линия);position:relative;flex:none;border:0}
-.тумблер::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--пыль)}
-.тумблер[aria-checked="true"]{background:var(--выше)}.тумблер[aria-checked="true"]::after{left:21px;background:var(--ночь)}
+.тумблер{width:44px;height:26px;border-radius:13px;background:var(--линия2);position:relative;flex:none;border:0}
+.тумблер::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--пыль);transition:left .15s}
+.тумблер[aria-checked="true"]{background:var(--прицел)}.тумблер[aria-checked="true"]::after{left:21px;background:var(--ночь)}
 .вход p{color:var(--пыль);margin:12px 0 18px;max-width:46ch}
-.низ{position:fixed;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(4,1fr);background:var(--ночь);border-top:1px solid var(--линия);padding-bottom:env(safe-area-inset-bottom)}
+.низ{position:fixed;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(4,1fr);background:rgba(10,11,13,.92);backdrop-filter:blur(10px);border-top:1px solid var(--линия);padding-bottom:env(safe-area-inset-bottom);z-index:5}
 .низ a{min-height:56px;display:grid;place-items:center;color:var(--пыль);font-size:var(--fs1);text-decoration:none}
-.низ a.вкл{color:var(--текст);font-weight:600}
+.низ a.вкл{color:var(--прицел);font-weight:700;box-shadow:inset 0 2px 0 var(--прицел)}
 .экран{display:none;padding-bottom:70px}.экран.вкл{display:block}
 .верх-вкладки{display:none}
 body.без-входа .низ,body.без-входа .верх-вкладки{display:none!important}
+@media (max-width:420px){.в-терминал,.б-под{display:none}.г-тикер{font-size:44px}.герой{grid-template-columns:84px 1fr;gap:12px;padding:14px}.знак-п{width:84px;height:84px}}
 @media (min-width:1000px){
  body{max-width:1440px;margin:0 auto}
  .низ{display:none}
  .верх-вкладки{display:flex;gap:4px;margin-left:24px}
- .верх-вкладки a{padding:10px 14px;border-radius:8px;color:var(--пыль);text-decoration:none}.верх-вкладки a.вкл{background:var(--сланец);color:var(--текст);font-weight:600}
+ .верх-вкладки a{padding:10px 14px;border-radius:10px;color:var(--пыль);text-decoration:none;font-size:var(--fs2)}.верх-вкладки a.вкл{background:var(--стекло2);color:var(--текст);font-weight:700;box-shadow:inset 0 -2px 0 var(--прицел)}
  .шапка{padding:18px 32px;border-bottom:1px solid var(--линия)}
- .сетка{display:grid;grid-template-columns:440px 1fr;min-height:calc(100vh - 70px)}
+ .сетка{display:grid;grid-template-columns:480px 1fr;min-height:calc(100vh - 70px)}
  .сетка #э-лента.вкл,.сетка #э-монета.вкл{display:block}
- .сетка #э-лента{border-right:1px solid var(--линия);padding-bottom:0}
- .сетка #э-монета{padding:0 24px}
+ .сетка #э-лента{border-right:1px solid var(--линия);padding:12px 0 0}
+ .сетка #э-монета{padding:12px 32px}
  body.широко .сетка{display:block}
- body.широко #э-итоги,body.широко #э-профиль,body.широко #э-вход{max-width:820px;margin:0 auto;padding-top:24px}
- .монета h1{font-size:48px}
+ body.широко #э-итоги,body.широко #э-профиль,body.широко #э-вход{max-width:860px;margin:0 auto;padding-top:24px}
+ .монета h1{font-size:64px}
+ .г-тикер{font-size:60px}
 }
 :focus-visible{outline:2px solid var(--прицел);outline-offset:2px}
 .о8{margin-top:8px}.о10{margin-top:10px}.о14{margin-top:14px}.без-поля{padding-left:0}
+
+/* ── движение: у каждой анимации смысл (ВИТРИНА-UX §4); при «меньше движения» — ничего ── */
+@media (prefers-reduced-motion:no-preference){
+ .захват::before{animation:гор .22s ease-out both}.захват::after{animation:верт .22s ease-out both}
+ .знак-п .к2{animation:скан 9s linear infinite}
+ .первый .знак-п .штр{animation:сход .7s cubic-bezier(.2,.8,.2,1) both}
+ .первый .знак-п .к1{animation:кольцо .9s cubic-bezier(.2,.8,.2,1) .15s both}
+ .первый .знак-п .точка{animation:точка .4s ease-out .8s both}
+ .первый .г-тикер{animation:тикер .5s ease-out .55s both}
+ .первый .м-поле i{animation:клетка .35s ease-out both}
+ .первый .м-поле::after{content:"";position:absolute;left:-4px;right:-4px;height:2px;top:0;background:linear-gradient(90deg,transparent,var(--прицел),transparent);box-shadow:0 0 12px var(--прицел);animation:луч 1.4s ease-in-out both;pointer-events:none}
+ .м-поле i.гор{animation:дыхание 2.4s ease-in-out infinite}
+ .первый .м-поле i.гор{animation:клетка .35s ease-out both,дыхание 2.4s ease-in-out .5s infinite}
+}
+@keyframes гор{from{opacity:.9;transform:scaleX(1)}to{opacity:0;transform:scaleX(.02)}}
+@keyframes верт{from{opacity:.9;transform:scaleY(1)}to{opacity:0;transform:scaleY(.02)}}
+@keyframes скан{to{transform:rotate(360deg)}}
+@keyframes сход{from{opacity:0;transform:scale(1.9)}to{opacity:1;transform:scale(1)}}
+@keyframes кольцо{from{opacity:0;stroke-dasharray:0 300}to{opacity:1;stroke-dasharray:300 0}}
+@keyframes точка{0%{opacity:0;transform:scale(0)}70%{opacity:1;transform:scale(1.6)}100%{transform:scale(1)}}
+@keyframes тикер{from{opacity:0;letter-spacing:.3em;filter:blur(4px)}to{opacity:1;letter-spacing:.01em;filter:none}}
+@keyframes клетка{from{opacity:0;transform:scale(.3)}to{opacity:1;transform:none}}
+@keyframes луч{from{top:0;opacity:1}90%{opacity:1}to{top:100%;opacity:0}}
+@keyframes дыхание{0%,100%{box-shadow:0 0 10px rgba(255,122,24,.85)}50%{box-shadow:0 0 2px rgba(255,122,24,.2);opacity:.7}}
+.первый .м-поле i:nth-child(1){animation-delay:9ms}.первый .м-поле i:nth-child(2){animation-delay:18ms}.первый .м-поле i:nth-child(3){animation-delay:27ms}.первый .м-поле i:nth-child(4){animation-delay:36ms}.первый .м-поле i:nth-child(5){animation-delay:45ms}.первый .м-поле i:nth-child(6){animation-delay:54ms}.первый .м-поле i:nth-child(7){animation-delay:63ms}.первый .м-поле i:nth-child(8){animation-delay:72ms}.первый .м-поле i:nth-child(9){animation-delay:81ms}.первый .м-поле i:nth-child(10){animation-delay:90ms}.первый .м-поле i:nth-child(11){animation-delay:99ms}.первый .м-поле i:nth-child(12){animation-delay:108ms}.первый .м-поле i:nth-child(13){animation-delay:117ms}.первый .м-поле i:nth-child(14){animation-delay:126ms}.первый .м-поле i:nth-child(15){animation-delay:135ms}.первый .м-поле i:nth-child(16){animation-delay:144ms}.первый .м-поле i:nth-child(17){animation-delay:153ms}.первый .м-поле i:nth-child(18){animation-delay:162ms}.первый .м-поле i:nth-child(19){animation-delay:171ms}.первый .м-поле i:nth-child(20){animation-delay:180ms}.первый .м-поле i:nth-child(21){animation-delay:189ms}.первый .м-поле i:nth-child(22){animation-delay:198ms}.первый .м-поле i:nth-child(23){animation-delay:207ms}.первый .м-поле i:nth-child(24){animation-delay:216ms}.первый .м-поле i:nth-child(25){animation-delay:225ms}.первый .м-поле i:nth-child(26){animation-delay:234ms}.первый .м-поле i:nth-child(27){animation-delay:243ms}.первый .м-поле i:nth-child(28){animation-delay:252ms}.первый .м-поле i:nth-child(29){animation-delay:261ms}.первый .м-поле i:nth-child(30){animation-delay:270ms}.первый .м-поле i:nth-child(31){animation-delay:279ms}.первый .м-поле i:nth-child(32){animation-delay:288ms}.первый .м-поле i:nth-child(33){animation-delay:297ms}.первый .м-поле i:nth-child(34){animation-delay:306ms}.первый .м-поле i:nth-child(35){animation-delay:315ms}.первый .м-поле i:nth-child(36){animation-delay:324ms}.первый .м-поле i:nth-child(37){animation-delay:333ms}.первый .м-поле i:nth-child(38){animation-delay:342ms}.первый .м-поле i:nth-child(39){animation-delay:351ms}.первый .м-поле i:nth-child(40){animation-delay:360ms}.первый .м-поле i:nth-child(41){animation-delay:369ms}.первый .м-поле i:nth-child(42){animation-delay:378ms}.первый .м-поле i:nth-child(43){animation-delay:387ms}.первый .м-поле i:nth-child(44){animation-delay:396ms}.первый .м-поле i:nth-child(45){animation-delay:405ms}.первый .м-поле i:nth-child(46){animation-delay:414ms}.первый .м-поле i:nth-child(47){animation-delay:423ms}.первый .м-поле i:nth-child(48){animation-delay:432ms}.первый .м-поле i:nth-child(49){animation-delay:441ms}.первый .м-поле i:nth-child(50){animation-delay:450ms}.первый .м-поле i:nth-child(51){animation-delay:459ms}.первый .м-поле i:nth-child(52){animation-delay:468ms}.первый .м-поле i:nth-child(53){animation-delay:477ms}.первый .м-поле i:nth-child(54){animation-delay:486ms}.первый .м-поле i:nth-child(55){animation-delay:495ms}.первый .м-поле i:nth-child(56){animation-delay:504ms}.первый .м-поле i:nth-child(57){animation-delay:513ms}.первый .м-поле i:nth-child(58){animation-delay:522ms}.первый .м-поле i:nth-child(59){animation-delay:531ms}.первый .м-поле i:nth-child(60){animation-delay:540ms}.первый .м-поле i:nth-child(61){animation-delay:549ms}.первый .м-поле i:nth-child(62){animation-delay:558ms}.первый .м-поле i:nth-child(63){animation-delay:567ms}.первый .м-поле i:nth-child(64){animation-delay:576ms}.первый .м-поле i:nth-child(65){animation-delay:585ms}.первый .м-поле i:nth-child(66){animation-delay:594ms}.первый .м-поле i:nth-child(67){animation-delay:603ms}.первый .м-поле i:nth-child(68){animation-delay:612ms}.первый .м-поле i:nth-child(69){animation-delay:621ms}.первый .м-поле i:nth-child(70){animation-delay:630ms}.первый .м-поле i:nth-child(71){animation-delay:639ms}.первый .м-поле i:nth-child(72){animation-delay:648ms}.первый .м-поле i:nth-child(73){animation-delay:657ms}.первый .м-поле i:nth-child(74){animation-delay:666ms}.первый .м-поле i:nth-child(75){animation-delay:675ms}.первый .м-поле i:nth-child(76){animation-delay:684ms}.первый .м-поле i:nth-child(77){animation-delay:693ms}.первый .м-поле i:nth-child(78){animation-delay:702ms}.первый .м-поле i:nth-child(79){animation-delay:711ms}.первый .м-поле i:nth-child(80){animation-delay:720ms}.первый .м-поле i:nth-child(81){animation-delay:729ms}.первый .м-поле i:nth-child(82){animation-delay:738ms}.первый .м-поле i:nth-child(83){animation-delay:747ms}.первый .м-поле i:nth-child(84){animation-delay:756ms}.первый .м-поле i:nth-child(85){animation-delay:765ms}.первый .м-поле i:nth-child(86){animation-delay:774ms}.первый .м-поле i:nth-child(87){animation-delay:783ms}.первый .м-поле i:nth-child(88){animation-delay:792ms}.первый .м-поле i:nth-child(89){animation-delay:801ms}.первый .м-поле i:nth-child(90){animation-delay:810ms}.первый .м-поле i:nth-child(91){animation-delay:819ms}.первый .м-поле i:nth-child(92){animation-delay:828ms}.первый .м-поле i:nth-child(93){animation-delay:837ms}.первый .м-поле i:nth-child(94){animation-delay:846ms}.первый .м-поле i:nth-child(95){animation-delay:855ms}.первый .м-поле i:nth-child(96){animation-delay:864ms}.первый .м-поле i:nth-child(97){animation-delay:873ms}.первый .м-поле i:nth-child(98){animation-delay:882ms}.первый .м-поле i:nth-child(99){animation-delay:891ms}.первый .м-поле i:nth-child(100){animation-delay:900ms}.первый .м-поле i:nth-child(101){animation-delay:909ms}.первый .м-поле i:nth-child(102){animation-delay:918ms}.первый .м-поле i:nth-child(103){animation-delay:927ms}.первый .м-поле i:nth-child(104){animation-delay:936ms}.первый .м-поле i:nth-child(105){animation-delay:945ms}.первый .м-поле i:nth-child(106){animation-delay:954ms}.первый .м-поле i:nth-child(107){animation-delay:963ms}.первый .м-поле i:nth-child(108){animation-delay:972ms}.первый .м-поле i:nth-child(109){animation-delay:981ms}.первый .м-поле i:nth-child(110){animation-delay:990ms}.первый .м-поле i:nth-child(111){animation-delay:999ms}.первый .м-поле i:nth-child(112){animation-delay:1008ms}.первый .м-поле i:nth-child(113){animation-delay:1017ms}.первый .м-поле i:nth-child(114){animation-delay:1026ms}.первый .м-поле i:nth-child(115){animation-delay:1035ms}.первый .м-поле i:nth-child(116){animation-delay:1044ms}.первый .м-поле i:nth-child(117){animation-delay:1053ms}.первый .м-поле i:nth-child(118){animation-delay:1062ms}.первый .м-поле i:nth-child(119){animation-delay:1071ms}.первый .м-поле i:nth-child(120){animation-delay:1080ms}.первый .м-поле i:nth-child(121){animation-delay:1089ms}.первый .м-поле i:nth-child(122){animation-delay:1098ms}.первый .м-поле i:nth-child(123){animation-delay:1107ms}.первый .м-поле i:nth-child(124){animation-delay:1116ms}.первый .м-поле i:nth-child(125){animation-delay:1125ms}.первый .м-поле i:nth-child(126){animation-delay:1134ms}.первый .м-поле i:nth-child(127){animation-delay:1143ms}.первый .м-поле i:nth-child(128){animation-delay:1152ms}.первый .м-поле i:nth-child(129){animation-delay:1161ms}.первый .м-поле i:nth-child(130){animation-delay:1170ms}.первый .м-поле i:nth-child(131){animation-delay:1179ms}.первый .м-поле i:nth-child(132){animation-delay:1188ms}.первый .м-поле i:nth-child(133){animation-delay:1197ms}.первый .м-поле i:nth-child(134){animation-delay:1206ms}.первый .м-поле i:nth-child(135){animation-delay:1215ms}.первый .м-поле i:nth-child(136){animation-delay:1224ms}.первый .м-поле i:nth-child(137){animation-delay:1233ms}.первый .м-поле i:nth-child(138){animation-delay:1242ms}.первый .м-поле i:nth-child(139){animation-delay:1251ms}.первый .м-поле i:nth-child(140){animation-delay:1260ms}.первый .м-поле i:nth-child(141){animation-delay:1269ms}.первый .м-поле i:nth-child(142){animation-delay:1278ms}.первый .м-поле i:nth-child(143){animation-delay:1287ms}.первый .м-поле i:nth-child(144){animation-delay:1296ms}.первый .м-поле i:nth-child(145){animation-delay:1305ms}.первый .м-поле i:nth-child(146){animation-delay:1314ms}.первый .м-поле i:nth-child(147){animation-delay:1323ms}.первый .м-поле i:nth-child(148){animation-delay:1332ms}.первый .м-поле i:nth-child(149){animation-delay:1341ms}.первый .м-поле i:nth-child(150){animation-delay:1350ms}.первый .м-поле i:nth-child(151){animation-delay:1359ms}.первый .м-поле i:nth-child(152){animation-delay:1368ms}.первый .м-поле i:nth-child(153){animation-delay:1377ms}.первый .м-поле i:nth-child(154){animation-delay:1386ms}.первый .м-поле i:nth-child(155){animation-delay:1395ms}.первый .м-поле i:nth-child(156){animation-delay:1404ms}.первый .м-поле i:nth-child(157){animation-delay:1413ms}.первый .м-поле i:nth-child(158){animation-delay:1422ms}.первый .м-поле i:nth-child(159){animation-delay:1431ms}.первый .м-поле i:nth-child(160){animation-delay:1440ms}.первый .м-поле i:nth-child(161){animation-delay:1449ms}.первый .м-поле i:nth-child(162){animation-delay:1458ms}.первый .м-поле i:nth-child(163){animation-delay:1467ms}.первый .м-поле i:nth-child(164){animation-delay:1476ms}.первый .м-поле i:nth-child(165){animation-delay:1485ms}.первый .м-поле i:nth-child(166){animation-delay:1494ms}.первый .м-поле i:nth-child(167){animation-delay:1503ms}.первый .м-поле i:nth-child(168){animation-delay:1512ms}.первый .м-поле i:nth-child(169){animation-delay:1521ms}.первый .м-поле i:nth-child(170){animation-delay:1530ms}.первый .м-поле i:nth-child(171){animation-delay:1539ms}.первый .м-поле i:nth-child(172){animation-delay:1548ms}.первый .м-поле i:nth-child(173){animation-delay:1557ms}.первый .м-поле i:nth-child(174){animation-delay:1566ms}.первый .м-поле i:nth-child(175){animation-delay:1575ms}.первый .м-поле i:nth-child(176){animation-delay:1584ms}.первый .м-поле i:nth-child(177){animation-delay:1593ms}.первый .м-поле i:nth-child(178){animation-delay:1602ms}.первый .м-поле i:nth-child(179){animation-delay:1611ms}.первый .м-поле i:nth-child(180){animation-delay:1620ms}

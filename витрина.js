@@ -32,15 +32,54 @@
       + '<span class="время">' + (сИтогом ? экр(дата(x.t)) : экр(назад(x.t, сейчас))) + '</span>'
       + '<span class="вид">' + экр(x.имя) + ' ' + силаHTML(x.сила) + подпись(x) + '</span>' + правый + '</button>';
   }
+  /* ══ Кейсы (17.10.2026, перенос дизайна шаг 4; холст «ScalpSniper — единый терминал», доски Main/Desktop) ══
+     Первый экран: «В прицеле» — одна главная свежая находка; «Мозаика находок» — каждая клетка = находка из ответа сервера,
+     цвет = что с ней стало через сутки; ниже списки «В работе» и «С итогом». Только то, что прислал сервер: ни вероятностей,
+     ни счётчиков, которых в ответе нет (воронка «412 → 1» появится, когда сервер начнёт отдавать её числа). */
+  function слово(n) { n = Math.abs(n) % 100; var к = n % 10; return n > 10 && n < 20 ? 'находок' : к === 1 ? 'находка' : к >= 2 && к <= 4 ? 'находки' : 'находок'; }
+  function вПрицеле(список) {
+    var свежие = список.filter(function (x) { return !x.итог; }), откр = свежие.filter(function (x) { return !x.закрыто; });
+    return (откр.length ? откр : свежие).slice().sort(function (a, b) { return (Number(b.сила) || 0) - (Number(a.сила) || 0) || b.t - a.t; })[0] || null;
+  }
+  function прицелSVG() {
+    return '<svg class="знак-п" viewBox="0 0 120 120" aria-hidden="true"><circle class="к1" cx="60" cy="60" r="46"/><circle class="к2" cx="60" cy="60" r="30"/>'
+      + '<path class="штр" d="M60 2v24M60 94v24M2 60h24M94 60h24"/><circle class="точка" cx="60" cy="60" r="4"/></svg>';
+  }
+  function геройHTML(x, сейчас) {
+    if (!x) return '<div class="герой тихо">' + прицелSVG() + '<span class="г-текст"><span class="г-метка">В прицеле</span><span class="г-тикер тикер">—</span>'
+      + '<span class="г-вид">Свежих находок нет — сканер смотрит рынок.</span></span></div>';
+    var ч = Math.max(1, Math.round(24 - (сейчас - x.t) / 36e5));
+    return '<button class="герой" type="button" data-id="' + экр(x.id) + '">' + прицелSVG()
+      + '<span class="г-текст"><span class="г-метка">В прицеле</span>'
+      + '<span class="г-тикер тикер' + (x.закрыто ? ' скрыт' : '') + '">' + (x.закрыто ? '••••' : экр(x.тикер)) + '</span>'
+      + '<span class="г-вид">' + экр(x.имя) + ' ' + силаHTML(x.сила) + '</span>'
+      + '<span class="г-путь"><i class="есть">найдена ' + экр(назад(x.t, сейчас)) + '</i><i class="ждём">итог через ' + ч + ' ч</i></span>'
+      + (x.закрыто ? '<span class="pro">Тикер свежей находки — в Pro</span>' : '') + '</span></button>';
+  }
+  function клеткаКласс(x, сейчас) {
+    if (x.итог) { var v = Number(x.итог.кРынку24), а = Math.abs(v); return (v > 0 ? 'в' : 'н') + (а >= 5 ? '3' : а >= 2 ? '2' : '1'); }
+    if (x.закрыто) return 'з';
+    return сейчас - x.t < 36e5 ? 'гор' : 'с';
+  }
+  function мозаикаHTML(список, сейчас, выбранId) {
+    if (!список.length) return '';
+    var сИт = список.filter(function (x) { return x.итог; }), выше = сИт.filter(function (x) { return x.итог.кРынку24 > 0; }).length;
+    var клетки = список.slice().sort(function (a, b) { return a.t - b.t; }).map(function (x) {
+      return '<i class="' + клеткаКласс(x, сейчас) + (x.id === выбранId ? ' выбр' : '') + '" data-id="' + экр(x.id) + '" title="' + (x.закрыто ? экр(x.имя) : экр(String(x.тикер || '').replace(/[^0-9A-Za-z]/g, '')) + ', ' + экр(x.имя)) + '"></i>'; }).join('');
+    var итог = сИт.length ? выше + ' из ' + сИт.length + ' обогнали рынок' : 'итогов ещё нет';
+    return '<div class="мозаика"><div class="м-верх"><b>Мозаика находок</b><span>' + список.length + ' ' + слово(список.length) + ', ' + итог + '</span></div>'
+      + '<div class="м-поле" role="img" aria-label="' + список.length + ' ' + слово(список.length) + ': ' + итог + '">' + клетки + '</div>'
+      + '<div class="м-легенда"><span class="л-в">обогнала рынок за сутки</span><span class="л-н">отстала</span><span class="л-с">ждёт итога</span></div></div>';
+  }
   function лентаHTML(д, фильтр, сейчас, выбранId, новые, выкл) {
     var все = (д.находки || []).filter(function (x) { return !выкл.has(x.вид) && (!фильтр || x.вид === фильтр); });
     var свежие = все.filter(function (x) { return !x.итог; }), прошлые = все.filter(function (x) { return x.итог; });
     var чипы = '<div class="чипы">' + [['', 'Все']].concat(ВИДЫ).map(function (в) {
       return '<button class="чип" type="button" data-вид="' + в[0] + '" aria-pressed="' + (в[0] === (фильтр || '')) + '">' + в[1] + '</button>'; }).join('') + '</div>';
     if (!все.length) return чипы + '<div class="пусто">Сегодня таких находок не было.' + (фильтр ? '<br><button class="кн" type="button" data-вид="">Показать все</button>' : '') + '</div>';
-    return чипы
-      + (свежие.length ? '<div class="раздел">Свежие' + (д.про ? '' : ' — бесплатно открыты 3 находки старше 15 минут') + '</div>' + свежие.map(function (x) { return строкаHTML(x, сейчас, выбранId, новые); }).join('') : '')
-      + (прошлые.length ? '<div class="раздел">Старше суток — уже с итогом</div>' + прошлые.map(function (x) { return строкаHTML(x, сейчас, выбранId, новые); }).join('') : '');
+    return чипы + геройHTML(вПрицеле(все), сейчас) + мозаикаHTML(все, сейчас, выбранId)
+      + (свежие.length ? '<div class="раздел">В работе' + (д.про ? '' : ' — бесплатно открыты 3 находки старше 15 минут') + '</div>' + свежие.map(function (x) { return строкаHTML(x, сейчас, выбранId, новые); }).join('') : '')
+      + (прошлые.length ? '<div class="раздел">С итогом — старше суток</div>' + прошлые.map(function (x) { return строкаHTML(x, сейчас, выбранId, новые); }).join('') : '');
   }
   function полосаHTML(ит) {
     var т = ит.точки || [], в = т.filter(Boolean).length;
@@ -96,7 +135,7 @@
     return '<div class="вход"><h1>Находки сканера и что с ними стало</h1><p>' + экр(почему || 'Чтобы видеть ленту, войдите — через Telegram или почту, в окне аккаунта терминала. Ключи бирж не нужны.') + '</p>'
       + '<a class="кн главная" href="scalpsniper.html">Войти</a></div>';
   }
-  var ВИТРИНА = { экр: экр, силаHTML: силаHTML, строкаHTML: строкаHTML, лентаHTML: лентаHTML, монетаHTML: монетаHTML, итогиHTML: итогиHTML, профильHTML: профильHTML, входHTML: входHTML, проц: проц, ВИДЫ: ВИДЫ };
+  var ВИТРИНА = { экр: экр, силаHTML: силаHTML, геройHTML: геройHTML, мозаикаHTML: мозаикаHTML, вПрицеле: вПрицеле, клеткаКласс: клеткаКласс, строкаHTML: строкаHTML, лентаHTML: лентаHTML, монетаHTML: монетаHTML, итогиHTML: итогиHTML, профильHTML: профильHTML, входHTML: входHTML, проц: проц, ВИДЫ: ВИДЫ };
   корень.ВИТРИНА = ВИТРИНА;
   if (typeof document === 'undefined') return;
 
@@ -114,9 +153,13 @@
   var тгДанные = (function () { try { var m = /(?:^#|&)tgWebAppData=([^&]*)/.exec(location.hash); return m ? decodeURIComponent(m[1]) : null; } catch (e) { return null; } })();
   if (/(^#|&)tgWebApp(Platform|Version|Data)=/.test(location.hash)) { try { history.replaceState(null, '', location.pathname + location.search + '#лента'); } catch (e) {} }
   function жив(текст, молчит) { var э = $('#жив'); э.textContent = текст; э.classList.toggle('молчит', !!молчит); }
+  var первый = true;
   function отрисовать() {
     var сейчас = Date.now();
     if (!д) return;
+    /* Входные анимации (прицел сходится, мозаика проявляется) — только при первом показе: ленту перерисовывает таймер раз в
+       минуту, и повтор каждую минуту был бы мельтешением, а не смыслом. */
+    if (первый) { первый = false; document.body.classList.add('первый'); setTimeout(function () { document.body.classList.remove('первый'); }, 2600); }
     $('#тариф').hidden = false; $('#тариф').textContent = д.про ? 'Pro' : 'Free';
     var выбран = (д.находки || []).filter(function (x) { return x.id === выбранId; })[0] || (д.находки || []).filter(function (x) { return !x.закрыто; })[0] || null;
     if (выбран) выбранId = выбран.id;
